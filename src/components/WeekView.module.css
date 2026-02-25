@@ -1,0 +1,86 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.day {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.day:hover {
+  border-color: var(--border2);
+}
+
+.today {
+  border-color: rgba(167, 139, 250, 0.35);
+  background: var(--accent-soft);
+}
+
+.dayName {
+  font-size: 9.5px;
+  color: var(--text3);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.dayDate {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 2px 0;
+}
+
+.dayDateToday {
+  color: var(--accent);
+}
+
+.dayTasks {
+  font-size: 10px;
+  color: var(--text3);
+}
+
+.dots {
+  display: flex;
+  gap: 3px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.done    { background: var(--green); }
+.pending { background: var(--accent-muted); }
+.empty   { background: var(--bg4); }
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sectionTitle {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text3);
+}
+
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}

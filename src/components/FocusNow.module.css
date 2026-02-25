@@ -1,0 +1,65 @@
+.focusNow {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.12), rgba(167, 139, 250, 0.03));
+  border: 1px solid rgba(167, 139, 250, 0.20);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  position: relative;
+  overflow: hidden;
+  animation: fadeUp 0.28s ease 0.05s both;
+}
+
+.focusNow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px 0 0 3px;
+}
+
+.label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--accent-muted);
+  margin-bottom: 6px;
+}
+
+.task {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.meta {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.time {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.btn {
+  background: var(--accent);
+  color: #131316;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+}
+
+.btn:hover {
+  background: #b9a0fc;
+}

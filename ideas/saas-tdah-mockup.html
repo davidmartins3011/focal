@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>focal. — Assistant TDAH</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Lora:ital,wght@0,500;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #18140f;
+      --bg2: #211c15;
+      --bg3: #2a231a;
+      --bg4: #332b1f;
+      --accent: #e8943a;
+      --accent-soft: rgba(232,148,58,0.12);
+      --accent-muted: #b56f24;
+      --green: #5eb88a;
+      --blue: #7aabf0;
+      --purple: #c080d8;
+      --red: #e06060;
+      --text: #f0e6d3;
+      --text2: #a89070;
+      --text3: #6a5840;
+      --border: rgba(255,255,255,0.06);
+      --border2: rgba(255,255,255,0.10);
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      overflow: hidden;
+    }
+
+    .app { display: flex; height: 100vh; }
+
+    /* ── LEFT ── */
+    .left { width: 58%; display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
+    .left-inner { display: flex; flex: 1; overflow: hidden; }
+
+    /* Sidebar */
+    .sidebar {
+      width: 52px; display: flex; flex-direction: column;
+      align-items: center; padding: 14px 0; gap: 6px;
+      border-right: 1px solid var(--border); background: var(--bg);
+    }
+    .sidebar-logo {
+      font-family: 'Lora', serif; font-size: 20px; font-weight: 500;
+      color: var(--accent); margin-bottom: 14px; letter-spacing: -0.5px;
+    }
+    .sidebar-icon {
+      width: 36px; height: 36px; border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text3); transition: all 0.15s; font-size: 16px;
+    }
+    .sidebar-icon:hover { background: var(--bg3); color: var(--text2); }
+    .sidebar-icon.active { background: var(--accent-soft); color: var(--accent); }
+
+    /* Main */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+    .main-header { padding: 18px 22px 0; display: flex; justify-content: space-between; align-items: flex-start; }
+    .date-display h1 { font-size: 21px; font-weight: 600; letter-spacing: -0.5px; color: var(--text); }
+    .date-display p { font-size: 11.5px; color: var(--text3); margin-top: 2px; }
+    .streak-badge {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--accent-soft); border: 1px solid rgba(232,148,58,0.2);
+      border-radius: 20px; padding: 5px 12px;
+      font-size: 12px; color: var(--accent); font-weight: 500;
+    }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; padding: 14px 22px 0; }
+    .tab {
+      padding: 5px 15px; border-radius: 20px; font-size: 13px; font-weight: 500;
+      cursor: pointer; color: var(--text3); transition: all 0.15s; border: 1px solid transparent;
+    }
+    .tab:hover { color: var(--text2); }
+    .tab.active { background: var(--bg3); border-color: var(--border2); color: var(--text); }
+
+    /* Scrollable content */
+    .main-content {
+      flex: 1; overflow-y: auto; padding: 14px 22px 24px;
+      scrollbar-width: thin; scrollbar-color: var(--bg4) transparent;
+    }
+
+    /* Focus Now */
+    .focus-now {
+      background: linear-gradient(135deg, rgba(232,148,58,0.14), rgba(232,148,58,0.04));
+      border: 1px solid rgba(232,148,58,0.25); border-radius: var(--radius);
+      padding: 14px 16px; margin-bottom: 18px; position: relative; overflow: hidden;
+      animation: fadeUp 0.3s ease both;
+    }
+    .focus-now::before {
+      content: ''; position: absolute; top: 0; left: 0;
+      width: 3px; height: 100%; background: var(--accent); border-radius: 3px 0 0 3px;
+    }
+    .focus-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent-muted); margin-bottom: 6px; }
+    .focus-task { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+    .focus-meta { display: flex; gap: 12px; align-items: center; }
+    .focus-time { font-size: 12px; color: var(--text2); }
+    .btn-primary {
+      background: var(--accent); color: #18140f; border: none;
+      border-radius: var(--radius-sm); padding: 5px 14px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      font-family: 'Outfit', sans-serif; transition: all 0.15s;
+    }
+    .btn-primary:hover { background: #f0a040; }
+
+    /* Progress */
+    .progress-wrap { margin-bottom: 18px; }
+    .progress-label { font-size: 11px; color: var(--text3); display: flex; justify-content: space-between; margin-bottom: 6px; }
+    .progress-label span:last-child { color: var(--accent); font-weight: 500; }
+    .progress-bar { height: 3px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #f0b060); border-radius: 3px; transition: width 0.4s ease; }
+
+    /* Section headers */
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .section-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text3); }
+    .section-action { font-size: 12px; color: var(--accent-muted); cursor: pointer; display: flex; align-items: center; gap: 4px; }
+    .section-action:hover { color: var(--accent); }
+
+    /* Task list */
+    .task-list { display: flex; flex-direction: column; gap: 1px; margin-bottom: 18px; }
+    .task-item {
+      display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px;
+      border-radius: var(--radius-sm); cursor: pointer; transition: background 0.12s;
+      border: 1px solid transparent;
+    }
+    .task-item:hover { background: var(--bg2); }
+    .task-item.expanded { background: var(--bg2); border-color: var(--border); }
+
+    .task-check {
+      width: 17px; height: 17px; border-radius: 5px; border: 1.5px solid var(--text3);
+      flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .task-check.done { background: var(--green); border-color: var(--green); color: #18140f; font-size: 9px; }
+
+    .task-body { flex: 1; min-width: 0; }
+    .task-name { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.3; }
+    .task-name.done { text-decoration: line-through; color: var(--text3); }
+
+    .task-tags { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
+    .tag {
+      font-size: 9.5px; font-weight: 600; padding: 2px 7px;
+      border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .tag.crm       { background: rgba(94,184,138,0.12);  color: #5eb88a; }
+    .tag.data      { background: rgba(122,171,240,0.12); color: #7aabf0; }
+    .tag.roadmap   { background: rgba(232,148,58,0.12);  color: var(--accent); }
+    .tag.saas      { background: rgba(192,128,216,0.12); color: #c080d8; }
+    .tag.urgent    { background: rgba(224,96,96,0.12);   color: #e06060; }
+
+    .task-expand-btn {
+      font-size: 11px; color: var(--accent-muted); display: flex;
+      align-items: center; gap: 4px; margin-top: 6px; cursor: pointer; user-select: none;
+    }
+    .task-expand-btn:hover { color: var(--accent); }
+
+    .ai-badge {
+      font-size: 9px; background: rgba(232,148,58,0.1);
+      color: var(--accent-muted); border: 1px solid rgba(232,148,58,0.15);
+      border-radius: 4px; padding: 1px 5px; font-weight: 600;
+      letter-spacing: 0.5px; text-transform: uppercase; margin-left: auto;
+    }
+
+    /* Micro-steps */
+    .micro-steps {
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .micro-step {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 8px; border-radius: 6px;
+    }
+    .micro-step:hover { background: var(--bg3); }
+    .step-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+    .step-dot.done { background: var(--green); }
+    .step-text { font-size: 12.5px; color: var(--text2); }
+    .step-text.done { text-decoration: line-through; color: var(--text3); }
+
+    /* Week view */
+    .view-panel { display: none; }
+    .view-panel.active { display: block; }
+
+    .week-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 18px; }
+    .week-day {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 10px 8px; cursor: pointer; transition: all 0.15s;
+    }
+    .week-day:hover { border-color: var(--border2); }
+    .week-day.today { border-color: rgba(232,148,58,0.4); background: var(--accent-soft); }
+    .wd-name { font-size: 9.5px; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .wd-date { font-size: 18px; font-weight: 700; color: var(--text); margin: 2px 0; }
+    .week-day.today .wd-date { color: var(--accent); }
+    .wd-tasks { font-size: 10px; color: var(--text3); }
+    .wd-dots { display: flex; gap: 3px; margin-top: 5px; flex-wrap: wrap; }
+    .wd-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--bg4); }
+    .wd-dot.done { background: var(--green); }
+    .wd-dot.pending { background: var(--accent-muted); }
+
+    /* ── RIGHT ── */
+    .right { width: 42%; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
+    .chat-header {
+      padding: 18px 18px 13px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .chat-title { display: flex; align-items: center; gap: 10px; }
+    .chat-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: linear-gradient(135deg, #e8943a, #b05010);
+      display: flex; align-items: center; justify-content: center; font-size: 15px;
+    }
+    .chat-title h3 { font-size: 14px; font-weight: 600; color: var(--text); }
+    .chat-title p { font-size: 11px; color: var(--green); display: flex; align-items: center; gap: 4px; }
+    .status-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+    .model-selector {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg3); border: 1px solid var(--border2);
+      border-radius: 20px; padding: 4px 10px;
+      font-size: 11px; color: var(--text2); cursor: pointer; user-select: none;
+    }
+    .model-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
+
+    /* Chat messages */
+    .chat-messages {
+      flex: 1; overflow-y: auto; padding: 14px 18px;
+      display: flex; flex-direction: column; gap: 14px;
+      scrollbar-width: thin; scrollbar-color: var(--bg4) transparent;
+    }
+    .day-divider { display: flex; align-items: center; gap: 10px; margin: 2px 0 8px; }
+    .day-divider span { font-size: 10.5px; color: var(--text3); font-weight: 600; white-space: nowrap; }
+    .day-divider::before, .day-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    .msg { display: flex; flex-direction: column; gap: 4px; animation: fadeUp 0.22s ease both; }
+    .msg-role { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); }
+    .msg-bubble {
+      padding: 11px 13px; border-radius: var(--radius);
+      font-size: 13px; line-height: 1.6; max-width: 100%;
+    }
+    .msg.user .msg-bubble { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius) var(--radius) 4px var(--radius); }
+    .msg.ai   .msg-bubble { background: var(--bg2); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius) var(--radius) var(--radius) 4px; }
+
+    .msg-steps {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 10px 13px; margin-top: 6px;
+    }
+    .msg-step { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; }
+    .msg-step:not(:last-child) { border-bottom: 1px solid var(--border); }
+    .step-num {
+      width: 19px; height: 19px; border-radius: 50%;
+      background: var(--accent-soft); color: var(--accent);
+      font-size: 10px; font-weight: 700; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0; margin-top: 1px;
+    }
+    .step-content { font-size: 12.5px; color: var(--text2); line-height: 1.5; }
+    code { background: var(--bg4); padding: 1px 5px; border-radius: 3px; font-size: 11px; font-family: monospace; }
+
+    .add-to-tasks {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; color: var(--accent); margin-top: 10px;
+      cursor: pointer; font-weight: 500;
+    }
+    .add-to-tasks:hover { text-decoration: underline; }
+
+    /* Input */
+    .chat-input-area { padding: 10px 16px 14px; border-top: 1px solid var(--border); }
+    .input-box {
+      display: flex; align-items: flex-end; gap: 8px;
+      background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: var(--radius); padding: 8px 10px; transition: border-color 0.15s;
+    }
+    .input-box:focus-within { border-color: rgba(232,148,58,0.4); }
+    .input-box textarea {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-family: 'Outfit', sans-serif; font-size: 13px;
+      resize: none; line-height: 1.5; min-height: 20px; max-height: 100px;
+    }
+    .input-box textarea::placeholder { color: var(--text3); }
+    .send-btn {
+      width: 30px; height: 30px; border-radius: 8px; background: var(--accent);
+      border: none; cursor: pointer; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0; transition: background 0.15s;
+    }
+    .send-btn:hover { background: #f0a040; }
+    .input-hints { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+    .hint-pill {
+      font-size: 11px; color: var(--text3); background: var(--bg3);
+      border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px;
+      cursor: pointer; transition: all 0.12s;
+    }
+    .hint-pill:hover { color: var(--text2); border-color: var(--border2); }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .focus-now { animation: fadeUp 0.28s ease 0.05s both; }
+    .task-item:nth-child(1) { animation: fadeUp 0.25s ease 0.08s both; }
+    .task-item:nth-child(2) { animation: fadeUp 0.25s ease 0.12s both; }
+    .task-item:nth-child(3) { animation: fadeUp 0.25s ease 0.16s both; }
+    .task-item:nth-child(4) { animation: fadeUp 0.25s ease 0.20s both; }
+    .task-item:nth-child(5) { animation: fadeUp 0.25s ease 0.24s both; }
+    .task-item:nth-child(6) { animation: fadeUp 0.25s ease 0.28s both; }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ════ LEFT PANEL ════ -->
+  <div class="left">
+    <div class="left-inner">
+
+      <!-- Sidebar icons -->
+      <div class="sidebar">
+        <div class="sidebar-logo">f.</div>
+        <div class="sidebar-icon active" title="Planning">📅</div>
+        <div class="sidebar-icon" title="Tâches">✓</div>
+        <div class="sidebar-icon" title="Personnes">👤</div>
+        <div class="sidebar-icon" title="Projets">◈</div>
+        <div style="flex:1"></div>
+        <div class="sidebar-icon" title="Paramètres">⚙</div>
+      </div>
+
+      <!-- Main content -->
+      <div class="main">
+        <div class="main-header">
+          <div class="date-display">
+            <h1>Mercredi 25 fév.</h1>
+            <p>Semaine 9 · 4 tâches restantes</p>
+          </div>
+          <div class="streak-badge">🔥 5j de suite</div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab('today', this)">Aujourd'hui</div>
+          <div class="tab" onclick="switchTab('week', this)">Cette semaine</div>
+          <div class="tab" onclick="switchTab('review', this)">Revue</div>
+        </div>
+
+        <div class="main-content">
+
+          <!-- TODAY -->
+          <div id="view-today" class="view-panel active">
+            <div class="focus-now">
+              <div class="focus-label">🎯 Focus maintenant</div>
+              <div class="focus-task">Préparer la revue de sprint vendredi</div>
+              <div class="focus-meta">
+                <span class="focus-time">⏱ ~45 min estimées</span>
+                <button class="btn-primary">Commencer</button>
+              </div>
+            </div>
+
+            <div class="progress-wrap">
+              <div class="progress-label">
+                <span>Progression du jour</span>
+                <span>3 / 7 tâches</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width:43%"></div>
+              </div>
+            </div>
+
+            <div class="section-header">
+              <span class="section-title">Tâches du jour</span>
+              <span class="section-action">+ Ajouter</span>
+            </div>
+
+            <div class="task-list">
+              <div class="task-item">
+                <div class="task-check done">✓</div>
+                <div class="task-body">
+                  <div class="task-name done">Sync équipe Data — stand-up</div>
+                  <div class="task-tags"><span class="tag roadmap">Roadmap</span></div>
+                </div>
+              </div>
+              <div class="task-item">
+                <div class="task-check done">✓</div>
+                <div class="task-body">
+                  <div class="task-name done">Revoir les specs du connecteur Salesforce</div>
+                  <div class="task-tags"><span class="tag crm">CRM</span></div>
+                </div>
+              </div>
+              <div class="task-item">
+                <div class="task-check done">✓</div>
+                <div class="task-body">
+                  <div class="task-name done">Répondre aux emails du matin</div>
+                </div>
+              </div>
+
+              <!-- Expanded task with micro-steps -->
+              <div class="task-item expanded">
+                <div class="task-check"></div>
+                <div class="task-body">
+                  <div class="task-name">Préparer la revue de sprint vendredi</div>
+                  <div class="task-tags">
+                    <span class="tag roadmap">Roadmap</span>
+                    <span class="tag urgent">Prioritaire</span>
+                  </div>
+                  <div class="task-expand-btn" onclick="toggleSteps(this)">
+                    <span class="expand-icon">▾</span>
+                    <span class="expand-text">3 étapes · décomposé par IA</span>
+                    <span class="ai-badge">IA</span>
+                  </div>
+                  <div class="micro-steps">
+                    <div class="micro-step">
+                      <div class="step-dot done"></div>
+                      <div class="step-text done">Lister les tickets fermés depuis le dernier sprint</div>
+                    </div>
+                    <div class="micro-step">
+                      <div class="step-dot"></div>
+                      <div class="step-text">Identifier les 2-3 points de blocage à mentionner</div>
+                    </div>
+                    <div class="micro-step">
+                      <div class="step-dot"></div>
+                      <div class="step-text">Préparer les slides (5 slides max)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="task-item">
+                <div class="task-check"></div>
+                <div class="task-body">
+                  <div class="task-name">Investiguer le bug pipeline dbt — table orders</div>
+                  <div class="task-tags"><span class="tag data">Data Platform</span></div>
+                </div>
+              </div>
+              <div class="task-item">
+                <div class="task-check"></div>
+                <div class="task-body">
+                  <div class="task-name">Brainstorm idées SaaS TDAH — 20 min</div>
+                  <div class="task-tags"><span class="tag saas">SaaS</span></div>
+                </div>
+              </div>
+              <div class="task-item">
+                <div class="task-check"></div>
+                <div class="task-body">
+                  <div class="task-name">Préparer questions pour entretien utilisateur TDAH</div>
+                  <div class="task-tags"><span class="tag saas">SaaS</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- WEEK -->
+          <div id="view-week" class="view-panel">
+            <div class="week-grid">
+              <div class="week-day">
+                <div class="wd-name">Lun</div><div class="wd-date">23</div>
+                <div class="wd-tasks">5 tâches</div>
+                <div class="wd-dots">
+                  <div class="wd-dot done"></div><div class="wd-dot done"></div>
+                  <div class="wd-dot done"></div><div class="wd-dot done"></div><div class="wd-dot done"></div>
+                </div>
+              </div>
+              <div class="week-day">
+                <div class="wd-name">Mar</div><div class="wd-date">24</div>
+                <div class="wd-tasks">4 tâches</div>
+                <div class="wd-dots">
+                  <div class="wd-dot done"></div><div class="wd-dot done"></div>
+                  <div class="wd-dot done"></div><div class="wd-dot pending"></div>
+                </div>
+              </div>
+              <div class="week-day today">
+                <div class="wd-name">Mer</div><div class="wd-date">25</div>
+                <div class="wd-tasks">7 tâches · 3 faites</div>
+                <div class="wd-dots">
+                  <div class="wd-dot done"></div><div class="wd-dot done"></div>
+                  <div class="wd-dot done"></div><div class="wd-dot pending"></div><div class="wd-dot pending"></div>
+                </div>
+              </div>
+              <div class="week-day">
+                <div class="wd-name">Jeu</div><div class="wd-date">26</div>
+                <div class="wd-tasks">3 tâches</div>
+                <div class="wd-dots">
+                  <div class="wd-dot"></div><div class="wd-dot"></div><div class="wd-dot"></div>
+                </div>
+              </div>
+              <div class="week-day">
+                <div class="wd-name">Ven</div><div class="wd-date">27</div>
+                <div class="wd-tasks">Sprint review</div>
+                <div class="wd-dots"><div class="wd-dot"></div><div class="wd-dot"></div></div>
+              </div>
+            </div>
+
+            <div class="section-header">
+              <span class="section-title">Priorités de la semaine</span>
+            </div>
+            <div class="task-list">
+              <div class="task-item">
+                <div class="task-check done">✓</div>
+                <div class="task-body">
+                  <div class="task-name done">Finaliser la roadmap Q1 avec l'équipe</div>
+                  <div class="task-tags"><span class="tag roadmap">Roadmap</span></div>
+                </div>
+              </div>
+              <div class="task-item">
+                <div class="task-check"></div>
+                <div class="task-body">
+                  <div class="task-name">Livrer la revue de sprint vendredi</div>
+                  <div class="task-tags"><span class="tag roadmap">Roadmap</span></div>
+                </div>
+              </div>
+              <div class="task-item">
+                <div class="task-check"></div>
+                <div class="task-body">
+                  <div class="task-name">Corriger le bug pipeline dbt en prod</div>
+                  <div class="task-tags"><span class="tag data">Data Platform</span></div>
+                </div>
+              </div>
+              <div class="task-item">
+                <div class="task-check"></div>
+                <div class="task-body">
+                  <div class="task-name">Valider le concept SaaS TDAH avec 3 personnes</div>
+                  <div class="task-tags"><span class="tag saas">SaaS</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- REVIEW -->
+          <div id="view-review" class="view-panel">
+            <div style="margin-bottom:16px;">
+              <div class="section-header" style="margin-bottom:12px;">
+                <span class="section-title">Bilan du jour</span>
+              </div>
+              <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-size:13px;color:var(--text2);line-height:1.7;">
+                Clique sur <strong style="color:var(--accent)">Lancer la revue</strong> pour que focal. t'accompagne dans ton bilan de fin de journée.<br><br>
+                Il t'aidera à : capturer ce que tu as accompli, noter les blocages, et définir ton top 3 de demain.
+              </div>
+              <button class="btn-primary" style="margin-top:12px;padding:8px 20px;font-size:13px;">Lancer la revue du soir</button>
+            </div>
+          </div>
+
+        </div><!-- /main-content -->
+      </div><!-- /main -->
+    </div><!-- /left-inner -->
+  </div><!-- /left -->
+
+  <!-- ════ RIGHT PANEL — AI Chat ════ -->
+  <div class="right">
+    <div class="chat-header">
+      <div class="chat-title">
+        <div class="chat-avatar">⚡</div>
+        <div>
+          <h3>focal. assistant</h3>
+          <p><span class="status-dot"></span> En ligne</p>
+        </div>
+      </div>
+      <div class="model-selector">
+        <div class="model-dot"></div>
+        Claude 3.5 ▾
+      </div>
+    </div>
+
+    <div class="chat-messages" id="chat-messages">
+      <div class="day-divider"><span>Aujourd'hui</span></div>
+
+      <div class="msg ai">
+        <div class="msg-role">focal.</div>
+        <div class="msg-bubble">
+          Bonjour David 👋 Tu as 7 tâches aujourd'hui et une revue de sprint vendredi. Je te suggère de commencer par la préparer — il te reste 2 étapes.<br><br>
+          Comment je peux t'aider ?
+        </div>
+      </div>
+
+      <div class="msg user">
+        <div class="msg-role">Toi</div>
+        <div class="msg-bubble">
+          J'ai besoin de déboguer le bug pipeline dbt sur la table orders. Je sais pas par où commencer.
+        </div>
+      </div>
+
+      <div class="msg ai">
+        <div class="msg-role">focal.</div>
+        <div class="msg-bubble">Pas de panique. Je découpe ça :</div>
+        <div class="msg-steps">
+          <div class="msg-step">
+            <div class="step-num">1</div>
+            <div class="step-content">Lancer <code>dbt test --select orders</code> et noter l'erreur exacte</div>
+          </div>
+          <div class="msg-step">
+            <div class="step-num">2</div>
+            <div class="step-content">Vérifier les logs dans <code>target/run_results.json</code></div>
+          </div>
+          <div class="msg-step">
+            <div class="step-num">3</div>
+            <div class="step-content">Identifier si l'erreur vient du modèle source ou d'une transformation en aval</div>
+          </div>
+          <div class="msg-step">
+            <div class="step-num">4</div>
+            <div class="step-content">Colle-moi l'erreur ici — je t'aide à la résoudre</div>
+          </div>
+          <div class="add-to-tasks" onclick="alert('✓ Étapes ajoutées à la tâche « bug pipeline dbt »')">
+            ＋ Ajouter ces étapes à la tâche
+          </div>
+        </div>
+      </div>
+
+      <div class="msg user">
+        <div class="msg-role">Toi</div>
+        <div class="msg-bubble">Prépare-moi aussi ma revue de fin de journée. J'ai du mal à bien terminer mes journées.</div>
+      </div>
+
+      <div class="msg ai">
+        <div class="msg-role">focal.</div>
+        <div class="msg-bubble">
+          Bonne initiative. Ce soir à 17h30 je te propose une revue de 10 minutes : ce que tu as fait, ce qui reste, et ton top 3 pour demain.<br><br>
+          Tu veux que je l'active en mode <strong style="color:var(--accent)">proactif</strong> (je t'envoie un rappel) ou tu le lances toi-même ?
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input-area">
+      <div class="input-box">
+        <textarea id="chat-input"
+          placeholder="Parle-moi d'une tâche bloquante, de ta journée..."
+          rows="1"
+          oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
+        <button class="send-btn" onclick="sendMsg()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#18140f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-hints">
+        <div class="hint-pill" onclick="fillInput('Décompose cette tâche pour moi :')">Décomposer une tâche</div>
+        <div class="hint-pill" onclick="fillInput('Plan du jour')">Plan du jour</div>
+        <div class="hint-pill" onclick="fillInput('Je suis bloqué sur...')">Je suis bloqué</div>
+        <div class="hint-pill" onclick="fillInput('Lance ma revue du soir')">Revue du soir</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function switchTab(id, el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('view-' + id).classList.add('active');
+  }
+
+  function toggleSteps(btn) {
+    const steps = btn.closest('.task-body').querySelector('.micro-steps');
+    const icon  = btn.querySelector('.expand-icon');
+    const visible = steps.style.display !== 'none';
+    steps.style.display = visible ? 'none' : 'flex';
+    icon.textContent = visible ? '▸' : '▾';
+  }
+
+  function fillInput(text) {
+    const ta = document.getElementById('chat-input');
+    ta.value = text;
+    ta.focus();
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }
+
+  const aiReplies = [
+    "Je note ça. Veux-tu que je le décompose en étapes actionnables ?",
+    "Compris. Voici comment je t'suggère d'aborder ça : commence par la partie la plus petite, celle que tu peux faire en moins de 5 minutes.",
+    "Bonne question. Donne-moi un peu plus de contexte et je t'aide à débloque ça.",
+    "Noté ! Je l'ajoute à ta liste et je te rappellerai ce soir lors de ta revue.",
+    "Tu sembles bloqué. Pas de souci — dis-moi la toute première micro-étape que tu peux faire maintenant, même petite.",
+  ];
+  let replyIdx = 0;
+
+  function sendMsg() {
+    const ta = document.getElementById('chat-input');
+    const text = ta.value.trim();
+    if (!text) return;
+
+    const container = document.getElementById('chat-messages');
+
+    const userEl = document.createElement('div');
+    userEl.className = 'msg user';
+    userEl.innerHTML = `<div class="msg-role">Toi</div><div class="msg-bubble">${escHtml(text)}</div>`;
+    container.appendChild(userEl);
+
+    ta.value = ''; ta.style.height = 'auto';
+
+    setTimeout(() => {
+      const aiEl = document.createElement('div');
+      aiEl.className = 'msg ai';
+      aiEl.innerHTML = `<div class="msg-role">focal.</div><div class="msg-bubble">${aiReplies[replyIdx % aiReplies.length]}</div>`;
+      replyIdx++;
+      container.appendChild(aiEl);
+      container.scrollTop = container.scrollHeight;
+    }, 700);
+
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+</script>
+</body>
+</html>

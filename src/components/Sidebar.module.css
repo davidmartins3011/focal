@@ -1,0 +1,48 @@
+.sidebar {
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0;
+  gap: 6px;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.logo {
+  font-family: 'Lora', serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--accent);
+  margin-bottom: 14px;
+  letter-spacing: -0.5px;
+}
+
+.icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text3);
+  transition: all 0.15s;
+  font-size: 16px;
+  background: none;
+  border: none;
+}
+
+.icon:hover {
+  background: var(--bg3);
+  color: var(--text2);
+}
+
+.icon.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.spacer {
+  flex: 1;
+}

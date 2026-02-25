@@ -1,0 +1,30 @@
+.wrap {
+  margin-bottom: 18px;
+}
+
+.label {
+  font-size: 11px;
+  color: var(--text3);
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.count {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.bar {
+  height: 3px;
+  background: var(--bg3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #c4b5fc);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
