@@ -1,12 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styles from "./IntegrationsView.module.css";
 import type { Integration } from "../types";
 import { defaultIntegrations, categoryLabels, categoryOrder } from "../data/mockIntegrations";
 import ContextPanel from "./ContextPanel";
 
-export default function IntegrationsView() {
+interface IntegrationsViewProps {
+  resetSignal?: number;
+}
+
+export default function IntegrationsView({ resetSignal }: IntegrationsViewProps) {
   const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
   const [contextFor, setContextFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    setContextFor(null);
+  }, [resetSignal]);
 
   const toggleConnection = (id: string) => {
     setIntegrations((prev) =>
@@ -91,7 +99,7 @@ export default function IntegrationsView() {
                       className={styles.contextBtn}
                       onClick={() => setContextFor(integration.id)}
                     >
-                      Contexte
+                      Directives
                     </button>
                     <button
                       className={`${styles.connectBtn} ${integration.connected ? styles.connectedBtn : ""}`}

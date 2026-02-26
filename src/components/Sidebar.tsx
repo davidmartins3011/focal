@@ -6,14 +6,24 @@ import {
   SettingsIcon,
   UserIcon,
   IntegrationsIcon,
+  BellIcon,
 } from "./icons";
 
 interface SidebarProps {
   activePage: SidebarPage;
   onPageChange: (page: SidebarPage) => void;
+  hasUnreadNotifs: boolean;
+  onToggleNotifCenter: () => void;
+  notifCenterOpen: boolean;
 }
 
-export default function Sidebar({ activePage, onPageChange }: SidebarProps) {
+export default function Sidebar({
+  activePage,
+  onPageChange,
+  hasUnreadNotifs,
+  onToggleNotifCenter,
+  notifCenterOpen,
+}: SidebarProps) {
   return (
     <nav className={styles.sidebar}>
       <div className={styles.logo}>f.</div>
@@ -35,6 +45,14 @@ export default function Sidebar({ activePage, onPageChange }: SidebarProps) {
 
       <div className={styles.spacer} />
 
+      <button
+        className={`${styles.icon} ${notifCenterOpen ? styles.active : ""}`}
+        onClick={onToggleNotifCenter}
+        title="Notifications"
+      >
+        <BellIcon />
+        {hasUnreadNotifs && <span className={styles.dot} />}
+      </button>
       <button
         className={`${styles.icon} ${activePage === "profile" ? styles.active : ""}`}
         onClick={() => onPageChange("profile")}

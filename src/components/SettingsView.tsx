@@ -1,13 +1,36 @@
 import { useState } from "react";
 import styles from "./SettingsView.module.css";
-import type { ThemeId, AIProviderId, AISettings } from "../types";
+import type { ThemeId, AIProviderId, AISettings, NotificationSettings, WeekDayId, ReminderFrequency } from "../types";
 import { themes, providers } from "../data/mockSettings";
+
+const DAY_LABELS: { id: WeekDayId; short: string }[] = [
+  { id: "lun", short: "L" },
+  { id: "mar", short: "M" },
+  { id: "mer", short: "Me" },
+  { id: "jeu", short: "J" },
+  { id: "ven", short: "V" },
+  { id: "sam", short: "S" },
+  { id: "dim", short: "D" },
+];
+
+const FREQUENCY_OPTIONS: { id: ReminderFrequency; label: string }[] = [
+  { id: "weekly", label: "Chaque semaine" },
+  { id: "biweekly", label: "Toutes les 2 semaines" },
+  { id: "monthly", label: "Tous les mois" },
+  { id: "bimonthly", label: "Tous les 2 mois" },
+  { id: "quarterly", label: "Tous les 3 mois" },
+];
 
 interface SettingsViewProps {
   currentTheme: ThemeId;
   onThemeChange: (theme: ThemeId) => void;
   aiSettings: AISettings;
   onAISettingsChange: (settings: AISettings) => void;
+  notifSettings: NotificationSettings;
+  onNotifSettingsChange: (settings: NotificationSettings) => void;
+  onTestNotification?: () => void;
+  dailyPriorityCount: number;
+  onDailyPriorityCountChange: (count: number) => void;
 }
 
 export default function SettingsView({
@@ -15,6 +38,11 @@ export default function SettingsView({
   onThemeChange,
   aiSettings,
   onAISettingsChange,
+  notifSettings,
+  onNotifSettingsChange,
+  onTestNotification,
+  dailyPriorityCount,
+  onDailyPriorityCountChange,
 }: SettingsViewProps) {
   const [visibleKeys, setVisibleKeys] = useState<Record<AIProviderId, boolean>>({
     openai: false,
@@ -49,9 +77,194 @@ export default function SettingsView({
   const getProviderConfig = (id: AIProviderId) =>
     aiSettings.providers.find((p) => p.id === id) ?? { id, enabled: false, apiKey: "" };
 
+  const toggleNotifMaster = () => {
+    onNotifSettingsChange({ ...notifSettings, enabled: !notifSettings.enabled });
+  };
+
+  const toggleReminder = (id: string) => {
+    onNotifSettingsChange({
+      ...notifSettings,
+      reminders: notifSettings.reminders.map((r) =>
+        r.id === id ? { ...r, enabled: !r.enabled } : r
+      ),
+    });
+  };
+
+  const updateReminderTime = (id: string, time: string) => {
+    onNotifSettingsChange({
+      ...notifSettings,
+      reminders: notifSettings.reminders.map((r) =>
+        r.id === id ? { ...r, time } : r
+      ),
+    });
+  };
+
+  const updateReminderFrequency = (id: string, frequency: ReminderFrequency) => {
+    onNotifSettingsChange({
+      ...notifSettings,
+      reminders: notifSettings.reminders.map((r) =>
+        r.id === id ? { ...r, frequency } : r
+      ),
+    });
+  };
+
+  const toggleReminderDay = (reminderId: string, day: WeekDayId) => {
+    onNotifSettingsChange({
+      ...notifSettings,
+      reminders: notifSettings.reminders.map((r) => {
+        if (r.id !== reminderId) return r;
+        const days = r.days.includes(day)
+          ? r.days.filter((d) => d !== day)
+          : [...r.days, day];
+        return { ...r, days };
+      }),
+    });
+  };
+
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>Paramètres</h1>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Général</h2>
+        <div className={styles.settingRow}>
+          <div className={styles.settingInfo}>
+            <div className={styles.settingLabel}>Priorités du jour</div>
+            <div className={styles.settingDesc}>
+              Nombre maximum de tâches affichées dans la section « Priorités du jour »
+            </div>
+          </div>
+          <div className={styles.counterControl}>
+            <button
+              className={styles.counterBtn}
+              onClick={() => onDailyPriorityCountChange(Math.max(1, dailyPriorityCount - 1))}
+              disabled={dailyPriorityCount <= 1}
+            >
+              −
+            </button>
+            <span className={styles.counterValue}>{dailyPriorityCount}</span>
+            <button
+              className={styles.counterBtn}
+              onClick={() => onDailyPriorityCountChange(Math.min(7, dailyPriorityCount + 1))}
+              disabled={dailyPriorityCount >= 7}
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <h2 className={styles.sectionTitle}>Notifications & Rappels</h2>
+          <button
+            className={`${styles.toggle} ${notifSettings.enabled ? styles.on : ""}`}
+            onClick={toggleNotifMaster}
+          >
+            <span className={styles.toggleDot} />
+          </button>
+        </div>
+        <p className={styles.sectionDesc}>
+          Focal te rappelle les moments clés de ta journée pour t'aider à rester sur les rails.
+        </p>
+
+        {notifSettings.enabled && (
+          <>
+            <div className={styles.remindersList}>
+              {notifSettings.reminders.map((reminder) => (
+                <div
+                  key={reminder.id}
+                  className={`${styles.reminderCard} ${reminder.enabled ? styles.reminderEnabled : ""}`}
+                >
+                  <div className={styles.reminderHeader}>
+                    <span className={styles.reminderIcon}>{reminder.icon}</span>
+                    <div className={styles.reminderInfo}>
+                      <div className={styles.reminderLabel}>{reminder.label}</div>
+                      <div className={styles.reminderDesc}>{reminder.description}</div>
+                    </div>
+                    <button
+                      className={`${styles.toggle} ${reminder.enabled ? styles.on : ""}`}
+                      onClick={() => toggleReminder(reminder.id)}
+                    >
+                      <span className={styles.toggleDot} />
+                    </button>
+                  </div>
+
+                  {reminder.enabled && (
+                    <div className={styles.reminderBody}>
+                      <div className={styles.reminderTimeRow}>
+                        <label className={styles.reminderTimeLabel}>Heure</label>
+                        <input
+                          type="time"
+                          className={styles.timeInput}
+                          value={reminder.time}
+                          onChange={(e) => updateReminderTime(reminder.id, e.target.value)}
+                        />
+                      </div>
+                      {reminder.frequency ? (
+                        <>
+                          <div className={styles.reminderDaysRow}>
+                            <label className={styles.reminderTimeLabel}>Fréq.</label>
+                            <div className={styles.freqPills}>
+                              {FREQUENCY_OPTIONS.map((f) => (
+                                <button
+                                  key={f.id}
+                                  className={`${styles.freqPill} ${reminder.frequency === f.id ? styles.freqActive : ""}`}
+                                  onClick={() => updateReminderFrequency(reminder.id, f.id)}
+                                >
+                                  {f.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className={styles.reminderDaysRow}>
+                            <label className={styles.reminderTimeLabel}>Jour</label>
+                            <div className={styles.dayPills}>
+                              {DAY_LABELS.map((d) => (
+                                <button
+                                  key={d.id}
+                                  className={`${styles.dayPill} ${reminder.days[0] === d.id ? styles.dayActive : ""}`}
+                                  onClick={() => onNotifSettingsChange({
+                                    ...notifSettings,
+                                    reminders: notifSettings.reminders.map((r) =>
+                                      r.id === reminder.id ? { ...r, days: [d.id] } : r
+                                    ),
+                                  })}
+                                >
+                                  {d.short}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className={styles.reminderDaysRow}>
+                          <label className={styles.reminderTimeLabel}>Jours</label>
+                          <div className={styles.dayPills}>
+                            {DAY_LABELS.map((d) => (
+                              <button
+                                key={d.id}
+                                className={`${styles.dayPill} ${reminder.days.includes(d.id) ? styles.dayActive : ""}`}
+                                onClick={() => toggleReminderDay(reminder.id, d.id)}
+                              >
+                                {d.short}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button className={styles.testBtn} onClick={onTestNotification}>
+              Tester une notification
+            </button>
+          </>
+        )}
+      </section>
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Intelligence Artificielle</h2>

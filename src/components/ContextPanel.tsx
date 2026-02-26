@@ -63,7 +63,7 @@ export default function ContextPanel({ integration, onBack, onUpdate }: Props) {
           <span className={styles.contextIcon}>{integration.icon}</span>
           <div>
             <h2 className={styles.contextName}>{integration.name}</h2>
-            <p className={styles.contextSub}>Contexte &amp; règles pour l'IA</p>
+            <p className={styles.contextSub}>Directives pour l'IA</p>
           </div>
         </div>
       </header>
@@ -132,7 +132,7 @@ export default function ContextPanel({ integration, onBack, onUpdate }: Props) {
         </section>
 
         <section className={styles.contextSection}>
-          <h3 className={styles.contextSectionTitle}>Extra Contexte</h3>
+          <h3 className={styles.contextSectionTitle}>Contexte</h3>
           <p className={styles.contextHint}>
             Informations supplémentaires que l'IA doit prendre en compte pour cette intégration.
           </p>

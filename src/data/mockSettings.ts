@@ -1,4 +1,4 @@
-import type { ThemeId, AIProviderId } from "../types";
+import type { ThemeId, AIProviderId, NotificationReminder } from "../types";
 
 export interface ThemeOption {
   id: ThemeId;
@@ -79,6 +79,77 @@ export const themes: ThemeOption[] = [
     name: "Solaire",
     description: "Ambre et or sur blanc chaud",
     colors: { bg: "#fffdf5", accent: "#d97706", text: "#1c1408", bg2: "#faf5e8" },
+  },
+];
+
+const weekdays: ("lun" | "mar" | "mer" | "jeu" | "ven")[] = ["lun", "mar", "mer", "jeu", "ven"];
+const allDays: ("lun" | "mar" | "mer" | "jeu" | "ven" | "sam" | "dim")[] = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"];
+
+export const defaultReminders: NotificationReminder[] = [
+  {
+    id: "morning-plan",
+    label: "Planification du matin",
+    description: "Prépare ta journée en définissant tes priorités",
+    time: "09:00",
+    enabled: true,
+    days: [...weekdays],
+    icon: "🌅",
+  },
+  {
+    id: "focus-checkin",
+    label: "Check-in focus",
+    description: "Où en es-tu ? Recentre-toi si besoin",
+    time: "11:00",
+    enabled: true,
+    days: [...weekdays],
+    icon: "🎯",
+  },
+  {
+    id: "lunch-break",
+    label: "Pause déjeuner",
+    description: "Fais une vraie pause, tu l'as mérité",
+    time: "12:30",
+    enabled: false,
+    days: [...allDays],
+    icon: "🍽",
+  },
+  {
+    id: "afternoon-boost",
+    label: "Boost après-midi",
+    description: "Relance ton énergie, choisis une tâche courte",
+    time: "15:00",
+    enabled: true,
+    days: [...weekdays],
+    icon: "⚡",
+  },
+  {
+    id: "daily-review",
+    label: "Revue du jour",
+    description: "Fais le point sur ta journée et célèbre tes victoires",
+    time: "18:00",
+    enabled: true,
+    days: [...weekdays],
+    icon: "📝",
+  },
+  {
+    id: "weekly-review",
+    label: "Revue hebdomadaire",
+    description: "Bilan de la semaine et préparation de la suivante",
+    time: "10:00",
+    enabled: true,
+    days: ["dim"],
+    icon: "📊",
+  },
+  {
+    id: "strategy-review",
+    label: "Revue stratégique",
+    description: "Prends du recul sur tes piliers et ajuste tes priorités du mois",
+    time: "10:00",
+    enabled: true,
+    days: ["dim"],
+    icon: "🧭",
+    frequency: "monthly",
+    frequencyOccurrence: "last",
   },
 ];
 

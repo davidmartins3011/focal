@@ -6,6 +6,8 @@
   background: var(--bg);
 }
 
+/* ── Header ── */
+
 .header {
   padding: 18px 22px 0;
 }
@@ -21,12 +23,6 @@
   font-weight: 600;
   letter-spacing: -0.5px;
   color: var(--text);
-}
-
-.header p {
-  font-size: 11.5px;
-  color: var(--text3);
-  margin-top: 2px;
 }
 
 .todayBtn {
@@ -45,6 +41,142 @@
 .todayBtn:hover {
   border-color: var(--accent-muted);
 }
+
+/* ── Week score ── */
+
+.weekScore {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.weekScoreBar {
+  flex: 1;
+  height: 3px;
+  background: var(--bg3);
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 120px;
+}
+
+.weekScoreFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-muted), var(--accent));
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.weekScoreCount {
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+/* ── Deadline banner ── */
+
+.deadline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 22px 0;
+  padding: 9px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  animation: fadeUp 0.25s ease;
+}
+
+.deadlineLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.deadlinePulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.deadlineLabel {
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+}
+
+.deadlineTask {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deadlineTime {
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.critical {
+  background: rgba(224, 96, 96, 0.12);
+  border: 1px solid rgba(224, 96, 96, 0.25);
+}
+
+.critical .deadlinePulse {
+  background: var(--red);
+}
+
+.critical .deadlineLabel {
+  color: var(--red);
+}
+
+.critical .deadlineTime {
+  color: var(--red);
+}
+
+.soon {
+  background: rgba(230, 160, 60, 0.10);
+  border: 1px solid rgba(230, 160, 60, 0.20);
+}
+
+.soon .deadlinePulse {
+  background: #e6a03c;
+}
+
+.soon .deadlineLabel {
+  color: #d49530;
+}
+
+.soon .deadlineTime {
+  color: #d49530;
+}
+
+.upcoming {
+  background: var(--accent-soft);
+  border: 1px solid rgba(167, 139, 250, 0.15);
+}
+
+.upcoming .deadlinePulse {
+  background: var(--accent-muted);
+}
+
+.upcoming .deadlineLabel {
+  color: var(--accent-muted);
+}
+
+.upcoming .deadlineTime {
+  color: var(--accent-muted);
+}
+
+/* ── Content ── */
 
 .content {
   flex: 1;
@@ -125,15 +257,17 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 8px 4px 6px;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 4px 5px;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s;
-  min-height: 52px;
+  min-height: 48px;
   font-family: 'Outfit', sans-serif;
+  position: relative;
 }
 
 .cell:hover {
@@ -148,17 +282,42 @@
   line-height: 1;
 }
 
+.cellRelative {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-muted);
+}
+
 .otherMonth {
-  opacity: 0.3;
+  opacity: 0.25;
 }
 
 .otherMonth .cellDate {
   color: var(--text3);
 }
 
+/* ── Heatmap load levels ── */
+
+.load_light {
+  background: var(--accent-soft);
+}
+
+.load_medium {
+  background: rgba(167, 139, 250, 0.14);
+}
+
+.load_heavy {
+  background: rgba(224, 96, 96, 0.10);
+  border-color: rgba(224, 96, 96, 0.15);
+}
+
+/* ── Today + selected ── */
+
 .today {
   border-color: var(--accent-muted);
-  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.15);
 }
 
 .today .cellDate {
@@ -166,38 +325,57 @@
   font-weight: 700;
 }
 
+.today .cellRelative {
+  color: var(--accent);
+}
+
 .selected {
   border-color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: 0 0 0 1px var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent-soft), inset 0 0 0 1px rgba(167, 139, 250, 0.15);
 }
 
 .selected .cellDate {
   color: var(--accent);
 }
 
-/* ── Dots (task indicators) ── */
-
-.dots {
-  display: flex;
-  gap: 3px;
-  justify-content: center;
-  flex-wrap: wrap;
-  max-width: 36px;
+.selected .cellRelative {
+  color: var(--accent);
 }
 
-.dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
+/* ── Completed day glow ── */
+
+.cellDone {
+  border-color: rgba(110, 201, 160, 0.30);
+  background: rgba(110, 201, 160, 0.08);
 }
 
-.dotDone {
-  background: var(--green);
+.cellDone .cellDate {
+  color: var(--green);
 }
 
-.dotPending {
+.cellDone .cellRelative {
+  color: var(--green);
+}
+
+/* ── Mini progress bar in cells ── */
+
+.miniBar {
+  width: 70%;
+  height: 2px;
+  background: var(--bg4);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.miniFill {
+  height: 100%;
   background: var(--accent-muted);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.miniFillDone {
+  background: var(--green);
 }
 
 /* ── Detail panel ── */
@@ -213,11 +391,26 @@
   margin-bottom: 10px;
 }
 
+.detailLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .detailDate {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
   text-transform: capitalize;
+}
+
+.detailRelative {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent-muted);
+  background: var(--accent-soft);
+  padding: 1px 7px;
+  border-radius: 10px;
 }
 
 .detailCount {
@@ -226,25 +419,107 @@
   font-weight: 500;
 }
 
-.empty {
+.detailCountDone {
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* ── Overload warning ── */
+
+.overloadWarn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 16px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: rgba(230, 160, 60, 0.08);
+  border: 1px solid rgba(230, 160, 60, 0.18);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  color: #d49530;
+}
+
+/* ── Empty state (encouraging) ── */
+
+.empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 12.5px;
-  color: var(--text3);
+  color: var(--text2);
+  font-style: italic;
 }
 
 .emptyIcon {
-  font-size: 14px;
-  opacity: 0.5;
+  font-size: 18px;
+  opacity: 0.4;
+  font-style: normal;
 }
+
+/* ── Task list ── */
 
 .taskList {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+/* ── Prepare button ── */
+
+.prepareBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(167, 139, 250, 0.15);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-family: 'Outfit', sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.prepareBtn:hover {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: var(--accent-muted);
+}
+
+/* ── All done banner ── */
+
+.allDoneBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: rgba(110, 201, 160, 0.08);
+  border: 1px solid rgba(110, 201, 160, 0.20);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--green);
+  font-weight: 500;
+}
+
+.allDoneIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: var(--green);
+  color: var(--bg);
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
 }

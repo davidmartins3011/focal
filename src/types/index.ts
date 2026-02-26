@@ -2,6 +2,7 @@ export interface MicroStep {
   id: string;
   text: string;
   done: boolean;
+  estimatedMinutes?: number;
 }
 
 export interface Task {
@@ -12,6 +13,7 @@ export interface Task {
   microSteps?: MicroStep[];
   aiDecomposed?: boolean;
   estimatedMinutes?: number;
+  priority?: "main" | "secondary";
 }
 
 export interface Tag {
@@ -34,7 +36,7 @@ export interface ChatMessage {
   steps?: { text: string }[];
 }
 
-export type ViewTab = "today" | "week" | "review";
+export type ViewTab = "today" | "week" | "review" | "strategy";
 
 export type SidebarPage = "main" | "calendar" | "integrations" | "settings" | "profile";
 
@@ -76,6 +78,46 @@ export interface AIProviderConfig {
 
 export interface AISettings {
   providers: AIProviderConfig[];
+}
+
+export type WeekDayId = "lun" | "mar" | "mer" | "jeu" | "ven" | "sam" | "dim";
+
+export type ReminderFrequency =
+  | "weekly"
+  | "biweekly"
+  | "monthly"
+  | "bimonthly"
+  | "quarterly";
+
+export type FrequencyOccurrence = "1st" | "2nd" | "3rd" | "4th" | "last";
+
+export interface NotificationReminder {
+  id: string;
+  label: string;
+  description: string;
+  time: string; // HH:mm
+  enabled: boolean;
+  days: WeekDayId[];
+  icon: string;
+  frequency?: ReminderFrequency;
+  frequencyOccurrence?: FrequencyOccurrence;
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  reminders: NotificationReminder[];
+}
+
+export interface NotificationHistoryEntry {
+  id: string;
+  reminderId: string;
+  icon: string;
+  label: string;
+  description: string;
+  scheduledTime: string; // HH:mm
+  firedAt: string;       // ISO datetime
+  missed: boolean;
+  read: boolean;
 }
 
 export interface IntegrationRule {

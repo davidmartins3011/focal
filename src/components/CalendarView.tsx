@@ -13,12 +13,53 @@ const MONTHS = [
 
 const DAY_NAMES = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
+const EMPTY_MESSAGES = [
+  "Journée libre — et c'est très bien comme ça.",
+  "Rien de prévu. Un bon moment pour souffler.",
+  "Pas de tâches ici. Ton cerveau te remercie.",
+  "Journée ouverte — tu décideras le moment venu.",
+];
+
 function toKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function daysDiff(from: Date, to: Date): number {
+  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+function relativeLabel(day: Date, now: Date): string | null {
+  const diff = daysDiff(now, day);
+  if (diff === 0) return "Auj.";
+  if (diff === 1) return "Dem.";
+  if (diff === -1) return "Hier";
+  if (diff >= 2 && diff <= 6) return `+${diff}j`;
+  return null;
+}
+
+function deadlineLabel(diff: number): string {
+  if (diff === 0) return "aujourd'hui";
+  if (diff === 1) return "demain";
+  return `dans ${diff} jour${diff > 1 ? "s" : ""}`;
+}
+
+function deadlineUrgency(diff: number): "critical" | "soon" | "upcoming" {
+  if (diff <= 1) return "critical";
+  if (diff <= 3) return "soon";
+  return "upcoming";
+}
+
+function loadLevel(count: number): "none" | "light" | "medium" | "heavy" {
+  if (count === 0) return "none";
+  if (count <= 2) return "light";
+  if (count <= 4) return "medium";
+  return "heavy";
 }
 
 function buildCalendarDays(year: number, month: number): Date[] {
@@ -52,6 +93,50 @@ function ChevronRight() {
   );
 }
 
+interface NextDeadline {
+  task: Task;
+  date: Date;
+  diff: number;
+}
+
+function findNextDeadline(tasks: Record<string, Task[]>, now: Date): NextDeadline | null {
+  let best: NextDeadline | null = null;
+
+  for (const [key, dayTasks] of Object.entries(tasks)) {
+    const parts = key.split("-").map(Number);
+    const date = new Date(parts[0], parts[1], parts[2]);
+    const diff = daysDiff(now, date);
+    if (diff < 0) continue;
+
+    for (const task of dayTasks) {
+      if (task.done) continue;
+      const isUrgent = task.tags.some((t) => t.color === "urgent");
+      if (!best || (isUrgent && diff <= best.diff) || diff < best.diff) {
+        best = { task, date, diff };
+      }
+    }
+  }
+  return best;
+}
+
+function getWeekStats(tasks: Record<string, Task[]>, now: Date): { done: number; total: number } {
+  const day = now.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset);
+
+  let done = 0;
+  let total = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + i);
+    const key = toKey(d);
+    const dayTasks = tasks[key] ?? [];
+    total += dayTasks.length;
+    done += dayTasks.filter((t) => t.done).length;
+  }
+  return { done, total };
+}
+
 const today = new Date();
 const mockTasks = buildCalendarMockTasks();
 
@@ -73,17 +158,31 @@ export default function CalendarView() {
   const selectedTasks: Task[] = mockTasks[toKey(selectedDate)] ?? [];
   const totalDone = selectedTasks.filter((t) => t.done).length;
   const totalTasks = selectedTasks.length;
+  const allDone = totalTasks > 0 && totalDone === totalTasks;
+
+  const nextDeadline = useMemo(() => findNextDeadline(mockTasks, today), []);
+  const weekStats = useMemo(() => getWeekStats(mockTasks, today), []);
+  const weekPct = weekStats.total > 0 ? Math.round((weekStats.done / weekStats.total) * 100) : 0;
 
   const formatSelectedDate = () =>
     `${DAY_NAMES[selectedDate.getDay()]} ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()].toLowerCase()}`;
+
+  const emptyMessage = useMemo(
+    () => EMPTY_MESSAGES[selectedDate.getDate() % EMPTY_MESSAGES.length],
+    [selectedDate]
+  );
+
+  const isSelectedToday = isSameDay(selectedDate, today);
+  const selectedDayDiff = daysDiff(today, selectedDate);
+  const isOverloaded = totalTasks >= 5;
 
   const rows: Date[][] = [];
   for (let i = 0; i < calendarDays.length; i += 7) {
     rows.push(calendarDays.slice(i, i + 7));
   }
-  const visibleRows = rows.filter((row) =>
-    row.some((d) => d.getMonth() === month) || rows.indexOf(row) < 5
-  ).slice(0, 6);
+  const visibleRows = rows
+    .filter((row) => row.some((d) => d.getMonth() === month) || rows.indexOf(row) < 5)
+    .slice(0, 6);
 
   return (
     <div className={styles.calendar}>
@@ -92,8 +191,26 @@ export default function CalendarView() {
           <h1>Calendrier</h1>
           <button className={styles.todayBtn} onClick={goToday}>Aujourd'hui</button>
         </div>
-        <p>Vue d'ensemble de ton mois et tes deadlines</p>
+
+        <div className={styles.weekScore}>
+          <span>Cette semaine</span>
+          <div className={styles.weekScoreBar}>
+            <div className={styles.weekScoreFill} style={{ width: `${weekPct}%` }} />
+          </div>
+          <span className={styles.weekScoreCount}>{weekStats.done}/{weekStats.total}</span>
+        </div>
       </div>
+
+      {nextDeadline && (
+        <div className={`${styles.deadline} ${styles[deadlineUrgency(nextDeadline.diff)]}`}>
+          <div className={styles.deadlineLeft}>
+            <span className={styles.deadlinePulse} />
+            <span className={styles.deadlineLabel}>Prochaine deadline</span>
+          </div>
+          <span className={styles.deadlineTask}>{nextDeadline.task.name}</span>
+          <span className={styles.deadlineTime}>{deadlineLabel(nextDeadline.diff)}</span>
+        </div>
+      )}
 
       <div className={styles.content}>
         <div className={styles.monthNav}>
@@ -113,11 +230,15 @@ export default function CalendarView() {
             row.map((day) => {
               const key = toKey(day);
               const isCurrentMonth = day.getMonth() === month;
-              const isToday = isSameDay(day, today);
+              const isDayToday = isSameDay(day, today);
               const isSelected = isSameDay(day, selectedDate);
               const dayTasks: Task[] = mockTasks[key] ?? [];
               const doneCount = dayTasks.filter((t) => t.done).length;
-              const pendingCount = dayTasks.length - doneCount;
+              const taskCount = dayTasks.length;
+              const pct = taskCount > 0 ? Math.round((doneCount / taskCount) * 100) : -1;
+              const dayAllDone = taskCount > 0 && doneCount === taskCount;
+              const load = loadLevel(taskCount);
+              const rel = isCurrentMonth ? relativeLabel(day, today) : null;
 
               return (
                 <button
@@ -125,20 +246,25 @@ export default function CalendarView() {
                   className={[
                     styles.cell,
                     !isCurrentMonth && styles.otherMonth,
-                    isToday && styles.today,
+                    isDayToday && styles.today,
                     isSelected && styles.selected,
+                    dayAllDone && styles.cellDone,
+                    load !== "none" && styles[`load_${load}`],
                   ].filter(Boolean).join(" ")}
                   onClick={() => setSelectedDate(day)}
                 >
-                  <span className={styles.cellDate}>{day.getDate()}</span>
-                  {dayTasks.length > 0 && (
-                    <div className={styles.dots}>
-                      {Array.from({ length: Math.min(doneCount, 3) }).map((_, i) => (
-                        <span key={`d${i}`} className={`${styles.dot} ${styles.dotDone}`} />
-                      ))}
-                      {Array.from({ length: Math.min(pendingCount, 3) }).map((_, i) => (
-                        <span key={`p${i}`} className={`${styles.dot} ${styles.dotPending}`} />
-                      ))}
+                  {rel ? (
+                    <span className={`${styles.cellDate} ${styles.cellRelative}`}>{rel}</span>
+                  ) : (
+                    <span className={styles.cellDate}>{day.getDate()}</span>
+                  )}
+
+                  {taskCount > 0 && (
+                    <div className={styles.miniBar}>
+                      <div
+                        className={`${styles.miniFill} ${dayAllDone ? styles.miniFillDone : ""}`}
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                   )}
                 </button>
@@ -147,20 +273,32 @@ export default function CalendarView() {
           )}
         </div>
 
-        <div className={styles.detail}>
+        <div className={styles.detail} key={toKey(selectedDate)}>
           <div className={styles.detailHeader}>
-            <span className={styles.detailDate}>{formatSelectedDate()}</span>
+            <div className={styles.detailLeft}>
+              <span className={styles.detailDate}>{formatSelectedDate()}</span>
+              {selectedDayDiff > 0 && selectedDayDiff <= 7 && (
+                <span className={styles.detailRelative}>{deadlineLabel(selectedDayDiff)}</span>
+              )}
+            </div>
             {totalTasks > 0 && (
-              <span className={styles.detailCount}>
-                {totalDone}/{totalTasks} terminée{totalTasks > 1 ? "s" : ""}
+              <span className={`${styles.detailCount} ${allDone ? styles.detailCountDone : ""}`}>
+                {allDone ? "✓ Tout terminé" : `${totalDone}/${totalTasks} terminée${totalTasks > 1 ? "s" : ""}`}
               </span>
             )}
           </div>
 
+          {isOverloaded && !allDone && (
+            <div className={styles.overloadWarn}>
+              <span>⚡</span>
+              <span>Journée chargée — {totalTasks} tâches. Pense à redistribuer si besoin.</span>
+            </div>
+          )}
+
           {selectedTasks.length === 0 ? (
             <div className={styles.empty}>
-              <span className={styles.emptyIcon}>✦</span>
-              <span>Aucune tâche prévue</span>
+              <span className={styles.emptyIcon}>☁</span>
+              <span>{emptyMessage}</span>
             </div>
           ) : (
             <div className={styles.taskList}>
@@ -173,6 +311,19 @@ export default function CalendarView() {
                   animDelay={0.05 + i * 0.03}
                 />
               ))}
+            </div>
+          )}
+
+          {totalTasks > 0 && !allDone && (
+            <button className={styles.prepareBtn}>
+              {isSelectedToday ? "✦ Préparer ma journée" : "✦ Planifier cette journée"}
+            </button>
+          )}
+
+          {allDone && (
+            <div className={styles.allDoneBanner}>
+              <span className={styles.allDoneIcon}>✓</span>
+              <span>Bravo, tout est bouclé pour cette journée !</span>
             </div>
           )}
         </div>
