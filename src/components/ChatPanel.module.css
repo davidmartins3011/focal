@@ -22,7 +22,7 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #a78bfa, #6d45d0);
+  background: linear-gradient(135deg, var(--accent), var(--accent-muted));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -292,7 +292,7 @@
 }
 
 .inputBox:focus-within {
-  border-color: rgba(167, 139, 250, 0.4);
+  border-color: rgba(var(--accent-rgb), 0.4);
 }
 
 .inputBox textarea {
@@ -328,7 +328,7 @@
 }
 
 .sendBtn:hover {
-  background: #b9a0fc;
+  background: var(--accent-light);
 }
 
 .hints {

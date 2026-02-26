@@ -82,7 +82,7 @@
 }
 
 .card.connected {
-  border-color: rgba(167, 139, 250, 0.15);
+  border-color: rgba(var(--accent-rgb), 0.15);
 }
 
 .cardHeader {
@@ -184,7 +184,7 @@
 
 .connectedBtn {
   background: var(--accent-soft);
-  border-color: rgba(167, 139, 250, 0.2);
+  border-color: rgba(var(--accent-rgb), 0.2);
   color: var(--accent);
   display: flex;
   align-items: center;
@@ -192,7 +192,7 @@
 }
 
 .connectedBtn:hover {
-  background: rgba(167, 139, 250, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
   color: var(--accent);
 }
 
@@ -347,13 +347,13 @@
   font-weight: 500;
   cursor: pointer;
   background: var(--accent-soft);
-  border: 1px solid rgba(167, 139, 250, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   color: var(--accent);
   transition: all 0.15s;
 }
 
 .addRuleEmptyBtn:hover {
-  background: rgba(167, 139, 250, 0.18);
+  background: rgba(var(--accent-rgb), 0.18);
 }
 
 /* ─── Rule Card ─── */

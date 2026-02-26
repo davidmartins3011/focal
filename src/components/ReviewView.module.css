@@ -34,7 +34,7 @@
 .btn {
   margin-top: 12px;
   background: var(--accent);
-  color: #131316;
+  color: var(--bg);
   border: none;
   border-radius: var(--radius-sm);
   padding: 8px 20px;
@@ -46,5 +46,5 @@
 }
 
 .btn:hover {
-  background: #b9a0fc;
+  background: var(--accent-light);
 }

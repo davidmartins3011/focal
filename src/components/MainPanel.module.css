@@ -31,7 +31,7 @@
   align-items: center;
   gap: 6px;
   background: var(--accent-soft);
-  border: 1px solid rgba(167, 139, 250, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   border-radius: 20px;
   padding: 5px 12px;
   font-size: 12px;

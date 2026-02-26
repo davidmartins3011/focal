@@ -24,15 +24,15 @@
 }
 
 .glowDone {
-  border-color: rgba(167, 139, 250, 0.35);
-  box-shadow: 0 0 20px rgba(167, 139, 250, 0.08);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.08);
   animation: glowPulse 1.5s ease-out both !important;
 }
 
 @keyframes glowPulse {
-  0%   { box-shadow: 0 0 0 rgba(167, 139, 250, 0); border-color: var(--border); }
-  30%  { box-shadow: 0 0 24px rgba(167, 139, 250, 0.15); border-color: rgba(167, 139, 250, 0.4); }
-  100% { box-shadow: 0 0 0 rgba(167, 139, 250, 0); border-color: var(--border); }
+  0%   { box-shadow: 0 0 0 rgba(var(--accent-rgb), 0); border-color: var(--border); }
+  30%  { box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.15); border-color: rgba(var(--accent-rgb), 0.4); }
+  100% { box-shadow: 0 0 0 rgba(var(--accent-rgb), 0); border-color: var(--border); }
 }
 
 .check {
@@ -56,7 +56,7 @@
 .checkDone {
   background: var(--green);
   border-color: var(--green);
-  color: #131316;
+  color: var(--bg);
 }
 
 .body {
@@ -92,11 +92,11 @@
   letter-spacing: 0.5px;
 }
 
-.crm     { background: rgba(94, 184, 138, 0.12);  color: #5eb88a; }
-.data    { background: rgba(122, 171, 240, 0.12); color: #7aabf0; }
-.roadmap { background: rgba(167, 139, 250, 0.12);  color: var(--accent); }
-.saas    { background: rgba(192, 128, 216, 0.12); color: #c080d8; }
-.urgent  { background: rgba(224, 96, 96, 0.12);   color: #e06060; }
+.crm     { background: rgba(94, 184, 138, 0.12);  color: var(--green); }
+.data    { background: rgba(122, 171, 240, 0.12); color: var(--blue); }
+.roadmap { background: rgba(var(--accent-rgb), 0.12);  color: var(--accent); }
+.saas    { background: rgba(192, 128, 216, 0.12); color: var(--purple); }
+.urgent  { background: rgba(224, 96, 96, 0.12);   color: var(--red); }
 
 /* ── Decompose button ── */
 .decomposeBtn {
@@ -118,7 +118,7 @@
 .decomposeBtn:hover {
   color: var(--accent);
   background: var(--accent-soft);
-  border-color: rgba(167, 139, 250, 0.15);
+  border-color: rgba(var(--accent-rgb), 0.15);
 }
 
 .decomposeIcon {
@@ -219,9 +219,9 @@
 
 .aiBadge {
   font-size: 9px;
-  background: rgba(167, 139, 250, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--accent-muted);
-  border: 1px solid rgba(167, 139, 250, 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-radius: 4px;
   padding: 1px 5px;
   font-weight: 600;

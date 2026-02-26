@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import type { Task } from "../types";
+import { buildCalendarMockTasks } from "../data/mockTasks";
 import TaskItem from "./TaskItem";
 import styles from "./CalendarView.module.css";
 
@@ -9,6 +10,8 @@ const MONTHS = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
 ];
+
+const DAY_NAMES = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
 function toKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -33,55 +36,6 @@ function buildCalendarDays(year: number, month: number): Date[] {
   return days;
 }
 
-const today = new Date();
-
-const mockTasks: Record<string, Task[]> = (() => {
-  const y = today.getFullYear();
-  const m = today.getMonth();
-  const map: Record<string, Task[]> = {};
-
-  const add = (day: number, tasks: Task[]) => {
-    map[toKey(new Date(y, m, day))] = tasks;
-  };
-
-  add(today.getDate(), [
-    { id: "c1", name: "Finaliser wireframes page pricing", done: false, tags: [{ label: "SaaS", color: "saas" }] },
-    { id: "c2", name: "Répondre au mail de Marc", done: true, tags: [{ label: "CRM", color: "crm" }] },
-    { id: "c3", name: "Préparer le standup", done: false, tags: [{ label: "Roadmap", color: "roadmap" }] },
-  ]);
-
-  add(today.getDate() - 1, [
-    { id: "c4", name: "Revue de code PR #42", done: true, tags: [{ label: "Data", color: "data" }] },
-    { id: "c5", name: "Rédiger spec notifications", done: true, tags: [{ label: "SaaS", color: "saas" }] },
-  ]);
-
-  add(today.getDate() + 1, [
-    { id: "c6", name: "Call client Neovision — 14h", done: false, tags: [{ label: "CRM", color: "crm" }] },
-  ]);
-
-  add(today.getDate() + 3, [
-    { id: "c7", name: "Livraison MVP dashboard", done: false, tags: [{ label: "Roadmap", color: "roadmap" }, { label: "Urgent", color: "urgent" }] },
-    { id: "c8", name: "Tests E2E module facturation", done: false, tags: [{ label: "SaaS", color: "saas" }] },
-  ]);
-
-  add(today.getDate() + 5, [
-    { id: "c9", name: "Webinaire produit — 10h30", done: false, tags: [{ label: "SaaS", color: "saas" }] },
-    { id: "c10", name: "Synchro data pipeline", done: false, tags: [{ label: "Data", color: "data" }] },
-    { id: "c11", name: "Déjeuner équipe", done: false, tags: [] },
-  ]);
-
-  add(today.getDate() - 3, [
-    { id: "c12", name: "Intégration API paiement", done: true, tags: [{ label: "SaaS", color: "saas" }] },
-  ]);
-
-  add(today.getDate() - 5, [
-    { id: "c13", name: "Planifier sprint Q2", done: true, tags: [{ label: "Roadmap", color: "roadmap" }] },
-    { id: "c14", name: "Mise à jour documentation", done: true, tags: [{ label: "Data", color: "data" }] },
-  ]);
-
-  return map;
-})();
-
 function ChevronLeft() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -98,6 +52,9 @@ function ChevronRight() {
   );
 }
 
+const today = new Date();
+const mockTasks = buildCalendarMockTasks();
+
 export default function CalendarView() {
   const [viewDate, setViewDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<Date>(today);
@@ -113,15 +70,12 @@ export default function CalendarView() {
     setSelectedDate(today);
   };
 
-  const selectedTasks = mockTasks[toKey(selectedDate)] ?? [];
-
+  const selectedTasks: Task[] = mockTasks[toKey(selectedDate)] ?? [];
   const totalDone = selectedTasks.filter((t) => t.done).length;
   const totalTasks = selectedTasks.length;
 
-  const formatSelectedDate = () => {
-    const dayNames = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-    return `${dayNames[selectedDate.getDay()]} ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()].toLowerCase()}`;
-  };
+  const formatSelectedDate = () =>
+    `${DAY_NAMES[selectedDate.getDay()]} ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()].toLowerCase()}`;
 
   const rows: Date[][] = [];
   for (let i = 0; i < calendarDays.length; i += 7) {
@@ -143,15 +97,9 @@ export default function CalendarView() {
 
       <div className={styles.content}>
         <div className={styles.monthNav}>
-          <button className={styles.navBtn} onClick={prevMonth}>
-            <ChevronLeft />
-          </button>
-          <span className={styles.monthLabel}>
-            {MONTHS[month]} {year}
-          </span>
-          <button className={styles.navBtn} onClick={nextMonth}>
-            <ChevronRight />
-          </button>
+          <button className={styles.navBtn} onClick={prevMonth}><ChevronLeft /></button>
+          <span className={styles.monthLabel}>{MONTHS[month]} {year}</span>
+          <button className={styles.navBtn} onClick={nextMonth}><ChevronRight /></button>
         </div>
 
         <div className={styles.weekDays}>
@@ -167,7 +115,7 @@ export default function CalendarView() {
               const isCurrentMonth = day.getMonth() === month;
               const isToday = isSameDay(day, today);
               const isSelected = isSameDay(day, selectedDate);
-              const dayTasks = mockTasks[key] ?? [];
+              const dayTasks: Task[] = mockTasks[key] ?? [];
               const doneCount = dayTasks.filter((t) => t.done).length;
               const pendingCount = dayTasks.length - doneCount;
 
