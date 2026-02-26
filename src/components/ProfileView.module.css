@@ -1,0 +1,372 @@
+.container {
+  flex: 1;
+  padding: 32px 36px;
+  overflow-y: auto;
+}
+
+.header {
+  margin-bottom: 36px;
+}
+
+.avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.avatar svg {
+  opacity: 0.7;
+}
+
+.title {
+  font-family: 'Lora', serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text2);
+  line-height: 1.5;
+  max-width: 420px;
+}
+
+.emptyState {
+  padding: 48px 24px;
+  text-align: center;
+  background: var(--bg2);
+  border-radius: var(--radius);
+  border: 1px dashed var(--border2);
+}
+
+.emptyState p {
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+
+.emptyState .editBtn {
+  margin-top: 20px;
+}
+
+.emptyHint {
+  font-size: 13px;
+  color: var(--text3) !important;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.section {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+}
+
+.sectionTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sectionIcon {
+  font-size: 18px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.fieldLabel {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 4px;
+}
+
+.fieldValue {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.tagList {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.tag {
+  font-size: 13px;
+  padding: 6px 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.sourceLink {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.sourceLink:hover {
+  text-decoration: underline;
+}
+
+.sourcesViewList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sourceViewItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sourceViewItem:last-child {
+  border-bottom: none;
+}
+
+.sourceType {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  min-width: 90px;
+}
+
+.sourceUrlPlaceholder {
+  color: var(--text3);
+  font-size: 13px;
+}
+
+.sourcesList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sourceRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sourceSelect {
+  flex: 0 0 120px;
+}
+
+.sourceUrl {
+  flex: 1;
+  min-width: 0;
+}
+
+.removeSourceBtn {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text3);
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.removeSourceBtn:hover {
+  color: var(--red);
+  background: rgba(224, 96, 96, 0.1);
+}
+
+.addSourceBtn {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  background: transparent;
+  border: 1px dashed var(--border2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.addSourceBtn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Edit mode */
+.headerTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.editBtn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.editBtn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.editActions {
+  display: flex;
+  gap: 8px;
+}
+
+.cancelBtn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cancelBtn:hover {
+  background: var(--bg4);
+  color: var(--text);
+}
+
+.saveBtn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.saveBtn:hover {
+  background: var(--accent-muted);
+}
+
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.formField {
+  margin-bottom: 16px;
+}
+
+.formField:last-child {
+  margin-bottom: 0;
+}
+
+.input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  transition: border-color 0.15s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.input::placeholder {
+  color: var(--text3);
+}
+
+.inputText,
+.inputSelect {
+  max-width: 400px;
+}
+
+.textarea {
+  min-height: 80px;
+  resize: vertical;
+  max-width: 100%;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.checkboxLabel input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.checkboxGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.formFooter {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+}

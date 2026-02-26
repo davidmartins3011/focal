@@ -1,0 +1,283 @@
+.container {
+  flex: 1;
+  padding: 32px 36px;
+  overflow-y: auto;
+}
+
+.title {
+  font-family: 'Lora', serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 32px;
+}
+
+.section {
+  margin-bottom: 36px;
+}
+
+.sectionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 16px;
+}
+
+.themesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.themeCard {
+  position: relative;
+  border: 2px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg2);
+}
+
+.themeCard:hover {
+  border-color: var(--text3);
+  background: var(--bg3);
+}
+
+.themeCard.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.themePreview {
+  width: 100%;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  display: flex;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.previewBar {
+  flex: 1;
+  border-radius: 4px;
+}
+
+.themeName {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.themeDesc {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.4;
+}
+
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.checkmark {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+}
+
+/* AI Providers */
+
+.providersList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.providerCard {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  background: var(--bg2);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.providerCard.enabled {
+  border-color: var(--accent);
+}
+
+.providerHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.providerHeader:hover {
+  background: var(--bg3);
+}
+
+.providerLogo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.providerInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.providerName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.providerModels {
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 1px;
+}
+
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--bg4);
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle.on {
+  background: var(--accent);
+}
+
+.toggleDot {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.toggle.on .toggleDot {
+  transform: translateX(18px);
+}
+
+.providerBody {
+  padding: 0 16px 16px;
+}
+
+.apiKeyWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.apiKeyLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text2);
+  margin-bottom: 6px;
+}
+
+.apiKeyInput {
+  width: 100%;
+  padding: 10px 40px 10px 12px;
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  background: var(--bg3);
+  color: var(--text);
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.apiKeyInput::placeholder {
+  color: var(--text3);
+}
+
+.apiKeyInput:focus {
+  border-color: var(--accent);
+}
+
+.apiKeyToggle {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.apiKeyToggle:hover {
+  color: var(--text2);
+}
+
+.apiKeyStatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.statusDot.saved {
+  background: var(--green);
+}
+
+.statusDot.missing {
+  background: var(--text3);
+}
+
+.statusText {
+  color: var(--text2);
+}

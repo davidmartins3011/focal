@@ -4,7 +4,8 @@
   padding: 0;
 }
 
-:root {
+:root,
+[data-theme="default"] {
   --bg: #131316;
   --bg2: #1a1a1f;
   --bg3: #232329;
@@ -23,6 +24,202 @@
   --border2: rgba(255, 255, 255, 0.10);
   --radius: 12px;
   --radius-sm: 8px;
+}
+
+[data-theme="clair"] {
+  --bg: #f5f3f7;
+  --bg2: #eae7ef;
+  --bg3: #ddd9e4;
+  --bg4: #d0cbda;
+  --accent: #7c5cbf;
+  --accent-soft: rgba(124, 92, 191, 0.10);
+  --accent-muted: #6a4daa;
+  --green: #3da57a;
+  --blue: #4a85d4;
+  --purple: #9a5cb8;
+  --red: #d04040;
+  --text: #1e1a26;
+  --text2: #5a5468;
+  --text3: #9890a5;
+  --border: rgba(0, 0, 0, 0.08);
+  --border2: rgba(0, 0, 0, 0.12);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+[data-theme="sombre"] {
+  --bg: #09090b;
+  --bg2: #0f0f13;
+  --bg3: #18181d;
+  --bg4: #222228;
+  --accent: #8b6fd8;
+  --accent-soft: rgba(139, 111, 216, 0.12);
+  --accent-muted: #7560b8;
+  --green: #4ea880;
+  --blue: #5a90d8;
+  --purple: #a060c0;
+  --red: #c85050;
+  --text: #d4d0dc;
+  --text2: #706a7e;
+  --text3: #3e3a48;
+  --border: rgba(255, 255, 255, 0.04);
+  --border2: rgba(255, 255, 255, 0.07);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+/* TDAH-friendly: warm, low-stimulation, earthy tones */
+[data-theme="zen"] {
+  --bg: #1c1917;
+  --bg2: #231f1c;
+  --bg3: #2c2724;
+  --bg4: #38322e;
+  --accent: #d4a574;
+  --accent-soft: rgba(212, 165, 116, 0.12);
+  --accent-muted: #b88c5e;
+  --green: #7dab82;
+  --blue: #82a5bf;
+  --purple: #b89ccc;
+  --red: #cc7b6e;
+  --text: #e5ddd4;
+  --text2: #9e9488;
+  --text3: #5e574f;
+  --border: rgba(255, 255, 255, 0.06);
+  --border2: rgba(255, 255, 255, 0.09);
+  --radius: 14px;
+  --radius-sm: 10px;
+}
+
+/* TDAH-friendly: high contrast, clean, calming blue-green focus */
+[data-theme="hyperfocus"] {
+  --bg: #0f1419;
+  --bg2: #151c23;
+  --bg3: #1d262f;
+  --bg4: #27333f;
+  --accent: #34d399;
+  --accent-soft: rgba(52, 211, 153, 0.12);
+  --accent-muted: #2bb580;
+  --green: #34d399;
+  --blue: #60a5fa;
+  --purple: #a78bfa;
+  --red: #f87171;
+  --text: #e2e8f0;
+  --text2: #8494a7;
+  --text3: #4a5568;
+  --border: rgba(255, 255, 255, 0.06);
+  --border2: rgba(255, 255, 255, 0.10);
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+/* Warm sunrise — coral & peach on cream */
+[data-theme="aurore"] {
+  --bg: #fdf6f0;
+  --bg2: #f5ebe2;
+  --bg3: #ebddd0;
+  --bg4: #dfd0c0;
+  --accent: #e07850;
+  --accent-soft: rgba(224, 120, 80, 0.12);
+  --accent-muted: #c46640;
+  --green: #6aab72;
+  --blue: #5a9ec4;
+  --purple: #b07cc0;
+  --red: #d45050;
+  --text: #2c1e14;
+  --text2: #7a6455;
+  --text3: #b0a090;
+  --border: rgba(0, 0, 0, 0.07);
+  --border2: rgba(0, 0, 0, 0.11);
+  --radius: 14px;
+  --radius-sm: 10px;
+}
+
+/* Deep ocean — teal & cyan on dark navy */
+[data-theme="ocean"] {
+  --bg: #0a1628;
+  --bg2: #0f1e34;
+  --bg3: #162844;
+  --bg4: #1e3452;
+  --accent: #22d3ee;
+  --accent-soft: rgba(34, 211, 238, 0.10);
+  --accent-muted: #18a8bf;
+  --green: #2dd4a8;
+  --blue: #38bdf8;
+  --purple: #a78bfa;
+  --red: #fb7185;
+  --text: #e0f2fe;
+  --text2: #7aa8c4;
+  --text3: #3a5a74;
+  --border: rgba(255, 255, 255, 0.06);
+  --border2: rgba(255, 255, 255, 0.10);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+/* Cherry blossom — soft pink on lavender-white */
+[data-theme="sakura"] {
+  --bg: #fdf2f8;
+  --bg2: #f5e6f0;
+  --bg3: #eadae8;
+  --bg4: #ddcce0;
+  --accent: #e45da0;
+  --accent-soft: rgba(228, 93, 160, 0.10);
+  --accent-muted: #c44888;
+  --green: #5cb889;
+  --blue: #6ea4d4;
+  --purple: #b47cd8;
+  --red: #e05a6a;
+  --text: #2a1824;
+  --text2: #7a5a6e;
+  --text3: #b09aa8;
+  --border: rgba(0, 0, 0, 0.06);
+  --border2: rgba(0, 0, 0, 0.10);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+/* Nordic frost — icy blue-gray, sharp and clean */
+[data-theme="nord"] {
+  --bg: #1a2030;
+  --bg2: #212838;
+  --bg3: #2a3244;
+  --bg4: #343e52;
+  --accent: #88c0d0;
+  --accent-soft: rgba(136, 192, 208, 0.12);
+  --accent-muted: #6ea8b8;
+  --green: #a3be8c;
+  --blue: #81a1c1;
+  --purple: #b48ead;
+  --red: #bf616a;
+  --text: #eceff4;
+  --text2: #8a94a6;
+  --text3: #4c566a;
+  --border: rgba(255, 255, 255, 0.06);
+  --border2: rgba(255, 255, 255, 0.10);
+  --radius: 8px;
+  --radius-sm: 4px;
+}
+
+/* Bright solar — amber & gold on warm white */
+[data-theme="solaire"] {
+  --bg: #fffdf5;
+  --bg2: #faf5e8;
+  --bg3: #f0eada;
+  --bg4: #e4dcc8;
+  --accent: #d97706;
+  --accent-soft: rgba(217, 119, 6, 0.10);
+  --accent-muted: #b86305;
+  --green: #4d9c5a;
+  --blue: #3b82c4;
+  --purple: #9060c8;
+  --red: #dc3545;
+  --text: #1c1408;
+  --text2: #6b5e40;
+  --text3: #a89878;
+  --border: rgba(0, 0, 0, 0.07);
+  --border2: rgba(0, 0, 0, 0.11);
+  --radius: 10px;
+  --radius-sm: 6px;
 }
 
 html, body, #root {
