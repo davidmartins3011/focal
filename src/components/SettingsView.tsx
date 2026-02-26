@@ -1,25 +1,15 @@
 import { useState } from "react";
 import styles from "./SettingsView.module.css";
-import type { ThemeId, AIProviderId, AISettings, NotificationSettings, WeekDayId, ReminderFrequency } from "../types";
+import type { ThemeId, AIProviderId, AISettings, NotificationSettings, ReminderFrequency } from "../types";
 import { themes, providers } from "../data/mockSettings";
-
-const DAY_LABELS: { id: WeekDayId; short: string }[] = [
-  { id: "lun", short: "L" },
-  { id: "mar", short: "M" },
-  { id: "mer", short: "Me" },
-  { id: "jeu", short: "J" },
-  { id: "ven", short: "V" },
-  { id: "sam", short: "S" },
-  { id: "dim", short: "D" },
-];
-
-const FREQUENCY_OPTIONS: { id: ReminderFrequency; label: string }[] = [
-  { id: "weekly", label: "Chaque semaine" },
-  { id: "biweekly", label: "Toutes les 2 semaines" },
-  { id: "monthly", label: "Tous les mois" },
-  { id: "bimonthly", label: "Tous les 2 mois" },
-  { id: "quarterly", label: "Tous les 3 mois" },
-];
+import {
+  DAY_LABELS,
+  FREQUENCY_OPTIONS,
+  getOccurrenceOptions,
+  BIMONTHLY_CYCLES,
+  BIANNUAL_CYCLES,
+  QUARTERLY_CYCLES,
+} from "../data/settingsConstants";
 
 interface SettingsViewProps {
   currentTheme: ThemeId;
@@ -217,25 +207,134 @@ export default function SettingsView({
                               ))}
                             </div>
                           </div>
-                          <div className={styles.reminderDaysRow}>
-                            <label className={styles.reminderTimeLabel}>Jour</label>
-                            <div className={styles.dayPills}>
-                              {DAY_LABELS.map((d) => (
-                                <button
-                                  key={d.id}
-                                  className={`${styles.dayPill} ${reminder.days[0] === d.id ? styles.dayActive : ""}`}
-                                  onClick={() => onNotifSettingsChange({
-                                    ...notifSettings,
-                                    reminders: notifSettings.reminders.map((r) =>
-                                      r.id === reminder.id ? { ...r, days: [d.id] } : r
-                                    ),
-                                  })}
-                                >
-                                  {d.short}
-                                </button>
-                              ))}
+
+                          {reminder.frequency !== "weekly" && (
+                            <div className={styles.reminderDaysRow}>
+                              <label className={styles.reminderTimeLabel}>Quand</label>
+                              <div className={styles.occurrenceRow}>
+                                <div className={styles.freqPills}>
+                                  {getOccurrenceOptions(reminder.frequency).map((o) => (
+                                    <button
+                                      key={o.id}
+                                      className={`${styles.freqPill} ${(reminder.frequencyOccurrence ?? "1st") === o.id ? styles.freqActive : ""}`}
+                                      onClick={() => onNotifSettingsChange({
+                                        ...notifSettings,
+                                        reminders: notifSettings.reminders.map((r) =>
+                                          r.id === reminder.id ? { ...r, frequencyOccurrence: o.id } : r
+                                        ),
+                                      })}
+                                    >
+                                      {o.label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className={styles.dayPills}>
+                                  {DAY_LABELS.map((d) => (
+                                    <button
+                                      key={d.id}
+                                      className={`${styles.dayPill} ${reminder.days[0] === d.id ? styles.dayActive : ""}`}
+                                      onClick={() => onNotifSettingsChange({
+                                        ...notifSettings,
+                                        reminders: notifSettings.reminders.map((r) =>
+                                          r.id === reminder.id ? { ...r, days: [d.id] } : r
+                                        ),
+                                      })}
+                                    >
+                                      {d.short}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          )}
+
+                          {reminder.frequency === "bimonthly" && (
+                            <div className={styles.reminderDaysRow}>
+                              <label className={styles.reminderTimeLabel}>Mois</label>
+                              <div className={styles.cyclePills}>
+                                {BIMONTHLY_CYCLES.map((c) => (
+                                  <button
+                                    key={c.start}
+                                    className={`${styles.cyclePill} ${(reminder.frequencyCycleStart ?? 1) === c.start ? styles.cycleActive : ""}`}
+                                    onClick={() => onNotifSettingsChange({
+                                      ...notifSettings,
+                                      reminders: notifSettings.reminders.map((r) =>
+                                        r.id === reminder.id ? { ...r, frequencyCycleStart: c.start } : r
+                                      ),
+                                    })}
+                                  >
+                                    {c.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {reminder.frequency === "quarterly" && (
+                            <div className={styles.reminderDaysRow}>
+                              <label className={styles.reminderTimeLabel}>Mois</label>
+                              <div className={styles.cyclePills}>
+                                {QUARTERLY_CYCLES.map((c) => (
+                                  <button
+                                    key={c.start}
+                                    className={`${styles.cyclePill} ${(reminder.frequencyCycleStart ?? 1) === c.start ? styles.cycleActive : ""}`}
+                                    onClick={() => onNotifSettingsChange({
+                                      ...notifSettings,
+                                      reminders: notifSettings.reminders.map((r) =>
+                                        r.id === reminder.id ? { ...r, frequencyCycleStart: c.start } : r
+                                      ),
+                                    })}
+                                  >
+                                    {c.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {reminder.frequency === "biannual" && (
+                            <div className={styles.reminderDaysRow}>
+                              <label className={styles.reminderTimeLabel}>Mois</label>
+                              <div className={styles.cyclePills}>
+                                {BIANNUAL_CYCLES.map((c) => (
+                                  <button
+                                    key={c.start}
+                                    className={`${styles.cyclePill} ${(reminder.frequencyCycleStart ?? 1) === c.start ? styles.cycleActive : ""}`}
+                                    onClick={() => onNotifSettingsChange({
+                                      ...notifSettings,
+                                      reminders: notifSettings.reminders.map((r) =>
+                                        r.id === reminder.id ? { ...r, frequencyCycleStart: c.start } : r
+                                      ),
+                                    })}
+                                  >
+                                    {c.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {reminder.frequency === "weekly" && (
+                            <div className={styles.reminderDaysRow}>
+                              <label className={styles.reminderTimeLabel}>Jour</label>
+                              <div className={styles.dayPills}>
+                                {DAY_LABELS.map((d) => (
+                                  <button
+                                    key={d.id}
+                                    className={`${styles.dayPill} ${reminder.days[0] === d.id ? styles.dayActive : ""}`}
+                                    onClick={() => onNotifSettingsChange({
+                                      ...notifSettings,
+                                      reminders: notifSettings.reminders.map((r) =>
+                                        r.id === reminder.id ? { ...r, days: [d.id] } : r
+                                      ),
+                                    })}
+                                  >
+                                    {d.short}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <div className={styles.reminderDaysRow}>

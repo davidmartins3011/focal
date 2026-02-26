@@ -161,10 +161,10 @@
 }
 
 /* Tag colors */
-.crm     { background: rgba(94, 184, 138, 0.12);  color: var(--green); }
-.data    { background: rgba(122, 171, 240, 0.12); color: var(--blue); }
+.crm     { background: rgba(var(--green-rgb), 0.12);  color: var(--green); }
+.data    { background: rgba(var(--blue-rgb), 0.12);   color: var(--blue); }
 .roadmap { background: rgba(var(--accent-rgb), 0.12);  color: var(--accent); }
-.saas    { background: rgba(192, 128, 216, 0.12); color: var(--purple); }
+.saas    { background: rgba(var(--purple-rgb), 0.12);  color: var(--purple); }
 
 /* ── Reflections ── */
 .reflections {

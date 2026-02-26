@@ -126,8 +126,8 @@
 }
 
 .critical {
-  background: rgba(224, 96, 96, 0.12);
-  border: 1px solid rgba(224, 96, 96, 0.25);
+  background: rgba(var(--red-rgb), 0.12);
+  border: 1px solid rgba(var(--red-rgb), 0.25);
 }
 
 .critical .deadlinePulse {
@@ -143,25 +143,25 @@
 }
 
 .soon {
-  background: rgba(230, 160, 60, 0.10);
-  border: 1px solid rgba(230, 160, 60, 0.20);
+  background: rgba(var(--warning-rgb), 0.10);
+  border: 1px solid rgba(var(--warning-rgb), 0.20);
 }
 
 .soon .deadlinePulse {
-  background: #e6a03c;
+  background: var(--warning);
 }
 
 .soon .deadlineLabel {
-  color: #d49530;
+  color: var(--warning);
 }
 
 .soon .deadlineTime {
-  color: #d49530;
+  color: var(--warning);
 }
 
 .upcoming {
   background: var(--accent-soft);
-  border: 1px solid rgba(167, 139, 250, 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
 }
 
 .upcoming .deadlinePulse {
@@ -305,19 +305,19 @@
 }
 
 .load_medium {
-  background: rgba(167, 139, 250, 0.14);
+  background: rgba(var(--accent-rgb), 0.14);
 }
 
 .load_heavy {
-  background: rgba(224, 96, 96, 0.10);
-  border-color: rgba(224, 96, 96, 0.15);
+  background: rgba(var(--red-rgb), 0.10);
+  border-color: rgba(var(--red-rgb), 0.15);
 }
 
 /* ── Today + selected ── */
 
 .today {
   border-color: var(--accent-muted);
-  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.15);
 }
 
 .today .cellDate {
@@ -331,7 +331,7 @@
 
 .selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-soft), inset 0 0 0 1px rgba(167, 139, 250, 0.15);
+  box-shadow: 0 0 0 1px var(--accent-soft), inset 0 0 0 1px rgba(var(--accent-rgb), 0.15);
 }
 
 .selected .cellDate {
@@ -345,8 +345,8 @@
 /* ── Completed day glow ── */
 
 .cellDone {
-  border-color: rgba(110, 201, 160, 0.30);
-  background: rgba(110, 201, 160, 0.08);
+  border-color: rgba(var(--green-rgb), 0.30);
+  background: rgba(var(--green-rgb), 0.08);
 }
 
 .cellDone .cellDate {
@@ -432,11 +432,11 @@
   gap: 8px;
   padding: 8px 12px;
   margin-bottom: 10px;
-  background: rgba(230, 160, 60, 0.08);
-  border: 1px solid rgba(230, 160, 60, 0.18);
+  background: rgba(var(--warning-rgb), 0.08);
+  border: 1px solid rgba(var(--warning-rgb), 0.18);
   border-radius: var(--radius-sm);
   font-size: 11.5px;
-  color: #d49530;
+  color: var(--warning);
 }
 
 /* ── Empty state (encouraging) ── */
@@ -479,7 +479,7 @@
   margin-top: 12px;
   padding: 10px;
   background: var(--accent-soft);
-  border: 1px solid rgba(167, 139, 250, 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
   border-radius: var(--radius-sm);
   color: var(--accent);
   font-family: 'Outfit', sans-serif;
@@ -490,7 +490,7 @@
 }
 
 .prepareBtn:hover {
-  background: rgba(167, 139, 250, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
   border-color: var(--accent-muted);
 }
 
@@ -502,8 +502,8 @@
   gap: 8px;
   margin-top: 12px;
   padding: 10px 14px;
-  background: rgba(110, 201, 160, 0.08);
-  border: 1px solid rgba(110, 201, 160, 0.20);
+  background: rgba(var(--green-rgb), 0.08);
+  border: 1px solid rgba(var(--green-rgb), 0.20);
   border-radius: var(--radius-sm);
   font-size: 12.5px;
   color: var(--green);

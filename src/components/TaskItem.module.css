@@ -52,16 +52,16 @@
 
 /* ── Celebration ── */
 .celebrating {
-  border-color: rgba(110, 201, 160, 0.35) !important;
-  box-shadow: 0 0 20px rgba(110, 201, 160, 0.12) !important;
+  border-color: rgba(var(--green-rgb), 0.35) !important;
+  box-shadow: 0 0 20px rgba(var(--green-rgb), 0.12) !important;
   animation: celebGlow 2.5s ease-out both !important;
 }
 
 @keyframes celebGlow {
-  0%   { box-shadow: 0 0 0 rgba(110, 201, 160, 0); border-color: transparent; }
-  15%  { box-shadow: 0 0 24px rgba(110, 201, 160, 0.18); border-color: rgba(110, 201, 160, 0.4); }
-  60%  { box-shadow: 0 0 16px rgba(110, 201, 160, 0.1); border-color: rgba(110, 201, 160, 0.25); }
-  100% { box-shadow: 0 0 0 rgba(110, 201, 160, 0); border-color: transparent; }
+  0%   { box-shadow: 0 0 0 rgba(var(--green-rgb), 0); border-color: transparent; }
+  15%  { box-shadow: 0 0 24px rgba(var(--green-rgb), 0.18); border-color: rgba(var(--green-rgb), 0.4); }
+  60%  { box-shadow: 0 0 16px rgba(var(--green-rgb), 0.1); border-color: rgba(var(--green-rgb), 0.25); }
+  100% { box-shadow: 0 0 0 rgba(var(--green-rgb), 0); border-color: transparent; }
 }
 
 .celebration {
@@ -215,11 +215,11 @@
   letter-spacing: 0.5px;
 }
 
-.crm     { background: rgba(94, 184, 138, 0.12);  color: var(--green); }
-.data    { background: rgba(122, 171, 240, 0.12); color: var(--blue); }
+.crm     { background: rgba(var(--green-rgb), 0.12);  color: var(--green); }
+.data    { background: rgba(var(--blue-rgb), 0.12);   color: var(--blue); }
 .roadmap { background: rgba(var(--accent-rgb), 0.12);  color: var(--accent); }
-.saas    { background: rgba(192, 128, 216, 0.12); color: var(--purple); }
-.urgent  { background: rgba(224, 96, 96, 0.12);   color: var(--red); }
+.saas    { background: rgba(var(--purple-rgb), 0.12);  color: var(--purple); }
+.urgent  { background: rgba(var(--red-rgb), 0.12);     color: var(--red); }
 
 /* ── Action buttons row ── */
 .actions {
@@ -282,8 +282,8 @@
 
 .stuckBtn:hover {
   color: var(--red);
-  background: rgba(224, 96, 96, 0.08);
-  border-color: rgba(224, 96, 96, 0.15);
+  background: rgba(var(--red-rgb), 0.08);
+  border-color: rgba(var(--red-rgb), 0.15);
 }
 
 .stuckMenu {

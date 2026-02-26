@@ -87,7 +87,8 @@ export type ReminderFrequency =
   | "biweekly"
   | "monthly"
   | "bimonthly"
-  | "quarterly";
+  | "quarterly"
+  | "biannual";
 
 export type FrequencyOccurrence = "1st" | "2nd" | "3rd" | "4th" | "last";
 
@@ -101,6 +102,7 @@ export interface NotificationReminder {
   icon: string;
   frequency?: ReminderFrequency;
   frequencyOccurrence?: FrequencyOccurrence;
+  frequencyCycleStart?: number; // 1-12, mois de départ du cycle
 }
 
 export interface NotificationSettings {

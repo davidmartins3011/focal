@@ -24,8 +24,8 @@
 }
 
 .timerDone {
-  background: linear-gradient(135deg, rgba(110, 201, 160, 0.10), rgba(110, 201, 160, 0.03));
-  border-color: rgba(110, 201, 160, 0.25);
+  background: linear-gradient(135deg, rgba(var(--green-rgb), 0.10), rgba(var(--green-rgb), 0.03));
+  border-color: rgba(var(--green-rgb), 0.25);
 }
 
 .timerDone::before {

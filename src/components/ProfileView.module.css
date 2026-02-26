@@ -213,7 +213,7 @@
 
 .removeSourceBtn:hover {
   color: var(--red);
-  background: rgba(224, 96, 96, 0.1);
+  background: rgba(var(--red-rgb), 0.1);
 }
 
 .addSourceBtn {

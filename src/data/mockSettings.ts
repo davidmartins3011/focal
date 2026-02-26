@@ -150,6 +150,7 @@ export const defaultReminders: NotificationReminder[] = [
     icon: "🧭",
     frequency: "monthly",
     frequencyOccurrence: "last",
+    frequencyCycleStart: 1,
   },
 ];
 

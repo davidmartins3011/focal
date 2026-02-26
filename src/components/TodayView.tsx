@@ -178,8 +178,8 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
     }, DECOMPOSE_DELAY_MS);
   }
 
-  function handleStuck(taskId: string) {
-    console.log("Stuck on task:", taskId);
+  function handleStuck(_taskId: string) {
+    // Will open chat panel with context when backend is connected
   }
 
   function startFocus(taskId: string) {
