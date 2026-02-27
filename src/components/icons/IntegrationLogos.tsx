@@ -75,8 +75,8 @@ function HubSpotLogo({ size = 28 }: LogoProps) {
       <path fill="#FF7A59" d="M30 16a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 10a4 4 0 1 1 0-8 4 4 0 0 1 0 8z" />
       <rect fill="#FF7A59" x="29" y="9" width="2" height="7" rx="1" />
       <circle fill="#FF7A59" cx="14" cy="33" r="2.5" />
-      <path fill="#FF7A59" d="M16.2 31.3 23 27" stroke="#FF7A59" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-      <path fill="#FF7A59" d="M23 17l-6.8 4.3" stroke="#FF7A59" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <path d="M16.2 31.3 23 27" stroke="#FF7A59" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <path d="M23 17l-6.8 4.3" stroke="#FF7A59" strokeWidth="1.8" fill="none" strokeLinecap="round" />
       <circle fill="#FF7A59" cx="14" cy="12" r="2.5" />
     </svg>
   );

@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
-import { strategyReviews, MONTH_NAMES } from "../data/mockStrategyReviews";
+import { useState, useMemo, useEffect } from "react";
+import { MONTH_NAMES } from "../data/mockStrategyReviews";
+import { getStrategyReviews } from "../services/reviews";
 import {
   getActiveMonths,
   strategyPeriodLabel,
@@ -46,6 +47,14 @@ interface StrategyViewProps {
 }
 
 export default function StrategyView({ frequency, cycleStart }: StrategyViewProps) {
+  const [reviews, setReviews] = useState<StrategyReview[]>([]);
+
+  useEffect(() => {
+    getStrategyReviews()
+      .then(setReviews)
+      .catch((err) => console.error("[StrategyView] getStrategyReviews error:", err));
+  }, []);
+
   const activeMonths = useMemo(
     () => getActiveMonths(frequency, cycleStart),
     [frequency, cycleStart]
@@ -53,14 +62,14 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
 
   const sorted = useMemo(
     () =>
-      [...strategyReviews]
+      [...reviews]
         .filter((r) => activeMonths.has(r.month))
         .sort((a, b) => {
           const da = a.year * 12 + a.month;
           const db = b.year * 12 + b.month;
           return db - da;
         }),
-    [activeMonths]
+    [reviews, activeMonths]
   );
 
   const [selectedId, setSelectedId] = useState(sorted[0]?.id ?? "");

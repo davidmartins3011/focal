@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { TodoItem, TodoPriority } from "../types";
-import { initialTodos } from "../data/mockTodos";
 import TodoItemRow from "./TodoItemRow";
+import * as todoService from "../services/todos";
 import styles from "./TodoView.module.css";
 
 type Filter = "all" | "done" | "ai" | "prioritized" | "unscheduled";
@@ -13,8 +13,14 @@ interface PopoverState {
 }
 
 export default function TodoView() {
-  const [todos, setTodos] = useState<TodoItem[]>(initialTodos);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
   const [newText, setNewText] = useState("");
+
+  useEffect(() => {
+    todoService.getTodos()
+      .then(setTodos)
+      .catch((err) => console.error("[TodoView] getTodos error:", err));
+  }, []);
   const [filter, setFilter] = useState<Filter>("all");
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -39,25 +45,24 @@ export default function TodoView() {
   const addTodo = () => {
     const text = newText.trim();
     if (!text) return;
-    const todo: TodoItem = {
-      id: `t${Date.now()}`,
-      text,
-      done: false,
-      source: "manual",
-      createdAt: new Date().toISOString(),
-    };
-    setTodos((prev) => [todo, ...prev]);
     setNewText("");
+    todoService.createTodo({ text })
+      .then((todo) => {
+        setTodos((prev) => [todo, ...prev]);
+      })
+      .catch((err) => console.error("[TodoView] createTodo error:", err));
   };
 
   const toggleDone = (id: string) => {
     setTodos((prev) =>
       prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
     );
+    todoService.toggleTodo(id);
   };
 
   const deleteTodo = (id: string) => {
     setTodos((prev) => prev.filter((t) => t.id !== id));
+    todoService.deleteTodo(id);
   };
 
   const startEditing = (id: string, currentText: string) => {
@@ -72,6 +77,7 @@ export default function TodoView() {
       setTodos((prev) =>
         prev.map((t) => (t.id === editingId ? { ...t, text: trimmed } : t))
       );
+      todoService.updateTodo({ id: editingId, text: trimmed });
     }
     setEditingId(null);
     setEditText("");
@@ -90,12 +96,14 @@ export default function TodoView() {
     setTodos((prev) =>
       prev.map((t) => (t.id === id ? { ...t, [field]: value } : t))
     );
+    todoService.updateTodo({ id, [field]: value ?? null });
   };
 
   const setScheduledDate = (id: string, date: string | undefined) => {
     setTodos((prev) =>
       prev.map((t) => (t.id === id ? { ...t, scheduledDate: date } : t))
     );
+    todoService.updateTodo({ id, scheduledDate: date ?? null });
   };
 
   const openPopover = (todoId: string, type: PopoverType) => {

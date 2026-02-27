@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   DndContext,
   closestCenter,
@@ -24,7 +24,8 @@ import FocusTimer from "./FocusTimer";
 import ProgressBar from "./ProgressBar";
 import TaskItem from "./TaskItem";
 import type { Task } from "../types";
-import { initialTodayTasks, mockDecompositions, mockStepDecompositions } from "../data/mockTasks";
+import { mockDecompositions, mockStepDecompositions } from "../data/mockTasks";
+import { getTasks as fetchTasks, toggleTask as toggleTaskSvc, reorderTasks as reorderTasksSvc } from "../services/tasks";
 import styles from "./TodayView.module.css";
 
 const DECOMPOSE_DELAY_MS = 1800;
@@ -72,14 +73,14 @@ interface TodayViewProps {
 
 export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
   const [prepDone, setPrepDone] = useState(isDailyPrepDone);
-  const [tasks, setTasks] = useState<Task[]>(() =>
-    [...initialTodayTasks].sort((a, b) => {
-      const pa = a.priority === "main" ? 0 : 1;
-      const pb = b.priority === "main" ? 0 : 1;
-      return pa - pb;
-    })
-  );
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [decomposingId, setDecomposingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchTasks("today")
+      .then(setTasks)
+      .catch((err) => console.error("[TodayView] fetchTasks error:", err));
+  }, []);
   const [decomposingStepKey, setDecomposingStepKey] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [timerTaskId, setTimerTaskId] = useState<string | null>(null);
@@ -108,6 +109,7 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
     );
+    toggleTaskSvc(id);
   }
 
   function toggleStep(taskId: string, stepId: string) {
@@ -264,6 +266,7 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
       setTasks((prev) =>
         prev.map((t) => (t.id === timerTaskId ? { ...t, done: true } : t))
       );
+      toggleTaskSvc(timerTaskId);
       if (selectedTaskId === timerTaskId) {
         setSelectedTaskId(null);
       }
@@ -303,11 +306,11 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    setTasks((prev) => {
-      const oldIndex = prev.findIndex((t) => t.id === active.id);
-      const newIndex = prev.findIndex((t) => t.id === over.id);
-      return arrayMove(prev, oldIndex, newIndex);
-    });
+    const oldIndex = tasks.findIndex((t) => t.id === active.id);
+    const newIndex = tasks.findIndex((t) => t.id === over.id);
+    const reordered = arrayMove(tasks, oldIndex, newIndex);
+    setTasks(reordered);
+    reorderTasksSvc(reordered.map((t) => t.id));
   }
 
   function handleDragCancel() {

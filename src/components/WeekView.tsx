@@ -1,7 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import PrepBanner from "./PrepBanner";
 import TaskItem from "./TaskItem";
-import { weekDays, weekPriorities } from "../data/mockTasks";
+import { weekDays } from "../data/mockTasks";
+import { getTasks as fetchTasks } from "../services/tasks";
+import type { Task } from "../types";
 import styles from "./WeekView.module.css";
 
 function weekKey(): string {
@@ -18,6 +20,13 @@ function isWeeklyPrepDone(): boolean {
 
 export default function WeekView() {
   const [prepDone, setPrepDone] = useState(isWeeklyPrepDone);
+  const [weekPriorities, setWeekPriorities] = useState<Task[]>([]);
+
+  useEffect(() => {
+    fetchTasks("week")
+      .then(setWeekPriorities)
+      .catch((err) => console.error("[WeekView] fetchTasks error:", err));
+  }, []);
 
   const dismissPrep = useCallback(() => {
     localStorage.setItem(weekKey(), "done");
