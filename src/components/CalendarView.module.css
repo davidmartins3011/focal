@@ -75,107 +75,6 @@
   font-size: 11px;
 }
 
-/* ── Deadline banner ── */
-
-.deadline {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 10px 22px 0;
-  padding: 9px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  animation: fadeUp 0.25s ease;
-}
-
-.deadlineLeft {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.deadlinePulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-.deadlineLabel {
-  font-weight: 700;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  white-space: nowrap;
-}
-
-.deadlineTask {
-  flex: 1;
-  font-weight: 500;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.deadlineTime {
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.critical {
-  background: rgba(var(--red-rgb), 0.12);
-  border: 1px solid rgba(var(--red-rgb), 0.25);
-}
-
-.critical .deadlinePulse {
-  background: var(--red);
-}
-
-.critical .deadlineLabel {
-  color: var(--red);
-}
-
-.critical .deadlineTime {
-  color: var(--red);
-}
-
-.soon {
-  background: rgba(var(--warning-rgb), 0.10);
-  border: 1px solid rgba(var(--warning-rgb), 0.20);
-}
-
-.soon .deadlinePulse {
-  background: var(--warning);
-}
-
-.soon .deadlineLabel {
-  color: var(--warning);
-}
-
-.soon .deadlineTime {
-  color: var(--warning);
-}
-
-.upcoming {
-  background: var(--accent-soft);
-  border: 1px solid rgba(var(--accent-rgb), 0.15);
-}
-
-.upcoming .deadlinePulse {
-  background: var(--accent-muted);
-}
-
-.upcoming .deadlineLabel {
-  color: var(--accent-muted);
-}
-
-.upcoming .deadlineTime {
-  color: var(--accent-muted);
-}
-
 /* ── Content ── */
 
 .content {
@@ -391,26 +290,11 @@
   margin-bottom: 10px;
 }
 
-.detailLeft {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .detailDate {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
   text-transform: capitalize;
-}
-
-.detailRelative {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--accent-muted);
-  background: var(--accent-soft);
-  padding: 1px 7px;
-  border-radius: 10px;
 }
 
 .detailCount {

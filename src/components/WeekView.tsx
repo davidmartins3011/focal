@@ -39,6 +39,17 @@ export default function WeekView() {
           />
         ))}
       </div>
+
+      <div className={styles.reviewSection}>
+        <div className={styles.reviewIcon}>📋</div>
+        <div className={styles.reviewContent}>
+          <span className={styles.reviewTitle}>Revue de la semaine</span>
+          <span className={styles.reviewDesc}>
+            Fais le point sur ta semaine : objectifs atteints, blocages récurrents, et priorités pour la semaine prochaine.
+          </span>
+        </div>
+        <button className={styles.reviewBtn}>Lancer la revue</button>
+      </div>
     </div>
   );
 }

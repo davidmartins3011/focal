@@ -1,0 +1,633 @@
+/* ─── Container & Header ─── */
+
+.container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  padding: 28px 32px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.titleIcon {
+  font-size: 22px;
+}
+
+.subtitle {
+  color: var(--text2);
+  font-size: 13px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.statsRow {
+  display: flex;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.stat {
+  font-size: 12px;
+  color: var(--text3);
+  font-weight: 500;
+}
+
+.stat strong {
+  color: var(--text2);
+  font-weight: 600;
+}
+
+/* ─── Content ─── */
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 32px 32px;
+}
+
+/* ─── Add area ─── */
+
+.addArea {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.addInput {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--text);
+  font-size: 13px;
+  font-family: 'Outfit', sans-serif;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.addInput::placeholder {
+  color: var(--text3);
+}
+
+.addInput:focus {
+  border-color: var(--accent);
+}
+
+.addBtn {
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.addBtn:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
+/* ─── Filters ─── */
+
+.filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filterBtn {
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  background: none;
+  color: var(--text3);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+}
+
+.filterBtn:hover {
+  background: var(--bg3);
+  color: var(--text2);
+}
+
+.filterBtn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.25);
+}
+
+/* ─── Todo list ─── */
+
+.todoList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ─── Todo item ─── */
+
+.todoItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s, opacity 0.15s, box-shadow 0.15s;
+  animation: fadeUp 0.2s ease both;
+  position: relative;
+}
+
+.todoItem:hover {
+  background: var(--bg2);
+}
+
+.todoItem.done {
+  opacity: 0.45;
+}
+
+/* ─── Drag handle ─── */
+
+.dragHandle {
+  width: 16px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text3);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+  margin-top: 1px;
+}
+
+.todoItem:hover .dragHandle {
+  opacity: 0.6;
+}
+
+.dragHandle:hover {
+  color: var(--text2);
+  opacity: 1 !important;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+/* ─── Drag states ─── */
+
+.todoItem.dragging {
+  opacity: 0.25;
+}
+
+.todoItem.dragOverTop {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+.todoItem.dragOverBottom {
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid var(--text3);
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: all 0.15s;
+  color: transparent;
+  padding: 0;
+}
+
+.checkbox:hover {
+  border-color: var(--accent);
+}
+
+.checkbox.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.todoBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.todoText {
+  font-size: 13.5px;
+  color: var(--text);
+  line-height: 1.45;
+  word-break: break-word;
+  cursor: text;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  transition: background 0.12s;
+}
+
+.todoText:hover {
+  background: rgba(var(--accent-rgb), 0.05);
+}
+
+/* ─── Inline edit ─── */
+
+.editInput {
+  width: 100%;
+  font-size: 13.5px;
+  color: var(--text);
+  line-height: 1.45;
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg3);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 6px 10px;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.15);
+}
+
+.todoItem.done .todoText {
+  text-decoration: line-through;
+  color: var(--text3);
+}
+
+.todoMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+/* ─── Badges ─── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.urgencyBadge {
+  background: rgba(var(--red-rgb), 0.12);
+  color: var(--red);
+}
+
+.importanceBadge {
+  background: rgba(var(--blue-rgb), 0.12);
+  color: var(--blue);
+}
+
+.aiBadge {
+  background: rgba(var(--purple-rgb), 0.10);
+  color: var(--purple);
+  font-weight: 500;
+}
+
+.scheduledBadge {
+  background: rgba(var(--green-rgb), 0.12);
+  color: var(--green);
+  font-weight: 500;
+}
+
+.unscheduledBadge {
+  background: rgba(var(--warning-rgb), 0.10);
+  color: var(--warning);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.dateBadge {
+  font-size: 10px;
+  color: var(--text3);
+  font-weight: 400;
+}
+
+/* ─── Action buttons ─── */
+
+.todoActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.actionBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text3);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+  padding: 0;
+}
+
+.actionBtn:hover {
+  background: var(--bg3);
+  color: var(--text2);
+}
+
+.actionBtn.actionBtnActive {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.actionBtn.actionBtnWarn {
+  color: var(--warning);
+  opacity: 0.6;
+}
+
+.actionBtn.actionBtnWarn:hover {
+  opacity: 1;
+  background: rgba(var(--warning-rgb), 0.10);
+}
+
+.deleteBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text3);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+  padding: 0;
+  opacity: 0;
+}
+
+.todoItem:hover .deleteBtn {
+  opacity: 1;
+}
+
+.deleteBtn:hover {
+  background: rgba(var(--red-rgb), 0.12);
+  color: var(--red);
+}
+
+/* ─── Clickable badges ─── */
+
+.badgeClickable {
+  cursor: pointer;
+  border: none;
+  transition: filter 0.12s;
+  font-family: 'Outfit', sans-serif;
+}
+
+.badgeClickable:hover {
+  filter: brightness(1.3);
+}
+
+/* ─── Popover (shared) ─── */
+
+.popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  z-index: 100;
+  min-width: 220px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: fadeUp 0.15s ease;
+}
+
+.popoverLabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text3);
+  margin-bottom: 6px;
+  padding: 0 4px;
+}
+
+.popoverRow {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.popoverDot {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: none;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+  padding: 0;
+  font-family: 'Outfit', sans-serif;
+}
+
+.popoverDot:hover {
+  background: var(--bg3);
+  color: var(--text2);
+}
+
+.popoverDot.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.3);
+}
+
+.popoverDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+.popoverClear {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text3);
+  text-align: left;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.12s;
+}
+
+.popoverClear:hover {
+  background: var(--bg3);
+  color: var(--text2);
+}
+
+/* ─── Schedule options ─── */
+
+.scheduleOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.scheduleOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text2);
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.12s;
+  text-align: left;
+  width: 100%;
+}
+
+.scheduleOption:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.scheduleOption.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.scheduleOptionIcon {
+  font-size: 13px;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.scheduleOptionText {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.scheduleOptionHint {
+  font-size: 10px;
+  color: var(--text3);
+  font-weight: 400;
+  margin-left: auto;
+}
+
+.scheduleOption.selected .scheduleOptionHint {
+  color: var(--accent-muted);
+}
+
+/* ─── Date input ─── */
+
+.dateInput {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text);
+  font-size: 12px;
+  font-family: 'Outfit', sans-serif;
+  outline: none;
+  transition: border-color 0.15s;
+  color-scheme: dark;
+}
+
+.dateInput:focus {
+  border-color: var(--accent);
+}
+
+/* ─── Empty state ─── */
+
+.emptyState {
+  padding: 48px 28px;
+  border-radius: var(--radius);
+  background: var(--bg2);
+  border: 1px dashed var(--border2);
+  text-align: center;
+  animation: fadeUp 0.3s ease both;
+}
+
+.emptyIcon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.emptyText {
+  font-size: 13px;
+  color: var(--text3);
+  line-height: 1.6;
+  max-width: 340px;
+  margin: 0 auto;
+}
+
+/* ─── Section divider ─── */
+
+.sectionLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text3);
+  padding: 12px 12px 6px;
+}

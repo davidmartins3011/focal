@@ -29,6 +29,10 @@ interface Props {
   decomposingStepId?: string | null;
   animDelay?: number;
   isSecondary?: boolean;
+  dragHandleProps?: Record<string, unknown>;
+  isSelected?: boolean;
+  hasRunningTimer?: boolean;
+  onSelect?: (id: string) => void;
 }
 
 export default function TaskItem({
@@ -46,6 +50,10 @@ export default function TaskItem({
   decomposingStepId = null,
   animDelay = 0,
   isSecondary = false,
+  dragHandleProps,
+  isSelected = false,
+  hasRunningTimer = false,
+  onSelect,
 }: Props) {
   const [expanded, setExpanded] = useState(!!task.microSteps?.length && !task.done);
   const [visibleSteps, setVisibleSteps] = useState<number>(task.microSteps?.length ?? 0);
@@ -139,14 +147,29 @@ export default function TaskItem({
         isSecondary ? styles.secondary : "",
         celebrationMsg ? styles.celebrating : "",
         showStuckMenu ? styles.stuckOpen : "",
+        isSelected ? styles.selected : "",
       ]
         .filter(Boolean)
         .join(" ")}
       style={{ animation: `fadeUp 0.25s ease ${animDelay}s both` }}
+      onClick={() => onSelect?.(task.id)}
     >
+      {dragHandleProps && (
+        <div className={styles.dragHandle} {...dragHandleProps}>
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor">
+            <circle cx="2" cy="2" r="1.2" />
+            <circle cx="6" cy="2" r="1.2" />
+            <circle cx="2" cy="7" r="1.2" />
+            <circle cx="6" cy="7" r="1.2" />
+            <circle cx="2" cy="12" r="1.2" />
+            <circle cx="6" cy="12" r="1.2" />
+          </svg>
+        </div>
+      )}
+
       <button
         className={`${styles.check} ${task.done ? styles.checkDone : ""}`}
-        onClick={() => onToggle(task.id)}
+        onClick={(e) => { e.stopPropagation(); onToggle(task.id); }}
       >
         {task.done && "✓"}
       </button>
@@ -156,7 +179,13 @@ export default function TaskItem({
           <div className={`${styles.name} ${task.done ? styles.nameDone : ""}`}>
             {task.name}
           </div>
-          {!task.done && (
+          {hasRunningTimer && (
+            <span className={styles.timerBadge}>
+              <span className={styles.timerDot} />
+              en cours
+            </span>
+          )}
+          {!task.done && !hasRunningTimer && (
             <EditableEstimate
               minutes={task.estimatedMinutes}
               onChange={(m) => onUpdateEstimate?.(task.id, m)}

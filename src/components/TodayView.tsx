@@ -1,4 +1,23 @@
 import { useState, useCallback } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import FocusNow from "./FocusNow";
 import FocusTimer from "./FocusTimer";
 import ProgressBar from "./ProgressBar";
@@ -10,28 +29,68 @@ import styles from "./TodayView.module.css";
 const DECOMPOSE_DELAY_MS = 1800;
 const MOCK_STREAK = 5;
 
+function SortableTaskItem(props: React.ComponentProps<typeof TaskItem>) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.35 : 1,
+    position: "relative" as const,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <TaskItem
+        {...props}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
 interface TodayViewProps {
   dailyPriorityCount: number;
 }
 
 export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
-  const [tasks, setTasks] = useState<Task[]>(initialTodayTasks);
+  const [tasks, setTasks] = useState<Task[]>(() =>
+    [...initialTodayTasks].sort((a, b) => {
+      const pa = a.priority === "main" ? 0 : 1;
+      const pb = b.priority === "main" ? 0 : 1;
+      return pa - pb;
+    })
+  );
   const [decomposingId, setDecomposingId] = useState<string | null>(null);
   const [decomposingStepKey, setDecomposingStepKey] = useState<string | null>(null);
-  const [focusingTaskId, setFocusingTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [timerTaskId, setTimerTaskId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-  const sorted = [...tasks].sort((a, b) => {
-    const pa = a.priority === "main" ? 0 : 1;
-    const pb = b.priority === "main" ? 0 : 1;
-    return pa - pb;
-  });
-  const mainTasks = sorted.slice(0, dailyPriorityCount);
-  const secondaryTasks = sorted.slice(dailyPriorityCount);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const mainTasks = tasks.slice(0, dailyPriorityCount);
+  const secondaryTasks = tasks.slice(dailyPriorityCount);
   const doneCount = tasks.filter((t) => t.done).length;
   const mainDoneCount = mainTasks.filter((t) => t.done).length;
   const secondaryDoneCount = secondaryTasks.filter((t) => t.done).length;
-  const focusTask = mainTasks.find((t) => !t.done && t.estimatedMinutes);
-  const focusingTask = focusingTaskId ? tasks.find((t) => t.id === focusingTaskId) : null;
+
+  const defaultFocusId = mainTasks.find((t) => !t.done && t.estimatedMinutes)?.id ?? null;
+  const effectiveSelectedId = selectedTaskId ?? defaultFocusId;
+  const selectedTask = effectiveSelectedId ? tasks.find((t) => t.id === effectiveSelectedId) : null;
+  const timerTask = timerTaskId ? tasks.find((t) => t.id === timerTaskId) : null;
+  const showTimerPanel = timerTaskId !== null && effectiveSelectedId === timerTaskId;
 
   const isBusy = !!decomposingId || !!decomposingStepKey;
 
@@ -182,30 +241,37 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
     // Will open chat panel with context when backend is connected
   }
 
-  function startFocus(taskId: string) {
-    setFocusingTaskId(taskId);
+  function selectTask(id: string) {
+    setSelectedTaskId(id);
   }
 
-  function completeFocusedTask() {
-    if (focusingTaskId) {
+  function startTimer(taskId: string) {
+    setTimerTaskId(taskId);
+  }
+
+  function completeTimerTask() {
+    if (timerTaskId) {
       setTasks((prev) =>
-        prev.map((t) => (t.id === focusingTaskId ? { ...t, done: true } : t))
+        prev.map((t) => (t.id === timerTaskId ? { ...t, done: true } : t))
       );
+      if (selectedTaskId === timerTaskId) {
+        setSelectedTaskId(null);
+      }
     }
-    setFocusingTaskId(null);
+    setTimerTaskId(null);
   }
 
-  function skipFocusedTask() {
-    setFocusingTaskId(null);
+  function skipTimerTask() {
+    setTimerTaskId(null);
   }
 
-  function cancelFocus() {
-    setFocusingTaskId(null);
+  function cancelTimer() {
+    setTimerTaskId(null);
   }
 
   function getNextFocusTask(): string | undefined {
     const remaining = mainTasks.filter(
-      (t) => !t.done && t.id !== focusingTaskId && t.estimatedMinutes
+      (t) => !t.done && t.id !== timerTaskId && t.estimatedMinutes
     );
     return remaining[0]?.name;
   }
@@ -218,73 +284,76 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
     return tId === taskId ? sId : null;
   }
 
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setTasks((prev) => {
+      const oldIndex = prev.findIndex((t) => t.id === active.id);
+      const newIndex = prev.findIndex((t) => t.id === over.id);
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }
+
+  function handleDragCancel() {
+    setActiveId(null);
+  }
+
+  const activeTask = activeId ? tasks.find((t) => t.id === activeId) : null;
+  const taskIds = tasks.map((t) => t.id);
+
   return (
     <div>
-      {focusingTask && focusingTask.estimatedMinutes ? (
-        <FocusTimer
-          key={focusingTask.id}
-          taskName={focusingTask.name}
-          estimatedMinutes={focusingTask.estimatedMinutes}
-          nextTaskName={getNextFocusTask()}
-          onComplete={completeFocusedTask}
-          onSkip={skipFocusedTask}
-          onCancel={cancelFocus}
-        />
-      ) : focusTask ? (
+      {timerTask && timerTask.estimatedMinutes && (
+        <div style={{ display: showTimerPanel ? undefined : "none" }}>
+          <FocusTimer
+            key={timerTask.id}
+            taskName={timerTask.name}
+            estimatedMinutes={timerTask.estimatedMinutes}
+            nextTaskName={getNextFocusTask()}
+            onComplete={completeTimerTask}
+            onSkip={skipTimerTask}
+            onCancel={cancelTimer}
+          />
+        </div>
+      )}
+
+      {!showTimerPanel && selectedTask && selectedTask.estimatedMinutes && !selectedTask.done && (
         <FocusNow
-          task={focusTask.name}
-          estimatedMinutes={focusTask.estimatedMinutes!}
-          onStart={() => startFocus(focusTask.id)}
+          task={selectedTask.name}
+          estimatedMinutes={selectedTask.estimatedMinutes}
+          onStart={() => startTimer(effectiveSelectedId!)}
         />
-      ) : null}
+      )}
 
       <ProgressBar done={doneCount} total={tasks.length} streak={MOCK_STREAK} />
 
-      <div className={styles.sectionHeader}>
-        <span className={styles.sectionTitle}>
-          <span className={styles.priorityIcon}>⚡</span>
-          Priorités du jour
-        </span>
-        <span className={styles.sectionCount}>
-          {mainDoneCount}/{mainTasks.length}
-        </span>
-      </div>
-
-      <div className={styles.taskList}>
-        {mainTasks.map((task, i) => (
-          <TaskItem
-            key={task.id}
-            task={task}
-            onToggle={toggleTask}
-            onToggleStep={toggleStep}
-            onDecompose={decompose}
-            onRedecompose={redecompose}
-            onDecomposeStep={decomposeStep}
-            onEditStep={editStep}
-            onStuck={handleStuck}
-            onUpdateEstimate={updateEstimate}
-            onUpdateStepEstimate={updateStepEstimate}
-            isDecomposing={decomposingId === task.id}
-            decomposingStepId={getDecomposingStepId(task.id)}
-            animDelay={0.08 + i * 0.04}
-          />
-        ))}
-      </div>
-
-      {secondaryTasks.length > 0 && (
-        <>
-          <div className={`${styles.sectionHeader} ${styles.secondaryHeader}`}>
-            <span className={`${styles.sectionTitle} ${styles.secondaryTitle}`}>
-              Aussi prévu
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionTitle}>
+              <span className={styles.priorityIcon}>⚡</span>
+              Priorités du jour
             </span>
             <span className={styles.sectionCount}>
-              {secondaryDoneCount}/{secondaryTasks.length}
+              {mainDoneCount}/{mainTasks.length}
             </span>
           </div>
 
           <div className={styles.taskList}>
-            {secondaryTasks.map((task, i) => (
-              <TaskItem
+            {mainTasks.map((task, i) => (
+              <SortableTaskItem
                 key={task.id}
                 task={task}
                 onToggle={toggleTask}
@@ -298,13 +367,76 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
                 onUpdateStepEstimate={updateStepEstimate}
                 isDecomposing={decomposingId === task.id}
                 decomposingStepId={getDecomposingStepId(task.id)}
-                animDelay={0.12 + i * 0.04}
-                isSecondary
+                animDelay={0.08 + i * 0.04}
+                isSelected={effectiveSelectedId === task.id}
+                hasRunningTimer={timerTaskId === task.id}
+                onSelect={selectTask}
               />
             ))}
           </div>
-        </>
-      )}
+
+          {secondaryTasks.length > 0 && (
+            <>
+              <div className={`${styles.sectionHeader} ${styles.secondaryHeader}`}>
+                <span className={`${styles.sectionTitle} ${styles.secondaryTitle}`}>
+                  Aussi prévu
+                </span>
+                <span className={styles.sectionCount}>
+                  {secondaryDoneCount}/{secondaryTasks.length}
+                </span>
+              </div>
+
+              <div className={styles.taskList}>
+                {secondaryTasks.map((task, i) => (
+                  <SortableTaskItem
+                    key={task.id}
+                    task={task}
+                    onToggle={toggleTask}
+                    onToggleStep={toggleStep}
+                    onDecompose={decompose}
+                    onRedecompose={redecompose}
+                    onDecomposeStep={decomposeStep}
+                    onEditStep={editStep}
+                    onStuck={handleStuck}
+                    onUpdateEstimate={updateEstimate}
+                    onUpdateStepEstimate={updateStepEstimate}
+                    isDecomposing={decomposingId === task.id}
+                    decomposingStepId={getDecomposingStepId(task.id)}
+                    animDelay={0.12 + i * 0.04}
+                    isSecondary
+                    isSelected={effectiveSelectedId === task.id}
+                    hasRunningTimer={timerTaskId === task.id}
+                    onSelect={selectTask}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </SortableContext>
+
+        <DragOverlay>
+          {activeTask && (
+            <div className={styles.dragOverlay}>
+              <TaskItem
+                task={activeTask}
+                onToggle={() => {}}
+                onToggleStep={() => {}}
+              />
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
+
+      <div className={styles.reviewSection}>
+        <div className={styles.reviewIcon}>🌙</div>
+        <div className={styles.reviewContent}>
+          <span className={styles.reviewTitle}>Revue du soir</span>
+          <span className={styles.reviewDesc}>
+            Fais le bilan de ta journée : ce que tu as accompli, les blocages, et ton top 3 de demain.
+          </span>
+        </div>
+        <button className={styles.reviewBtn}>Lancer la revue</button>
+      </div>
     </div>
   );
 }

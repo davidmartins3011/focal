@@ -19,13 +19,21 @@
 }
 
 .expanded {
-  background: var(--bg2);
   border-color: var(--border);
 }
 
 .decomposing {
-  background: var(--bg2);
   border-color: var(--border2);
+}
+
+/* ── Selected task (current focus) ── */
+.selected {
+  background: var(--accent-soft);
+  border-color: rgba(var(--accent-rgb), 0.25);
+}
+
+.selected:hover {
+  background: var(--accent-soft);
 }
 
 .glowDone {
@@ -77,6 +85,33 @@
   12%  { opacity: 1; transform: translateY(0); }
   65%  { opacity: 1; }
   100% { opacity: 0; transform: translateY(-4px); }
+}
+
+/* ── Drag handle ── */
+.dragHandle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+  cursor: grab;
+  color: transparent;
+  transition: color 0.15s;
+  padding: 4px 0;
+  margin-top: 1px;
+  touch-action: none;
+}
+
+.item:hover .dragHandle {
+  color: var(--text3);
+}
+
+.dragHandle:hover {
+  color: var(--text2) !important;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
 }
 
 /* ── Checkbox ── */
@@ -595,4 +630,32 @@
   font-weight: 600;
   color: var(--accent-muted);
   letter-spacing: 0.3px;
+}
+
+/* ── Timer running badge ── */
+.timerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  border-radius: 4px;
+  padding: 2px 7px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.timerDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: timerPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }

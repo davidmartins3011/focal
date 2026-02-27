@@ -43,18 +43,6 @@ function relativeLabel(day: Date, now: Date): string | null {
   return null;
 }
 
-function deadlineLabel(diff: number): string {
-  if (diff === 0) return "aujourd'hui";
-  if (diff === 1) return "demain";
-  return `dans ${diff} jour${diff > 1 ? "s" : ""}`;
-}
-
-function deadlineUrgency(diff: number): "critical" | "soon" | "upcoming" {
-  if (diff <= 1) return "critical";
-  if (diff <= 3) return "soon";
-  return "upcoming";
-}
-
 function loadLevel(count: number): "none" | "light" | "medium" | "heavy" {
   if (count === 0) return "none";
   if (count <= 2) return "light";
@@ -91,32 +79,6 @@ function ChevronRight() {
       <path d="M6 4l4 4-4 4" />
     </svg>
   );
-}
-
-interface NextDeadline {
-  task: Task;
-  date: Date;
-  diff: number;
-}
-
-function findNextDeadline(tasks: Record<string, Task[]>, now: Date): NextDeadline | null {
-  let best: NextDeadline | null = null;
-
-  for (const [key, dayTasks] of Object.entries(tasks)) {
-    const parts = key.split("-").map(Number);
-    const date = new Date(parts[0], parts[1], parts[2]);
-    const diff = daysDiff(now, date);
-    if (diff < 0) continue;
-
-    for (const task of dayTasks) {
-      if (task.done) continue;
-      const isUrgent = task.tags.some((t) => t.color === "urgent");
-      if (!best || (isUrgent && diff <= best.diff) || diff < best.diff) {
-        best = { task, date, diff };
-      }
-    }
-  }
-  return best;
 }
 
 function getWeekStats(tasks: Record<string, Task[]>, now: Date): { done: number; total: number } {
@@ -160,7 +122,6 @@ export default function CalendarView() {
   const totalTasks = selectedTasks.length;
   const allDone = totalTasks > 0 && totalDone === totalTasks;
 
-  const nextDeadline = useMemo(() => findNextDeadline(mockTasks, today), []);
   const weekStats = useMemo(() => getWeekStats(mockTasks, today), []);
   const weekPct = weekStats.total > 0 ? Math.round((weekStats.done / weekStats.total) * 100) : 0;
 
@@ -173,7 +134,6 @@ export default function CalendarView() {
   );
 
   const isSelectedToday = isSameDay(selectedDate, today);
-  const selectedDayDiff = daysDiff(today, selectedDate);
   const isOverloaded = totalTasks >= 5;
 
   const rows: Date[][] = [];
@@ -200,17 +160,6 @@ export default function CalendarView() {
           <span className={styles.weekScoreCount}>{weekStats.done}/{weekStats.total}</span>
         </div>
       </div>
-
-      {nextDeadline && (
-        <div className={`${styles.deadline} ${styles[deadlineUrgency(nextDeadline.diff)]}`}>
-          <div className={styles.deadlineLeft}>
-            <span className={styles.deadlinePulse} />
-            <span className={styles.deadlineLabel}>Prochaine deadline</span>
-          </div>
-          <span className={styles.deadlineTask}>{nextDeadline.task.name}</span>
-          <span className={styles.deadlineTime}>{deadlineLabel(nextDeadline.diff)}</span>
-        </div>
-      )}
 
       <div className={styles.content}>
         <div className={styles.monthNav}>
@@ -275,12 +224,7 @@ export default function CalendarView() {
 
         <div className={styles.detail} key={toKey(selectedDate)}>
           <div className={styles.detailHeader}>
-            <div className={styles.detailLeft}>
-              <span className={styles.detailDate}>{formatSelectedDate()}</span>
-              {selectedDayDiff > 0 && selectedDayDiff <= 7 && (
-                <span className={styles.detailRelative}>{deadlineLabel(selectedDayDiff)}</span>
-              )}
-            </div>
+            <span className={styles.detailDate}>{formatSelectedDate()}</span>
             {totalTasks > 0 && (
               <span className={`${styles.detailCount} ${allDone ? styles.detailCountDone : ""}`}>
                 {allDone ? "✓ Tout terminé" : `${totalDone}/${totalTasks} terminée${totalTasks > 1 ? "s" : ""}`}

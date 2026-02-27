@@ -43,3 +43,73 @@
   gap: 1px;
   margin-bottom: 18px;
 }
+
+/* ── Drag overlay ── */
+.dragOverlay {
+  background: var(--bg2);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(var(--accent-rgb), 0.1);
+  opacity: 0.95;
+  cursor: grabbing;
+}
+
+.reviewSection {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+  padding: 16px 18px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.reviewSection:hover {
+  border-color: var(--border2);
+}
+
+.reviewIcon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.reviewContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.reviewTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.reviewDesc {
+  font-size: 11.5px;
+  color: var(--text3);
+  line-height: 1.5;
+}
+
+.reviewBtn {
+  flex-shrink: 0;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.reviewBtn:hover {
+  background: var(--accent-light);
+}

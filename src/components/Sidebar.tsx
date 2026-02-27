@@ -3,6 +3,8 @@ import type { SidebarPage } from "../types";
 import {
   TasksIcon,
   CalendarIcon,
+  SuggestionsIcon,
+  TodoIcon,
   SettingsIcon,
   UserIcon,
   IntegrationsIcon,
@@ -36,11 +38,25 @@ export default function Sidebar({
         <TasksIcon />
       </button>
       <button
+        className={`${styles.icon} ${activePage === "todos" ? styles.active : ""}`}
+        onClick={() => onPageChange("todos")}
+        title="ToDo"
+      >
+        <TodoIcon />
+      </button>
+      <button
         className={`${styles.icon} ${activePage === "calendar" ? styles.active : ""}`}
         onClick={() => onPageChange("calendar")}
         title="Calendrier"
       >
         <CalendarIcon />
+      </button>
+      <button
+        className={`${styles.icon} ${activePage === "suggestions" ? styles.active : ""}`}
+        onClick={() => onPageChange("suggestions")}
+        title="Suggestions"
+      >
+        <SuggestionsIcon />
       </button>
 
       <div className={styles.spacer} />

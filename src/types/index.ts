@@ -36,9 +36,24 @@ export interface ChatMessage {
   steps?: { text: string }[];
 }
 
-export type ViewTab = "today" | "week" | "review" | "strategy";
+export type ViewTab = "today" | "week" | "strategy";
 
-export type SidebarPage = "main" | "calendar" | "integrations" | "settings" | "profile";
+export type SidebarPage = "main" | "calendar" | "suggestions" | "todos" | "integrations" | "settings" | "profile";
+
+export type TodoPriority = 1 | 2 | 3 | 4 | 5;
+
+export type TodoSource = "manual" | "ai";
+
+export interface TodoItem {
+  id: string;
+  text: string;
+  done: boolean;
+  urgency?: TodoPriority;
+  importance?: TodoPriority;
+  source: TodoSource;
+  createdAt: string; // ISO date
+  scheduledDate?: string; // ISO date (YYYY-MM-DD) — jour dans le calendrier/planning
+}
 
 /** Une source de recherche de profil (LinkedIn, site web, etc.) */
 export interface ProfileResearchSource {

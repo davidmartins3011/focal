@@ -5,6 +5,8 @@ import ChatPanel from "./components/ChatPanel";
 import CalendarView from "./components/CalendarView";
 import IntegrationsView from "./components/IntegrationsView";
 import ProfileView from "./components/ProfileView";
+import SuggestionsView from "./components/SuggestionsView";
+import TodoView from "./components/TodoView";
 import SettingsView from "./components/SettingsView";
 import NotificationToast from "./components/NotificationToast";
 import NotificationCenter from "./components/NotificationCenter";
@@ -96,6 +98,10 @@ export default function App() {
         );
       case "calendar":
         return <CalendarView />;
+      case "suggestions":
+        return <SuggestionsView />;
+      case "todos":
+        return <TodoView />;
       case "integrations":
         return <IntegrationsView resetSignal={intResetKey} />;
       case "profile":

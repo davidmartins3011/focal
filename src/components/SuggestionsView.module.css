@@ -1,0 +1,352 @@
+/* ─── Container & Header ─── */
+
+.container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  padding: 28px 32px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.titleIcon {
+  font-size: 22px;
+}
+
+.subtitle {
+  color: var(--text2);
+  font-size: 13px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.learningBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 20px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 10px;
+}
+
+.pulsingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* ─── Content ─── */
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px 32px;
+}
+
+/* ─── Stats bar ─── */
+
+.statsBar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.statCard {
+  flex: 1;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  animation: fadeUp 0.25s ease both;
+}
+
+.statCard:nth-child(1) { animation-delay: 0.05s; }
+.statCard:nth-child(2) { animation-delay: 0.1s; }
+.statCard:nth-child(3) { animation-delay: 0.15s; }
+
+.statValue {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.statLabel {
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+/* ─── Section ─── */
+
+.section {
+  margin-bottom: 28px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sectionTitle {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text3);
+}
+
+.sectionCount {
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg3);
+  color: var(--text2);
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+/* ─── Suggestion Card ─── */
+
+.suggestionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  transition: all 0.2s;
+  animation: fadeUp 0.25s ease both;
+  cursor: default;
+}
+
+.card:nth-child(1) { animation-delay: 0.05s; }
+.card:nth-child(2) { animation-delay: 0.1s; }
+.card:nth-child(3) { animation-delay: 0.15s; }
+.card:nth-child(4) { animation-delay: 0.2s; }
+.card:nth-child(5) { animation-delay: 0.25s; }
+
+.card:hover {
+  border-color: var(--border2);
+  background: var(--bg3);
+}
+
+.card.applied {
+  opacity: 0.5;
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.cardIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.cardHeader {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.cardSource {
+  font-size: 11px;
+  color: var(--text3);
+  font-style: italic;
+}
+
+.cardDesc {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+/* ─── Impact + Meta ─── */
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.impactBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.impactHigh {
+  background: rgba(var(--green-rgb), 0.12);
+  color: var(--green);
+}
+
+.impactMedium {
+  background: rgba(var(--blue-rgb), 0.12);
+  color: var(--blue);
+}
+
+.impactLow {
+  background: var(--bg3);
+  color: var(--text2);
+}
+
+.categoryBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg3);
+  color: var(--text2);
+}
+
+.confidenceBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent-muted);
+}
+
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.applyBtn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--accent-soft);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  color: var(--accent);
+  font-family: 'Outfit', sans-serif;
+}
+
+.applyBtn:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
+.applyBtn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.dismissBtn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: none;
+  border: 1px solid var(--border2);
+  color: var(--text3);
+  font-family: 'Outfit', sans-serif;
+}
+
+.dismissBtn:hover {
+  background: var(--bg4);
+  color: var(--text2);
+  border-color: var(--text3);
+}
+
+.appliedLabel {
+  font-size: 12px;
+  color: var(--green);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ─── Empty state ─── */
+
+.emptyState {
+  padding: 48px 28px;
+  border-radius: var(--radius);
+  background: var(--bg2);
+  border: 1px dashed var(--border2);
+  text-align: center;
+  animation: fadeUp 0.3s ease both;
+}
+
+.emptyIcon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.emptyText {
+  font-size: 13px;
+  color: var(--text3);
+  line-height: 1.6;
+  max-width: 360px;
+  margin: 0 auto;
+}

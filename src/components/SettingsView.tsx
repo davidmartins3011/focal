@@ -1,6 +1,6 @@
 import { useState } from "react";
 import styles from "./SettingsView.module.css";
-import type { ThemeId, AIProviderId, AISettings, NotificationSettings, ReminderFrequency } from "../types";
+import type { ThemeId, AIProviderId, AISettings, NotificationSettings, ReminderFrequency, WeekDayId } from "../types";
 import { themes, providers } from "../data/mockSettings";
 import {
   DAY_LABELS,
