@@ -3,6 +3,7 @@ import PrepBanner from "./PrepBanner";
 import TaskItem from "./TaskItem";
 import { weekDays } from "../data/mockTasks";
 import { getTasks as fetchTasks } from "../services/tasks";
+import { getSetting, setSetting } from "../services/settings";
 import type { Task } from "../types";
 import styles from "./WeekView.module.css";
 
@@ -11,25 +12,24 @@ function weekKey(): string {
   const jan1 = new Date(now.getFullYear(), 0, 1);
   const dayOfYear = Math.floor((now.getTime() - jan1.getTime()) / 86400000) + 1;
   const weekNum = Math.ceil((dayOfYear + jan1.getDay()) / 7);
-  return `focal-weekly-prep-${now.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
-}
-
-function isWeeklyPrepDone(): boolean {
-  return localStorage.getItem(weekKey()) === "done";
+  return `weekly-prep-${now.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
 }
 
 export default function WeekView() {
-  const [prepDone, setPrepDone] = useState(isWeeklyPrepDone);
+  const [prepDone, setPrepDone] = useState(true);
   const [weekPriorities, setWeekPriorities] = useState<Task[]>([]);
 
   useEffect(() => {
     fetchTasks("week")
       .then(setWeekPriorities)
       .catch((err) => console.error("[WeekView] fetchTasks error:", err));
+    getSetting(weekKey())
+      .then((val) => setPrepDone(val === "done"))
+      .catch(() => {});
   }, []);
 
   const dismissPrep = useCallback(() => {
-    localStorage.setItem(weekKey(), "done");
+    setSetting(weekKey(), "done").catch(() => {});
     setPrepDone(true);
   }, []);
 

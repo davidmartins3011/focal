@@ -103,7 +103,7 @@ export default function TodoView() {
     setTodos((prev) =>
       prev.map((t) => (t.id === id ? { ...t, scheduledDate: date } : t))
     );
-    todoService.updateTodo({ id, scheduledDate: date ?? null });
+    todoService.updateTodo({ id, scheduledDate: date });
   };
 
   const openPopover = (todoId: string, type: PopoverType) => {

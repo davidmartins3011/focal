@@ -36,6 +36,8 @@ pub struct Task {
     pub estimated_minutes: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_date: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +142,16 @@ pub struct NotificationHistoryEntry {
     pub read: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileResearchSource {
+    pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scraped_at: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct UserProfile {
@@ -157,6 +169,8 @@ pub struct UserProfile {
     pub profile_research_identifier: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile_research_identifier_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_research_sources: Option<Vec<ProfileResearchSource>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adhd_recognition: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -1,41 +1,20 @@
 import { useState, useEffect } from "react";
 import styles from "./ProfileView.module.css";
-import type { UserProfile, ProfileResearchSource } from "../types";
+import type { UserProfile } from "../types";
 import { SOURCE_LABELS, LABELS } from "../data/profileLabels";
 import { ProfileSection, ProfileField, ProfileList } from "./ProfileField";
 import ProfileEditForm from "./ProfileEditForm";
-
-export const PROFILE_STORAGE_KEY = "focal-user-profile";
-
-function loadProfile(): UserProfile {
-  try {
-    const stored = localStorage.getItem(PROFILE_STORAGE_KEY);
-    if (!stored) return {};
-    const parsed = JSON.parse(stored) as UserProfile & { profileResearchData?: { source: string; sourceUrl?: string } };
-    if (parsed.profileResearchData && !parsed.profileResearchSources) {
-      parsed.profileResearchSources = [{
-        source: parsed.profileResearchData.source as ProfileResearchSource["source"],
-        sourceUrl: parsed.profileResearchData.sourceUrl,
-      }];
-      delete (parsed as Record<string, unknown>).profileResearchData;
-    }
-    return parsed as UserProfile;
-  } catch {
-    return {};
-  }
-}
-
-function saveProfile(profile: UserProfile) {
-  localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-}
+import { getProfile, updateProfile } from "../services/profile";
 
 export default function ProfileView() {
-  const [profile, setProfile] = useState<UserProfile>(loadProfile);
+  const [profile, setProfile] = useState<UserProfile>({});
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<UserProfile>({});
 
   useEffect(() => {
-    setProfile(loadProfile());
+    getProfile()
+      .then(setProfile)
+      .catch((err) => console.error("[ProfileView] getProfile error:", err));
   }, []);
 
   const startEditing = () => {
@@ -74,7 +53,7 @@ export default function ProfileView() {
       toSave.profileResearchSources = undefined;
     }
     setProfile(toSave);
-    saveProfile(toSave);
+    updateProfile(toSave);
     setIsEditing(false);
     setEditForm({});
   };

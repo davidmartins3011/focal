@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { Task } from "../types";
-import { buildCalendarMockTasks } from "../data/mockTasks";
+import { getTasks as fetchTasks } from "../services/tasks";
 import TaskItem from "./TaskItem";
 import styles from "./CalendarView.module.css";
 
@@ -21,7 +21,10 @@ const EMPTY_MESSAGES = [
 ];
 
 function toKey(d: Date): string {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -100,11 +103,24 @@ function getWeekStats(tasks: Record<string, Task[]>, now: Date): { done: number;
 }
 
 const today = new Date();
-const mockTasks = buildCalendarMockTasks();
 
 export default function CalendarView() {
   const [viewDate, setViewDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<Date>(today);
+  const [taskMap, setTaskMap] = useState<Record<string, Task[]>>({});
+
+  useEffect(() => {
+    fetchTasks("calendar")
+      .then((tasks) => {
+        const map: Record<string, Task[]> = {};
+        for (const t of tasks) {
+          if (!t.scheduledDate) continue;
+          (map[t.scheduledDate] ??= []).push(t);
+        }
+        setTaskMap(map);
+      })
+      .catch((err) => console.error("[CalendarView] fetchTasks error:", err));
+  }, []);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -117,12 +133,12 @@ export default function CalendarView() {
     setSelectedDate(today);
   };
 
-  const selectedTasks: Task[] = mockTasks[toKey(selectedDate)] ?? [];
+  const selectedTasks: Task[] = taskMap[toKey(selectedDate)] ?? [];
   const totalDone = selectedTasks.filter((t) => t.done).length;
   const totalTasks = selectedTasks.length;
   const allDone = totalTasks > 0 && totalDone === totalTasks;
 
-  const weekStats = useMemo(() => getWeekStats(mockTasks, today), []);
+  const weekStats = useMemo(() => getWeekStats(taskMap, today), [taskMap]);
   const weekPct = weekStats.total > 0 ? Math.round((weekStats.done / weekStats.total) * 100) : 0;
 
   const formatSelectedDate = () =>
@@ -181,7 +197,7 @@ export default function CalendarView() {
               const isCurrentMonth = day.getMonth() === month;
               const isDayToday = isSameDay(day, today);
               const isSelected = isSameDay(day, selectedDate);
-              const dayTasks: Task[] = mockTasks[key] ?? [];
+              const dayTasks: Task[] = taskMap[key] ?? [];
               const doneCount = dayTasks.filter((t) => t.done).length;
               const taskCount = dayTasks.length;
               const pct = taskCount > 0 ? Math.round((doneCount / taskCount) * 100) : -1;

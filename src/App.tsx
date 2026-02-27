@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Sidebar from "./components/Sidebar";
 import MainPanel from "./components/MainPanel";
 import ChatPanel from "./components/ChatPanel";
@@ -12,15 +12,13 @@ import NotificationToast from "./components/NotificationToast";
 import NotificationCenter from "./components/NotificationCenter";
 import type { ViewTab, SidebarPage, ThemeId, AISettings, StrategyFrequency, FrequencyOccurrence, WeekDayId } from "./types";
 import { useNotifications } from "./hooks/useNotifications";
+import { getAllSettings, setSetting } from "./services/settings";
 import styles from "./App.module.css";
 
-function getStoredTheme(): ThemeId {
-  const stored = localStorage.getItem("focal-theme");
-  if (stored && ["default", "clair", "sombre", "zen", "hyperfocus", "aurore", "ocean", "sakura", "nord", "solaire"].includes(stored)) {
-    return stored as ThemeId;
-  }
-  return "default";
-}
+const VALID_THEMES: ThemeId[] = ["default", "clair", "sombre", "zen", "hyperfocus", "aurore", "ocean", "sakura", "nord", "solaire"];
+const VALID_STRATEGY_FREQS: StrategyFrequency[] = ["monthly", "bimonthly", "quarterly", "biannual"];
+const VALID_OCCURRENCES: FrequencyOccurrence[] = ["1st", "2nd", "3rd", "4th", "last"];
+const VALID_DAYS: WeekDayId[] = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"];
 
 const defaultAISettings: AISettings = {
   providers: [
@@ -30,77 +28,50 @@ const defaultAISettings: AISettings = {
   ],
 };
 
-function getStoredAISettings(): AISettings {
-  try {
-    const stored = localStorage.getItem("focal-ai-settings");
-    if (stored) {
-      const parsed = JSON.parse(stored) as AISettings;
-      if (parsed.providers?.length) return parsed;
-    }
-  } catch { /* ignore */ }
-  return defaultAISettings;
-}
-
-function getStoredDailyPriorityCount(): number {
-  const stored = localStorage.getItem("focal-daily-priority-count");
-  if (stored) {
-    const n = parseInt(stored, 10);
-    if (n >= 1 && n <= 7) return n;
-  }
-  return 3;
-}
-
-const VALID_STRATEGY_FREQS: StrategyFrequency[] = ["monthly", "bimonthly", "quarterly", "biannual"];
-
-function getStoredStrategyFrequency(): StrategyFrequency {
-  const stored = localStorage.getItem("focal-strategy-frequency");
-  if (stored && VALID_STRATEGY_FREQS.includes(stored as StrategyFrequency)) {
-    return stored as StrategyFrequency;
-  }
-  return "monthly";
-}
-
-function getStoredStrategyCycleStart(): number {
-  const stored = localStorage.getItem("focal-strategy-cycle-start");
-  if (stored) {
-    const n = parseInt(stored, 10);
-    if (n >= 1 && n <= 12) return n;
-  }
-  return 1;
-}
-
-const VALID_OCCURRENCES: FrequencyOccurrence[] = ["1st", "2nd", "3rd", "4th", "last"];
-const VALID_DAYS: WeekDayId[] = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"];
-
-function getStoredStrategyOccurrence(): FrequencyOccurrence {
-  const stored = localStorage.getItem("focal-strategy-occurrence");
-  if (stored && VALID_OCCURRENCES.includes(stored as FrequencyOccurrence)) {
-    return stored as FrequencyOccurrence;
-  }
-  return "last";
-}
-
-function getStoredStrategyDay(): WeekDayId {
-  const stored = localStorage.getItem("focal-strategy-day");
-  if (stored && VALID_DAYS.includes(stored as WeekDayId)) {
-    return stored as WeekDayId;
-  }
-  return "dim";
-}
-
 export default function App() {
   const [activeTab, setActiveTab] = useState<ViewTab>("today");
   const [activePage, setActivePage] = useState<SidebarPage>("main");
   const [intResetKey, setIntResetKey] = useState(0);
-  const [theme, setTheme] = useState<ThemeId>(getStoredTheme);
-  const [aiSettings, setAISettings] = useState<AISettings>(getStoredAISettings);
-  const [dailyPriorityCount, setDailyPriorityCount] = useState<number>(getStoredDailyPriorityCount);
-  const [strategyFrequency, setStrategyFrequency] = useState<StrategyFrequency>(getStoredStrategyFrequency);
-  const [strategyCycleStart, setStrategyCycleStart] = useState<number>(getStoredStrategyCycleStart);
-  const [strategyOccurrence, setStrategyOccurrence] = useState<FrequencyOccurrence>(getStoredStrategyOccurrence);
-  const [strategyDay, setStrategyDay] = useState<WeekDayId>(getStoredStrategyDay);
+  const [theme, setTheme] = useState<ThemeId>("default");
+  const [aiSettings, setAISettings] = useState<AISettings>(defaultAISettings);
+  const [dailyPriorityCount, setDailyPriorityCount] = useState<number>(3);
+  const [strategyFrequency, setStrategyFrequency] = useState<StrategyFrequency>("monthly");
+  const [strategyCycleStart, setStrategyCycleStart] = useState<number>(1);
+  const [strategyOccurrence, setStrategyOccurrence] = useState<FrequencyOccurrence>("last");
+  const [strategyDay, setStrategyDay] = useState<WeekDayId>("dim");
+  const loaded = useRef(false);
 
   const notif = useNotifications();
+
+  useEffect(() => {
+    getAllSettings()
+      .then((s) => {
+        if (s.theme && VALID_THEMES.includes(s.theme as ThemeId))
+          setTheme(s.theme as ThemeId);
+        if (s["ai-settings"]) {
+          try { const p = JSON.parse(s["ai-settings"]) as AISettings; if (p.providers?.length) setAISettings(p); } catch { /* ignore */ }
+        }
+        if (s["daily-priority-count"]) {
+          const n = parseInt(s["daily-priority-count"], 10);
+          if (n >= 1 && n <= 7) setDailyPriorityCount(n);
+        }
+        if (s["strategy-frequency"] && VALID_STRATEGY_FREQS.includes(s["strategy-frequency"] as StrategyFrequency))
+          setStrategyFrequency(s["strategy-frequency"] as StrategyFrequency);
+        if (s["strategy-cycle-start"]) {
+          const n = parseInt(s["strategy-cycle-start"], 10);
+          if (n >= 1 && n <= 12) setStrategyCycleStart(n);
+        }
+        if (s["strategy-occurrence"] && VALID_OCCURRENCES.includes(s["strategy-occurrence"] as FrequencyOccurrence))
+          setStrategyOccurrence(s["strategy-occurrence"] as FrequencyOccurrence);
+        if (s["strategy-day"] && VALID_DAYS.includes(s["strategy-day"] as WeekDayId))
+          setStrategyDay(s["strategy-day"] as WeekDayId);
+        loaded.current = true;
+      })
+      .catch((err) => {
+        console.error("[App] getAllSettings error:", err);
+        loaded.current = true;
+      });
+  }, []);
 
   const handlePageChange = (page: SidebarPage) => {
     if (page === "integrations") {
@@ -111,31 +82,31 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("focal-theme", theme);
+    if (loaded.current) setSetting("theme", theme);
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem("focal-ai-settings", JSON.stringify(aiSettings));
+    if (loaded.current) setSetting("ai-settings", JSON.stringify(aiSettings));
   }, [aiSettings]);
 
   useEffect(() => {
-    localStorage.setItem("focal-daily-priority-count", String(dailyPriorityCount));
+    if (loaded.current) setSetting("daily-priority-count", String(dailyPriorityCount));
   }, [dailyPriorityCount]);
 
   useEffect(() => {
-    localStorage.setItem("focal-strategy-frequency", strategyFrequency);
+    if (loaded.current) setSetting("strategy-frequency", strategyFrequency);
   }, [strategyFrequency]);
 
   useEffect(() => {
-    localStorage.setItem("focal-strategy-cycle-start", String(strategyCycleStart));
+    if (loaded.current) setSetting("strategy-cycle-start", String(strategyCycleStart));
   }, [strategyCycleStart]);
 
   useEffect(() => {
-    localStorage.setItem("focal-strategy-occurrence", strategyOccurrence);
+    if (loaded.current) setSetting("strategy-occurrence", strategyOccurrence);
   }, [strategyOccurrence]);
 
   useEffect(() => {
-    localStorage.setItem("focal-strategy-day", strategyDay);
+    if (loaded.current) setSetting("strategy-day", strategyDay);
   }, [strategyDay]);
 
   const handleStrategyFrequencyChange = useCallback((freq: StrategyFrequency) => {

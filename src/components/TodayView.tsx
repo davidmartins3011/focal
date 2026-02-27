@@ -26,17 +26,14 @@ import TaskItem from "./TaskItem";
 import type { Task } from "../types";
 import { mockDecompositions, mockStepDecompositions } from "../data/mockTasks";
 import { getTasks as fetchTasks, toggleTask as toggleTaskSvc, reorderTasks as reorderTasksSvc } from "../services/tasks";
+import { getSetting, setSetting } from "../services/settings";
 import styles from "./TodayView.module.css";
 
 const DECOMPOSE_DELAY_MS = 1800;
 const MOCK_STREAK = 5;
 
 function todayKey(): string {
-  return `focal-daily-prep-${new Date().toISOString().slice(0, 10)}`;
-}
-
-function isDailyPrepDone(): boolean {
-  return localStorage.getItem(todayKey()) === "done";
+  return `daily-prep-${new Date().toISOString().slice(0, 10)}`;
 }
 
 function SortableTaskItem(props: React.ComponentProps<typeof TaskItem>) {
@@ -72,7 +69,7 @@ interface TodayViewProps {
 }
 
 export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
-  const [prepDone, setPrepDone] = useState(isDailyPrepDone);
+  const [prepDone, setPrepDone] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [decomposingId, setDecomposingId] = useState<string | null>(null);
 
@@ -80,6 +77,9 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
     fetchTasks("today")
       .then(setTasks)
       .catch((err) => console.error("[TodayView] fetchTasks error:", err));
+    getSetting(todayKey())
+      .then((val) => setPrepDone(val === "done"))
+      .catch(() => {});
   }, []);
   const [decomposingStepKey, setDecomposingStepKey] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -321,7 +321,7 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
   const taskIds = tasks.map((t) => t.id);
 
   const dismissPrep = useCallback(() => {
-    localStorage.setItem(todayKey(), "done");
+    setSetting(todayKey(), "done").catch(() => {});
     setPrepDone(true);
   }, []);
 

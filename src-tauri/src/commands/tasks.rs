@@ -39,11 +39,11 @@ fn load_steps(db: &rusqlite::Connection, task_id: &str) -> Result<Vec<MicroStep>
 }
 
 fn load_task(db: &rusqlite::Connection, task_id: &str) -> Result<Task, String> {
-    let (id, name, done, est, pri, ai): (String, String, bool, Option<i32>, Option<String>, bool) = db
+    let (id, name, done, est, pri, ai, sched): (String, String, bool, Option<i32>, Option<String>, bool, Option<String>) = db
         .query_row(
-            "SELECT id, name, done, estimated_minutes, priority, ai_decomposed FROM tasks WHERE id = ?1",
+            "SELECT id, name, done, estimated_minutes, priority, ai_decomposed, scheduled_date FROM tasks WHERE id = ?1",
             params![task_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
         )
         .map_err(|e| e.to_string())?;
     let tags = load_tags(db, &id)?;
@@ -57,6 +57,7 @@ fn load_task(db: &rusqlite::Connection, task_id: &str) -> Result<Task, String> {
         ai_decomposed: if ai { Some(true) } else { None },
         estimated_minutes: est,
         priority: pri,
+        scheduled_date: sched,
     })
 }
 

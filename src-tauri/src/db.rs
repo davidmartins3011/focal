@@ -443,14 +443,14 @@ fn seed_settings(conn: &Connection) -> Result<(), rusqlite::Error> {
         conn.execute("INSERT INTO settings (key, value) VALUES (?1,?2)", params![key, value])?;
         Ok(())
     };
-    ins("theme", "\"default\"")?;
-    ins("daily_priority_count", "3")?;
-    ins("strategy_frequency", "\"monthly\"")?;
-    ins("strategy_cycle_start", "1")?;
-    ins("strategy_occurrence", "\"last\"")?;
-    ins("strategy_day", "\"dim\"")?;
-    ins("ai_settings", r#"{"providers":[{"id":"openai","enabled":false,"apiKey":""},{"id":"anthropic","enabled":false,"apiKey":""},{"id":"mistral","enabled":false,"apiKey":""}]}"#)?;
-    ins("notification_settings", &serde_json::to_string(&serde_json::json!({
+    ins("theme", "default")?;
+    ins("daily-priority-count", "3")?;
+    ins("strategy-frequency", "monthly")?;
+    ins("strategy-cycle-start", "1")?;
+    ins("strategy-occurrence", "last")?;
+    ins("strategy-day", "dim")?;
+    ins("ai-settings", r#"{"providers":[{"id":"openai","enabled":false,"apiKey":""},{"id":"anthropic","enabled":false,"apiKey":""},{"id":"mistral","enabled":false,"apiKey":""}]}"#)?;
+    ins("notification-settings", &serde_json::to_string(&serde_json::json!({
         "enabled": true,
         "reminders": [
             {"id":"morning-plan","label":"Planification du matin","description":"Prépare ta journée en définissant tes priorités","time":"09:00","enabled":true,"days":["lun","mar","mer","jeu","ven"],"icon":"🌅"},

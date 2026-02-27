@@ -14,6 +14,7 @@ export interface Task {
   aiDecomposed?: boolean;
   estimatedMinutes?: number;
   priority?: "main" | "secondary";
+  scheduledDate?: string;
 }
 
 export interface Tag {

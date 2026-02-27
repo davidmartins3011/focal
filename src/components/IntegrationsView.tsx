@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import styles from "./IntegrationsView.module.css";
 import type { Integration } from "../types";
-import { defaultIntegrations, categoryLabels, categoryOrder } from "../data/mockIntegrations";
+import { categoryLabels, categoryOrder } from "../data/mockIntegrations";
+import { getIntegrations, updateIntegrationConnection } from "../services/integrations";
 import ContextPanel from "./ContextPanel";
 import { integrationLogos } from "./icons/IntegrationLogos";
 
@@ -10,17 +11,27 @@ interface IntegrationsViewProps {
 }
 
 export default function IntegrationsView({ resetSignal }: IntegrationsViewProps) {
-  const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [contextFor, setContextFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    getIntegrations()
+      .then(setIntegrations)
+      .catch((err) => console.error("[IntegrationsView] getIntegrations error:", err));
+  }, []);
 
   useEffect(() => {
     setContextFor(null);
   }, [resetSignal]);
 
   const toggleConnection = (id: string) => {
+    const item = integrations.find((i) => i.id === id);
+    if (!item) return;
+    const next = !item.connected;
     setIntegrations((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, connected: !i.connected } : i))
+      prev.map((i) => (i.id === id ? { ...i, connected: next } : i))
     );
+    updateIntegrationConnection(id, next);
   };
 
   const updateIntegration = (updated: Integration) => {
