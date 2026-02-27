@@ -132,6 +132,15 @@ export const defaultReminders: NotificationReminder[] = [
     icon: "📝",
   },
   {
+    id: "weekly-prep",
+    label: "Préparation de la semaine",
+    description: "Pose tes objectifs et répartis tes tâches pour la semaine",
+    time: "09:00",
+    enabled: true,
+    days: ["lun"],
+    icon: "📋",
+  },
+  {
     id: "weekly-review",
     label: "Revue hebdomadaire",
     description: "Bilan de la semaine et préparation de la suivante",
@@ -142,7 +151,7 @@ export const defaultReminders: NotificationReminder[] = [
   },
   {
     id: "strategy-review",
-    label: "Revue stratégique",
+    label: "Prise de recul",
     description: "Prends du recul sur tes piliers et ajuste tes priorités du mois",
     time: "10:00",
     enabled: true,

@@ -18,6 +18,7 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import PrepBanner from "./PrepBanner";
 import FocusNow from "./FocusNow";
 import FocusTimer from "./FocusTimer";
 import ProgressBar from "./ProgressBar";
@@ -28,6 +29,14 @@ import styles from "./TodayView.module.css";
 
 const DECOMPOSE_DELAY_MS = 1800;
 const MOCK_STREAK = 5;
+
+function todayKey(): string {
+  return `focal-daily-prep-${new Date().toISOString().slice(0, 10)}`;
+}
+
+function isDailyPrepDone(): boolean {
+  return localStorage.getItem(todayKey()) === "done";
+}
 
 function SortableTaskItem(props: React.ComponentProps<typeof TaskItem>) {
   const {
@@ -62,6 +71,7 @@ interface TodayViewProps {
 }
 
 export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
+  const [prepDone, setPrepDone] = useState(isDailyPrepDone);
   const [tasks, setTasks] = useState<Task[]>(() =>
     [...initialTodayTasks].sort((a, b) => {
       const pa = a.priority === "main" ? 0 : 1;
@@ -307,8 +317,21 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
   const activeTask = activeId ? tasks.find((t) => t.id === activeId) : null;
   const taskIds = tasks.map((t) => t.id);
 
+  const dismissPrep = useCallback(() => {
+    localStorage.setItem(todayKey(), "done");
+    setPrepDone(true);
+  }, []);
+
+  const launchPrep = useCallback(() => {
+    dismissPrep();
+  }, [dismissPrep]);
+
   return (
     <div>
+      {!prepDone && (
+        <PrepBanner variant="daily" onLaunch={launchPrep} onDismiss={dismissPrep} />
+      )}
+
       {timerTask && timerTask.estimatedMinutes && (
         <div style={{ display: showTimerPanel ? undefined : "none" }}>
           <FocusTimer

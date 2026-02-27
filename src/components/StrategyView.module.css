@@ -2,6 +2,92 @@
   animation: fadeUp 0.3s ease both;
 }
 
+/* ── Month selector ── */
+.monthSelector {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.monthChip {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+}
+
+.monthChip:hover {
+  border-color: var(--border2);
+  background: var(--bg3);
+}
+
+.monthChipActive {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.monthChipActive:hover {
+  background: var(--accent-light);
+  border-color: var(--accent-light);
+}
+
+.monthChipLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.monthChipActive .monthChipLabel {
+  color: var(--bg);
+}
+
+.monthChipYear {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text3);
+}
+
+.monthChipActive .monthChipYear {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ── Past review header ── */
+.pastHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.pastIcon {
+  font-size: 22px;
+}
+
+.pastTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pastMeta {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
 /* ── CTA Card ── */
 .ctaCard {
   background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.08), rgba(var(--accent-rgb), 0.02));
@@ -239,4 +325,28 @@
   font-size: 13px;
   color: var(--text);
   line-height: 1.4;
+}
+
+/* ── Empty state ── */
+.emptyState {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.emptyIcon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.emptyTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.emptyText {
+  font-size: 13px;
+  color: var(--text3);
+  line-height: 1.5;
 }

@@ -1,22 +1,24 @@
 import TodayView from "./TodayView";
 import WeekView from "./WeekView";
 import StrategyView from "./StrategyView";
-import type { ViewTab } from "../types";
+import type { ViewTab, StrategyFrequency } from "../types";
 import styles from "./MainPanel.module.css";
 
 interface Props {
   activeTab: ViewTab;
   onTabChange: (tab: ViewTab) => void;
   dailyPriorityCount: number;
+  strategyFrequency: StrategyFrequency;
+  strategyCycleStart: number;
 }
 
 const tabs: { id: ViewTab; label: string }[] = [
   { id: "today", label: "Aujourd'hui" },
   { id: "week", label: "Cette semaine" },
-  { id: "strategy", label: "Stratégie" },
+  { id: "strategy", label: "Prise de recul" },
 ];
 
-export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount }: Props) {
+export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyFrequency, strategyCycleStart }: Props) {
   return (
     <div className={styles.main}>
       <div className={styles.header}>
@@ -42,7 +44,9 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount }
       <div className={styles.content}>
         {activeTab === "today" && <TodayView dailyPriorityCount={dailyPriorityCount} />}
         {activeTab === "week" && <WeekView />}
-        {activeTab === "strategy" && <StrategyView />}
+        {activeTab === "strategy" && (
+          <StrategyView frequency={strategyFrequency} cycleStart={strategyCycleStart} />
+        )}
       </div>
     </div>
   );

@@ -1,10 +1,39 @@
+import { useState, useCallback } from "react";
+import PrepBanner from "./PrepBanner";
 import TaskItem from "./TaskItem";
 import { weekDays, weekPriorities } from "../data/mockTasks";
 import styles from "./WeekView.module.css";
 
+function weekKey(): string {
+  const now = new Date();
+  const jan1 = new Date(now.getFullYear(), 0, 1);
+  const dayOfYear = Math.floor((now.getTime() - jan1.getTime()) / 86400000) + 1;
+  const weekNum = Math.ceil((dayOfYear + jan1.getDay()) / 7);
+  return `focal-weekly-prep-${now.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}
+
+function isWeeklyPrepDone(): boolean {
+  return localStorage.getItem(weekKey()) === "done";
+}
+
 export default function WeekView() {
+  const [prepDone, setPrepDone] = useState(isWeeklyPrepDone);
+
+  const dismissPrep = useCallback(() => {
+    localStorage.setItem(weekKey(), "done");
+    setPrepDone(true);
+  }, []);
+
+  const launchPrep = useCallback(() => {
+    dismissPrep();
+  }, [dismissPrep]);
+
   return (
     <div>
+      {!prepDone && (
+        <PrepBanner variant="weekly" onLaunch={launchPrep} onDismiss={dismissPrep} />
+      )}
+
       <div className={styles.grid}>
         {weekDays.map((day) => (
           <div

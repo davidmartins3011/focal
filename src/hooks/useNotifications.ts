@@ -170,6 +170,7 @@ export function useNotifications() {
           label: r.label,
           description: r.description,
           time: hhmm,
+          reminderId: r.id,
         });
 
         addHistoryEntry({

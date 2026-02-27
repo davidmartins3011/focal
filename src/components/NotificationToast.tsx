@@ -7,6 +7,7 @@ export interface ToastData {
   label: string;
   description: string;
   time: string;
+  reminderId?: string;
 }
 
 interface NotificationToastProps {

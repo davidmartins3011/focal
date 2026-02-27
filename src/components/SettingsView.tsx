@@ -1,6 +1,6 @@
 import { useState } from "react";
 import styles from "./SettingsView.module.css";
-import type { ThemeId, AIProviderId, AISettings, NotificationSettings, ReminderFrequency, WeekDayId } from "../types";
+import type { ThemeId, AIProviderId, AISettings, NotificationSettings, ReminderFrequency, WeekDayId, StrategyFrequency, FrequencyOccurrence } from "../types";
 import { themes, providers } from "../data/mockSettings";
 import {
   DAY_LABELS,
@@ -9,7 +9,19 @@ import {
   BIMONTHLY_CYCLES,
   BIANNUAL_CYCLES,
   QUARTERLY_CYCLES,
+  STRATEGY_FREQUENCY_OPTIONS,
+  STRATEGY_BIMONTHLY_CYCLES,
+  STRATEGY_QUARTERLY_CYCLES,
+  STRATEGY_BIANNUAL_CYCLES,
 } from "../data/settingsConstants";
+
+const STRATEGY_OCCURRENCE_OPTIONS: { id: FrequencyOccurrence; label: string }[] = [
+  { id: "1st", label: "1er" },
+  { id: "2nd", label: "2e" },
+  { id: "3rd", label: "3e" },
+  { id: "4th", label: "4e" },
+  { id: "last", label: "Dernier" },
+];
 
 interface SettingsViewProps {
   currentTheme: ThemeId;
@@ -21,6 +33,14 @@ interface SettingsViewProps {
   onTestNotification?: () => void;
   dailyPriorityCount: number;
   onDailyPriorityCountChange: (count: number) => void;
+  strategyFrequency: StrategyFrequency;
+  onStrategyFrequencyChange: (freq: StrategyFrequency) => void;
+  strategyCycleStart: number;
+  onStrategyCycleStartChange: (start: number) => void;
+  strategyOccurrence: FrequencyOccurrence;
+  onStrategyOccurrenceChange: (occ: FrequencyOccurrence) => void;
+  strategyDay: WeekDayId;
+  onStrategyDayChange: (day: WeekDayId) => void;
 }
 
 export default function SettingsView({
@@ -33,6 +53,14 @@ export default function SettingsView({
   onTestNotification,
   dailyPriorityCount,
   onDailyPriorityCountChange,
+  strategyFrequency,
+  onStrategyFrequencyChange,
+  strategyCycleStart,
+  onStrategyCycleStartChange,
+  strategyOccurrence,
+  onStrategyOccurrenceChange,
+  strategyDay,
+  onStrategyDayChange,
 }: SettingsViewProps) {
   const [visibleKeys, setVisibleKeys] = useState<Record<AIProviderId, boolean>>({
     openai: false,
@@ -117,29 +145,136 @@ export default function SettingsView({
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Général</h2>
-        <div className={styles.settingRow}>
-          <div className={styles.settingInfo}>
-            <div className={styles.settingLabel}>Priorités du jour</div>
-            <div className={styles.settingDesc}>
-              Nombre maximum de tâches affichées dans la section « Priorités du jour »
+        <div className={styles.generalList}>
+          <div className={styles.settingRow}>
+            <div className={styles.settingInfo}>
+              <div className={styles.settingLabel}>Priorités du jour</div>
+              <div className={styles.settingDesc}>
+                Nombre maximum de tâches affichées dans la section « Priorités du jour »
+              </div>
+            </div>
+            <div className={styles.counterControl}>
+              <button
+                className={styles.counterBtn}
+                onClick={() => onDailyPriorityCountChange(Math.max(1, dailyPriorityCount - 1))}
+                disabled={dailyPriorityCount <= 1}
+              >
+                −
+              </button>
+              <span className={styles.counterValue}>{dailyPriorityCount}</span>
+              <button
+                className={styles.counterBtn}
+                onClick={() => onDailyPriorityCountChange(Math.min(7, dailyPriorityCount + 1))}
+                disabled={dailyPriorityCount >= 7}
+              >
+                +
+              </button>
             </div>
           </div>
-          <div className={styles.counterControl}>
-            <button
-              className={styles.counterBtn}
-              onClick={() => onDailyPriorityCountChange(Math.max(1, dailyPriorityCount - 1))}
-              disabled={dailyPriorityCount <= 1}
-            >
-              −
-            </button>
-            <span className={styles.counterValue}>{dailyPriorityCount}</span>
-            <button
-              className={styles.counterBtn}
-              onClick={() => onDailyPriorityCountChange(Math.min(7, dailyPriorityCount + 1))}
-              disabled={dailyPriorityCount >= 7}
-            >
-              +
-            </button>
+
+          <div className={styles.strategyCard}>
+            <div className={styles.settingRow}>
+              <div className={styles.settingInfo}>
+                <div className={styles.settingLabel}>Prise de recul</div>
+                <div className={styles.settingDesc}>
+                  À quelle fréquence veux-tu prendre du recul sur tes piliers et objectifs ?
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.strategyBody}>
+              <div className={styles.strategyFreqRow}>
+                <label className={styles.strategyLabel}>Fréq.</label>
+                <div className={styles.freqPills}>
+                  {STRATEGY_FREQUENCY_OPTIONS.map((f) => (
+                    <button
+                      key={f.id}
+                      className={`${styles.freqPill} ${strategyFrequency === f.id ? styles.freqActive : ""}`}
+                      onClick={() => onStrategyFrequencyChange(f.id)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={styles.strategyFreqRow}>
+                <label className={styles.strategyLabel}>Quand</label>
+                <div className={styles.occurrenceRow}>
+                  <div className={styles.freqPills}>
+                    {STRATEGY_OCCURRENCE_OPTIONS.map((o) => (
+                      <button
+                        key={o.id}
+                        className={`${styles.freqPill} ${strategyOccurrence === o.id ? styles.freqActive : ""}`}
+                        onClick={() => onStrategyOccurrenceChange(o.id)}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className={styles.dayPills}>
+                    {DAY_LABELS.map((d) => (
+                      <button
+                        key={d.id}
+                        className={`${styles.dayPill} ${strategyDay === d.id ? styles.dayActive : ""}`}
+                        onClick={() => onStrategyDayChange(d.id)}
+                      >
+                        {d.short}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {strategyFrequency === "bimonthly" && (
+                <div className={styles.strategyFreqRow}>
+                  <label className={styles.strategyLabel}>Mois</label>
+                  <div className={styles.cycleRow}>
+                    {STRATEGY_BIMONTHLY_CYCLES.map((c) => (
+                      <button
+                        key={c.start}
+                        className={`${styles.cyclePill} ${strategyCycleStart === c.start ? styles.cycleActive : ""}`}
+                        onClick={() => onStrategyCycleStartChange(c.start)}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {strategyFrequency === "quarterly" && (
+                <div className={styles.strategyFreqRow}>
+                  <label className={styles.strategyLabel}>Mois</label>
+                  <div className={styles.cycleRow}>
+                    {STRATEGY_QUARTERLY_CYCLES.map((c) => (
+                      <button
+                        key={c.start}
+                        className={`${styles.cyclePill} ${strategyCycleStart === c.start ? styles.cycleActive : ""}`}
+                        onClick={() => onStrategyCycleStartChange(c.start)}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {strategyFrequency === "biannual" && (
+                <div className={styles.strategyFreqRow}>
+                  <label className={styles.strategyLabel}>Mois</label>
+                  <div className={styles.cycleRow}>
+                    {STRATEGY_BIANNUAL_CYCLES.map((c) => (
+                      <button
+                        key={c.start}
+                        className={`${styles.cyclePill} ${strategyCycleStart === c.start ? styles.cycleActive : ""}`}
+                        onClick={() => onStrategyCycleStartChange(c.start)}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -191,7 +326,11 @@ export default function SettingsView({
                           onChange={(e) => updateReminderTime(reminder.id, e.target.value)}
                         />
                       </div>
-                      {reminder.frequency ? (
+                      {reminder.id === "strategy-review" ? (
+                        <div className={styles.reminderSyncNote}>
+                          Fréquence calée sur le réglage « Prise de recul » ci-dessus.
+                        </div>
+                      ) : reminder.frequency ? (
                         <>
                           <div className={styles.reminderDaysRow}>
                             <label className={styles.reminderTimeLabel}>Fréq.</label>

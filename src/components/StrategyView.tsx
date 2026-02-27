@@ -1,120 +1,159 @@
+import { useState, useMemo } from "react";
+import { strategyReviews, MONTH_NAMES } from "../data/mockStrategyReviews";
+import {
+  getActiveMonths,
+  strategyPeriodLabel,
+  strategyCtaLabel,
+  strategyNudgeThreshold,
+} from "../data/settingsConstants";
+import type { StrategyReview, StrategyFrequency } from "../types";
 import styles from "./StrategyView.module.css";
 
-interface Pillar {
-  id: string;
-  name: string;
-  tagColor: "crm" | "data" | "roadmap" | "saas";
-  goal: string;
-  progress: number;
-  insight: string;
+function daysSinceReview(review: StrategyReview): number {
+  const now = new Date();
+  const created = new Date(review.createdAt);
+  return Math.floor((now.getTime() - created.getTime()) / 86400000);
 }
 
-interface Reflection {
-  id: string;
-  prompt: string;
-  answer: string;
+function nextPeriodLabel(review: StrategyReview, freq: StrategyFrequency): string {
+  const step =
+    freq === "monthly" ? 1 :
+    freq === "bimonthly" ? 2 :
+    freq === "quarterly" ? 3 : 6;
+  const nextMonth = (review.month + step) % 12;
+  const yearAdd = review.month + step >= 12 ? 1 : 0;
+  return `${MONTH_NAMES[nextMonth]} ${review.year + yearAdd}`;
 }
 
-const pillars: Pillar[] = [
-  {
-    id: "roadmap",
-    name: "Roadmap produit",
-    tagColor: "roadmap",
-    goal: "Piloter la roadmap Q1 et livrer le sprint",
-    progress: 80,
-    insight: "Sprint review bien cadré, bonne vélocité",
-  },
-  {
-    id: "data",
-    name: "Data Platform",
-    tagColor: "data",
-    goal: "Stabiliser les pipelines dbt en prod",
-    progress: 65,
-    insight: "2 bugs critiques résolus, 1 en cours",
-  },
-  {
-    id: "crm",
-    name: "Relations & CRM",
-    tagColor: "crm",
-    goal: "Structurer le suivi client et partenaires",
-    progress: 40,
-    insight: "Suivi encore trop informel, à cadrer",
-  },
-  {
-    id: "saas",
-    name: "SaaS TDAH (focal.)",
-    tagColor: "saas",
-    goal: "Valider le concept et construire le MVP",
-    progress: 25,
-    insight: "Mockup fait, concept à tester avec 3 personnes",
-  },
-];
+function chipLabel(review: StrategyReview, freq: StrategyFrequency): string {
+  const short = MONTH_NAMES[review.month].slice(0, 3);
+  if (freq === "monthly") return `${short}.`;
+  if (freq === "bimonthly") {
+    const next = (review.month + 1) % 12;
+    return `${short}-${MONTH_NAMES[next].slice(0, 3)}`;
+  }
+  if (freq === "quarterly") {
+    const q = Math.floor(review.month / 3) + 1;
+    return `T${q}`;
+  }
+  const s = review.month < 6 ? 1 : 2;
+  return `S${s}`;
+}
 
-const reflections: Reflection[] = [
-  {
-    id: "worked",
-    prompt: "Ce qui a bien marché",
-    answer:
-      "Bonne discipline sur les standups. La décomposition de tâches m'aide vraiment — quand je l'utilise. Le focus par blocs de 45 min est efficace.",
-  },
-  {
-    id: "blocked",
-    prompt: "Ce qui m'a bloqué",
-    answer:
-      "Procrastination sur le projet SaaS : trop de tâches floues, pas assez décomposées. Le bug dbt a mangé 3 jours de focus.",
-  },
-  {
-    id: "stop",
-    prompt: "Ce que je veux arrêter",
-    answer:
-      "Checker Slack toutes les 10 min. Accepter des réunions sans agenda clair. Rester sur des tâches bloquées sans demander de l'aide.",
-  },
-  {
-    id: "start",
-    prompt: "Ce que je veux commencer",
-    answer:
-      "Bloquer 1h chaque matin pour le SaaS. Faire la revue du soir systématiquement. Utiliser « Je bloque » au lieu de tourner en rond.",
-  },
-];
+interface StrategyViewProps {
+  frequency: StrategyFrequency;
+  cycleStart: number;
+}
 
-const nextMonthTop3 = [
-  "Livrer le MVP focal. (décomposition IA + vue jour)",
-  "Clôturer le bug pipeline dbt et documenter la solution",
-  "Mettre en place un suivi client structuré (1 check-in/semaine)",
-];
+export default function StrategyView({ frequency, cycleStart }: StrategyViewProps) {
+  const activeMonths = useMemo(
+    () => getActiveMonths(frequency, cycleStart),
+    [frequency, cycleStart]
+  );
 
-const DAYS_SINCE_LAST_REVIEW = 28;
+  const sorted = useMemo(
+    () =>
+      [...strategyReviews]
+        .filter((r) => activeMonths.has(r.month))
+        .sort((a, b) => {
+          const da = a.year * 12 + a.month;
+          const db = b.year * 12 + b.month;
+          return db - da;
+        }),
+    [activeMonths]
+  );
 
-export default function StrategyView() {
-  const nudge = DAYS_SINCE_LAST_REVIEW >= 25;
+  const [selectedId, setSelectedId] = useState(sorted[0]?.id ?? "");
+  const review = sorted.find((r) => r.id === selectedId) ?? sorted[0];
+
+  if (!review) {
+    return (
+      <div className={styles.wrap}>
+        <div className={styles.emptyState}>
+          <div className={styles.emptyIcon}>🧭</div>
+          <div className={styles.emptyTitle}>Aucune revue pour cette fréquence</div>
+          <div className={styles.emptyText}>
+            Change la fréquence dans les paramètres ou lance ta première prise de recul.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isLatest = review.id === sorted[0]?.id;
+  const daysSince = daysSinceReview(review);
+  const nudge = isLatest && daysSince >= strategyNudgeThreshold(frequency);
+  const periodLabel = strategyPeriodLabel(frequency);
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.ctaCard}>
-        <div className={styles.ctaHeader}>
-          <span className={styles.ctaIcon}>🧭</span>
+      {sorted.length > 1 && (
+        <div className={styles.monthSelector}>
+          {sorted.map((r) => {
+            const active = r.id === review.id;
+            return (
+              <button
+                key={r.id}
+                className={`${styles.monthChip} ${active ? styles.monthChipActive : ""}`}
+                onClick={() => setSelectedId(r.id)}
+              >
+                <span className={styles.monthChipLabel}>
+                  {chipLabel(r, frequency)}
+                </span>
+                <span className={styles.monthChipYear}>{r.year}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {isLatest && (
+        <div className={styles.ctaCard}>
+          <div className={styles.ctaHeader}>
+            <span className={styles.ctaIcon}>🧭</span>
+            <div>
+              <div className={styles.ctaTitle}>
+                Prise de recul — {MONTH_NAMES[review.month]} {review.year}
+              </div>
+              <div className={`${styles.ctaMeta} ${nudge ? styles.ctaMetaNudge : ""}`}>
+                {nudge
+                  ? `Ça fait ${daysSince} jours — un bon moment pour prendre du recul`
+                  : `Dernière revue il y a ${daysSince} jours`}
+              </div>
+            </div>
+          </div>
+          <p className={styles.ctaText}>
+            Prends 15 minutes pour regarder {strategyCtaLabel(frequency)}, ajuster tes piliers,
+            et décider de tes priorités pour {nextPeriodLabel(review, frequency)}.
+          </p>
+          <button className={styles.ctaBtn}>Lancer la prise de recul</button>
+        </div>
+      )}
+
+      {!isLatest && (
+        <div className={styles.pastHeader}>
+          <span className={styles.pastIcon}>📖</span>
           <div>
-            <div className={styles.ctaTitle}>Prise de recul — Février 2026</div>
-            <div className={`${styles.ctaMeta} ${nudge ? styles.ctaMetaNudge : ""}`}>
-              {nudge
-                ? `Ça fait ${DAYS_SINCE_LAST_REVIEW} jours — un bon moment pour prendre du recul`
-                : `Dernière revue il y a ${DAYS_SINCE_LAST_REVIEW} jours`}
+            <div className={styles.pastTitle}>
+              {MONTH_NAMES[review.month]} {review.year}
+            </div>
+            <div className={styles.pastMeta}>
+              Revue réalisée il y a {daysSince} jours
             </div>
           </div>
         </div>
-        <p className={styles.ctaText}>
-          Prends 15 minutes pour regarder le mois écoulé, ajuster tes piliers,
-          et décider de tes priorités pour mars.
-        </p>
-        <button className={styles.ctaBtn}>Lancer la revue stratégique</button>
-      </div>
+      )}
 
       <div className={styles.sectionHeader}>
         <span className={styles.sectionTitle}>Mes piliers</span>
-        <span className={styles.sectionHint}>Tes grands axes de travail ce mois-ci</span>
+        <span className={styles.sectionHint}>
+          {isLatest
+            ? `Tes grands axes de travail ${frequency === "monthly" ? "ce mois-ci" : "cette période"}`
+            : `Axes de travail en ${MONTH_NAMES[review.month].toLowerCase()} ${review.year}`}
+        </span>
       </div>
       <div className={styles.pillarsGrid}>
-        {pillars.map((p) => (
+        {review.pillars.map((p) => (
           <div key={p.id} className={styles.pillarCard}>
             <div className={styles.pillarHeader}>
               <span className={`${styles.pillarTag} ${styles[p.tagColor]}`}>
@@ -135,10 +174,10 @@ export default function StrategyView() {
       </div>
 
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionTitle}>Réflexion du mois</span>
+        <span className={styles.sectionTitle}>Réflexion {periodLabel}</span>
       </div>
       <div className={styles.reflections}>
-        {reflections.map((r) => (
+        {review.reflections.map((r) => (
           <div key={r.id} className={styles.reflectionCard}>
             <div className={styles.reflectionPrompt}>{r.prompt}</div>
             <div className={styles.reflectionAnswer}>{r.answer}</div>
@@ -147,10 +186,12 @@ export default function StrategyView() {
       </div>
 
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionTitle}>Top 3 — Mars 2026</span>
+        <span className={styles.sectionTitle}>
+          Top 3 — {nextPeriodLabel(review, frequency)}
+        </span>
       </div>
       <div className={styles.top3}>
-        {nextMonthTop3.map((item, i) => (
+        {review.top3.map((item, i) => (
           <div key={i} className={styles.top3Item}>
             <span className={styles.top3Number}>{i + 1}</span>
             <span className={styles.top3Text}>{item}</span>
