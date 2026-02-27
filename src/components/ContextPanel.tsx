@@ -1,6 +1,7 @@
 import type { Integration, IntegrationRule } from "../types";
 import ScoreSelector from "./ScoreSelector";
 import styles from "./IntegrationsView.module.css";
+import { integrationLogos } from "./icons/IntegrationLogos";
 
 interface Props {
   integration: Integration;
@@ -60,7 +61,11 @@ export default function ContextPanel({ integration, onBack, onUpdate }: Props) {
           ← Retour
         </button>
         <div className={styles.contextTitle}>
-          <span className={styles.contextIcon}>{integration.icon}</span>
+          <span className={styles.contextIcon}>
+            {integrationLogos[integration.id]
+              ? integrationLogos[integration.id]({ size: 28 })
+              : integration.icon}
+          </span>
           <div>
             <h2 className={styles.contextName}>{integration.name}</h2>
             <p className={styles.contextSub}>Directives pour l'IA</p>

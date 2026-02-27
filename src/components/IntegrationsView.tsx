@@ -3,6 +3,7 @@ import styles from "./IntegrationsView.module.css";
 import type { Integration } from "../types";
 import { defaultIntegrations, categoryLabels, categoryOrder } from "../data/mockIntegrations";
 import ContextPanel from "./ContextPanel";
+import { integrationLogos } from "./icons/IntegrationLogos";
 
 interface IntegrationsViewProps {
   resetSignal?: number;
@@ -81,7 +82,11 @@ export default function IntegrationsView({ resetSignal }: IntegrationsViewProps)
                   className={`${styles.card} ${integration.connected ? styles.connected : ""}`}
                 >
                   <div className={styles.cardHeader}>
-                    <span className={styles.cardIcon}>{integration.icon}</span>
+                    <span className={styles.cardIcon}>
+                      {integrationLogos[integration.id]
+                        ? integrationLogos[integration.id]({ size: 26 })
+                        : integration.icon}
+                    </span>
                     <div className={styles.cardInfo}>
                       <h3 className={styles.cardName}>
                         {integration.name}
