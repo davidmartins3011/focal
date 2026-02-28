@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { NotificationSettings, NotificationHistoryEntry, WeekDayId } from "../types";
+import type { NotificationSettings, NotificationHistoryEntry, WeekDayId, NotificationReminder } from "../types";
 import type { ToastData } from "../components/NotificationToast";
 import { defaultReminders } from "../data/settingsData";
 import { getSetting, setSetting } from "../services/settings";
@@ -9,6 +9,11 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
 } from "../services/notifications";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 
 const JS_DAY_TO_WEEKDAY: Record<number, WeekDayId> = {
   0: "dim", 1: "lun", 2: "mar", 3: "mer", 4: "jeu", 5: "ven", 6: "sam",
@@ -19,6 +24,80 @@ const defaultNotifSettings: NotificationSettings = {
   reminders: defaultReminders,
 };
 
+let nativePermissionGranted: boolean | null = null;
+
+async function ensureNativePermission(): Promise<boolean> {
+  if (nativePermissionGranted === true) return true;
+  try {
+    let granted = await isPermissionGranted();
+    if (!granted) {
+      const result = await requestPermission();
+      granted = result === "granted";
+    }
+    nativePermissionGranted = granted;
+    return granted;
+  } catch {
+    return false;
+  }
+}
+
+async function sendNativeNotification(title: string, body: string) {
+  const granted = await ensureNativePermission();
+  if (!granted) return;
+  try {
+    sendNotification({ title, body });
+  } catch { /* silently ignore — in-app toast is the fallback */ }
+}
+
+function getISOWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+function isMonthActiveForFrequency(
+  freq: "monthly" | "bimonthly" | "quarterly" | "biannual",
+  cycleStart: number,
+  month: number,
+): boolean {
+  const step = freq === "monthly" ? 1 : freq === "bimonthly" ? 2 : freq === "quarterly" ? 3 : 6;
+  const start = (cycleStart - 1) % step;
+  return month % step === start;
+}
+
+function shouldReminderFireOnDate(r: NotificationReminder, date: Date): boolean {
+  const dayId = JS_DAY_TO_WEEKDAY[date.getDay()];
+  if (!r.days.includes(dayId)) return false;
+  if (!r.frequency) return true;
+  if (r.frequency === "weekly") return true;
+
+  if (r.frequency === "biweekly") {
+    const weekNum = getISOWeekNumber(date);
+    const occ = r.frequencyOccurrence ?? "1st";
+    return occ === "1st" ? weekNum % 2 === 1 : weekNum % 2 === 0;
+  }
+
+  const month = date.getMonth();
+  if (!isMonthActiveForFrequency(r.frequency, r.frequencyCycleStart ?? 1, month)) {
+    return false;
+  }
+
+  const occ = r.frequencyOccurrence ?? "1st";
+  const dayOfMonth = date.getDate();
+  const nth = Math.ceil(dayOfMonth / 7);
+
+  if (occ === "last") {
+    const nextWeek = new Date(date);
+    nextWeek.setDate(dayOfMonth + 7);
+    return nextWeek.getMonth() !== date.getMonth();
+  }
+
+  const occNum = { "1st": 1, "2nd": 2, "3rd": 3, "4th": 4 }[occ] ?? 1;
+  return nth === occNum;
+}
+
 function detectMissedNotifications(
   settings: NotificationSettings,
   existingHistory: NotificationHistoryEntry[],
@@ -28,43 +107,49 @@ function detectMissedNotifications(
 
   const lastActiveDate = new Date(lastActive);
   const now = new Date();
+  if (now <= lastActiveDate) return [];
+
   const missed: NotificationHistoryEntry[] = [];
   const existingIds = new Set(existingHistory.map((e) => e.id));
 
-  const current = new Date(lastActiveDate);
-  current.setSeconds(0, 0);
+  for (const r of settings.reminders) {
+    if (!r.enabled) continue;
 
-  while (current <= now) {
-    const dateKey = current.toISOString().slice(0, 10);
-    const dayId = JS_DAY_TO_WEEKDAY[current.getDay()];
-    const hhmm = `${String(current.getHours()).padStart(2, "0")}:${String(current.getMinutes()).padStart(2, "0")}`;
+    const cursor = new Date(now);
+    cursor.setHours(0, 0, 0, 0);
 
-    for (const r of settings.reminders) {
-      if (!r.enabled) continue;
-      if (r.time !== hhmm) continue;
-      if (!r.days.includes(dayId)) continue;
+    const lowerBound = new Date(lastActiveDate);
+    lowerBound.setHours(0, 0, 0, 0);
 
-      const entryId = `${r.id}-${dateKey}-${hhmm}`;
-      if (existingIds.has(entryId)) continue;
+    while (cursor >= lowerBound) {
+      if (!shouldReminderFireOnDate(r, cursor)) {
+        cursor.setDate(cursor.getDate() - 1);
+        continue;
+      }
 
-      const scheduledDate = new Date(`${dateKey}T${hhmm}:00`);
-      if (scheduledDate <= lastActiveDate || scheduledDate > now) continue;
+      const dateKey = cursor.toISOString().slice(0, 10);
+      const scheduledDate = new Date(`${dateKey}T${r.time}:00`);
 
-      missed.push({
-        id: entryId,
-        reminderId: r.id,
-        icon: r.icon,
-        label: r.label,
-        description: r.description,
-        scheduledTime: r.time,
-        firedAt: scheduledDate.toISOString(),
-        missed: true,
-        read: false,
-      });
-      existingIds.add(entryId);
+      if (scheduledDate > lastActiveDate && scheduledDate <= now) {
+        const entryId = `${r.id}-${dateKey}-${r.time}`;
+        if (existingIds.has(entryId)) break;
+
+        missed.push({
+          id: entryId,
+          reminderId: r.id,
+          icon: r.icon,
+          label: r.label,
+          description: r.description,
+          scheduledTime: r.time,
+          firedAt: scheduledDate.toISOString(),
+          missed: true,
+          read: false,
+        });
+        break;
+      }
+
+      cursor.setDate(cursor.getDate() - 1);
     }
-
-    current.setMinutes(current.getMinutes() + 1);
   }
 
   return missed;
@@ -118,6 +203,10 @@ export function useNotifications() {
               firedAt: m.firedAt,
               missed: true,
             }).catch(() => {});
+            sendNativeNotification(
+              `${m.icon} ${m.label} (manqué)`,
+              m.description,
+            );
           }
         }
 
@@ -173,13 +262,12 @@ export function useNotifications() {
     const check = () => {
       const now = new Date();
       const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      const today = JS_DAY_TO_WEEKDAY[now.getDay()];
       const dateKey = now.toISOString().slice(0, 10);
 
       for (const r of notifSettings.reminders) {
         if (!r.enabled) continue;
         if (r.time !== hhmm) continue;
-        if (!r.days.includes(today)) continue;
+        if (!shouldReminderFireOnDate(r, now)) continue;
 
         const firedKey = `${r.id}-${dateKey}-${hhmm}`;
         if (firedRef.current.has(firedKey)) continue;
@@ -193,6 +281,8 @@ export function useNotifications() {
           time: hhmm,
           reminderId: r.id,
         });
+
+        sendNativeNotification(`${r.icon} ${r.label}`, r.description);
 
         addHistoryEntry({
           id: firedKey,
@@ -229,6 +319,8 @@ export function useNotifications() {
       description: sample.description,
       time: hhmm,
     });
+
+    sendNativeNotification(`${sample.icon} ${sample.label}`, sample.description);
 
     addHistoryEntry({
       id: toastId,

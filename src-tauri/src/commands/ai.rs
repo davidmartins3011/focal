@@ -510,3 +510,205 @@ pub async fn decompose_task(
 
     Err("L'IA n'a pas retourné un format de décomposition valide.".to_string())
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Suggestion {
+    pub id: String,
+    pub icon: String,
+    pub title: String,
+    pub description: String,
+    pub source: String,
+    pub impact: String,
+    pub category: String,
+    pub confidence: i32,
+}
+
+fn collect_task_stats(db: &rusqlite::Connection) -> String {
+    let mut lines = vec!["STATISTIQUES DE L'UTILISATEUR :".to_string()];
+
+    let total: i32 = db
+        .query_row("SELECT COUNT(*) FROM tasks", [], |r| r.get(0))
+        .unwrap_or(0);
+    let done: i32 = db
+        .query_row("SELECT COUNT(*) FROM tasks WHERE done = 1", [], |r| r.get(0))
+        .unwrap_or(0);
+    lines.push(format!("- Tâches totales : {total}, terminées : {done}"));
+
+    let today_total: i32 = db
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE view_context = 'today'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let today_done: i32 = db
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE view_context = 'today' AND done = 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    lines.push(format!(
+        "- Tâches du jour : {today_total}, terminées : {today_done}"
+    ));
+
+    let with_steps: i32 = db
+        .query_row(
+            "SELECT COUNT(DISTINCT task_id) FROM micro_steps",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let ai_decomposed: i32 = db
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE ai_decomposed = 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    lines.push(format!(
+        "- Tâches avec micro-étapes : {with_steps}, décomposées par IA : {ai_decomposed}"
+    ));
+
+    let with_estimate: i32 = db
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE estimated_minutes IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let avg_estimate: f64 = db
+        .query_row(
+            "SELECT COALESCE(AVG(estimated_minutes), 0) FROM tasks WHERE estimated_minutes IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0.0);
+    lines.push(format!(
+        "- Tâches avec estimation : {with_estimate}, moyenne : {avg_estimate:.0} min"
+    ));
+
+    let scheduled: i32 = db
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE scheduled_date IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let unscheduled: i32 = db
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE scheduled_date IS NULL AND done = 0",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    lines.push(format!(
+        "- Tâches programmées : {scheduled}, non programmées et actives : {unscheduled}"
+    ));
+
+    let todo_total: i32 = db
+        .query_row("SELECT COUNT(*) FROM todos", [], |r| r.get(0))
+        .unwrap_or(0);
+    let todo_done: i32 = db
+        .query_row("SELECT COUNT(*) FROM todos WHERE done = 1", [], |r| r.get(0))
+        .unwrap_or(0);
+    let todo_unscheduled: i32 = db
+        .query_row(
+            "SELECT COUNT(*) FROM todos WHERE scheduled_date IS NULL AND done = 0",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    lines.push(format!(
+        "- Todos : {todo_total} (terminés: {todo_done}, sans date et actifs: {todo_unscheduled})"
+    ));
+
+    lines.join("\n")
+}
+
+#[tauri::command]
+pub async fn generate_suggestions(
+    state: State<'_, AppState>,
+) -> Result<Vec<Suggestion>, String> {
+    let (provider_id, api_key, stats) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let provider = get_active_provider(&db)?;
+        let stats = collect_task_stats(&db);
+        (provider.id, provider.api_key, stats)
+    };
+
+    let system = format!(
+        concat!(
+            "Tu es l'assistant IA de focal., une app de productivité pour personnes TDAH.\n",
+            "Ton rôle est d'analyser les statistiques de l'utilisateur et de générer ",
+            "des suggestions personnalisées et actionnables pour améliorer sa productivité.\n\n",
+            "{}\n\n",
+            "INSTRUCTIONS :\n",
+            "- Génère entre 3 et 6 suggestions pertinentes basées sur les données réelles.\n",
+            "- Chaque suggestion doit être concrète, bienveillante, et adaptée au TDAH.\n",
+            "- Impact : \"high\", \"medium\", ou \"low\".\n",
+            "- Catégorie : \"planification\", \"habitudes\", \"focus\", \"organisation\", ou \"bien-être\".\n",
+            "- Confidence : entre 60 et 95 (pas 100%).\n",
+            "- Source : décris brièvement d'où vient l'observation (ex: \"Basé sur tes 15 tâches actives\").\n",
+            "- Icône : un seul emoji pertinent.\n\n",
+            "Réponds UNIQUEMENT en JSON valide, un tableau d'objets :\n",
+            "[{{\"id\": \"s1\", \"icon\": \"🎯\", \"title\": \"...\", \"description\": \"...\", ",
+            "\"source\": \"...\", \"impact\": \"high\", \"category\": \"planification\", \"confidence\": 85}}]\n",
+            "Pas de texte avant ou après le JSON. Pas de markdown.",
+        ),
+        stats
+    );
+
+    let msgs = vec![(
+        "user".to_string(),
+        "Analyse mes données et génère des suggestions personnalisées pour améliorer ma productivité.".to_string(),
+    )];
+
+    let raw = call_llm(&provider_id, &api_key, &system, msgs).await?;
+
+    let trimmed = raw.trim();
+    if let Ok(suggestions) = serde_json::from_str::<Vec<Suggestion>>(trimmed) {
+        return Ok(suggestions);
+    }
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(arr) = val.as_array() {
+            let suggestions: Vec<Suggestion> = arr
+                .iter()
+                .enumerate()
+                .filter_map(|(i, v)| {
+                    Some(Suggestion {
+                        id: v
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(&format!("s{}", i + 1))
+                            .to_string(),
+                        icon: v.get("icon").and_then(|v| v.as_str())?.to_string(),
+                        title: v.get("title").and_then(|v| v.as_str())?.to_string(),
+                        description: v.get("description").and_then(|v| v.as_str())?.to_string(),
+                        source: v.get("source").and_then(|v| v.as_str())?.to_string(),
+                        impact: v
+                            .get("impact")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("medium")
+                            .to_string(),
+                        category: v
+                            .get("category")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("organisation")
+                            .to_string(),
+                        confidence: v
+                            .get("confidence")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(75) as i32,
+                    })
+                })
+                .collect();
+            if !suggestions.is_empty() {
+                return Ok(suggestions);
+            }
+        }
+    }
+
+    Err("L'IA n'a pas retourné des suggestions dans un format valide.".to_string())
+}

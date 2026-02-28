@@ -24,12 +24,11 @@ import FocusTimer from "./FocusTimer";
 import ProgressBar from "./ProgressBar";
 import TaskItem from "./TaskItem";
 import type { Task } from "../types";
-import { getTasks as fetchTasks, toggleTask as toggleTaskSvc, reorderTasks as reorderTasksSvc, setMicroSteps } from "../services/tasks";
+import { getTasks as fetchTasks, toggleTask as toggleTaskSvc, reorderTasks as reorderTasksSvc, setMicroSteps, getStreak } from "../services/tasks";
 import { decomposeTask } from "../services/chat";
 import { getSetting, setSetting } from "../services/settings";
 import styles from "./TodayView.module.css";
 
-const MOCK_STREAK = 5;
 
 function todayKey(): string {
   return `daily-prep-${new Date().toISOString().slice(0, 10)}`;
@@ -70,12 +69,16 @@ interface TodayViewProps {
 export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
   const [prepDone, setPrepDone] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [streak, setStreak] = useState(0);
   const [decomposingId, setDecomposingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTasks("today")
       .then(setTasks)
       .catch((err) => console.error("[TodayView] fetchTasks error:", err));
+    getStreak()
+      .then(setStreak)
+      .catch((err) => console.error("[TodayView] getStreak error:", err));
     getSetting(todayKey())
       .then((val) => setPrepDone(val === "done"))
       .catch(() => {});
@@ -393,7 +396,7 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
         />
       )}
 
-      <ProgressBar done={doneCount} total={tasks.length} streak={MOCK_STREAK} />
+      <ProgressBar done={doneCount} total={tasks.length} streak={streak} />
 
       <DndContext
         sensors={sensors}

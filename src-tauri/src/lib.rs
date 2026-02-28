@@ -11,6 +11,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -35,6 +36,7 @@ pub fn run() {
             commands::tasks::reorder_tasks,
             commands::tasks::set_micro_steps,
             commands::tasks::toggle_micro_step,
+            commands::tasks::get_streak,
             commands::todos::get_todos,
             commands::todos::create_todo,
             commands::todos::update_todo,
@@ -64,6 +66,7 @@ pub fn run() {
             commands::ai::validate_api_key,
             commands::ai::send_message,
             commands::ai::decompose_task,
+            commands::ai::generate_suggestions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

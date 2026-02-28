@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import type { Task } from "../types";
-import { getTasks as fetchTasks } from "../services/tasks";
+import { getTasks as fetchTasks, toggleTask as toggleTaskSvc, toggleMicroStep as toggleStepSvc } from "../services/tasks";
 import TaskItem from "./TaskItem";
 import styles from "./CalendarView.module.css";
 
@@ -132,6 +132,38 @@ export default function CalendarView() {
     setViewDate(new Date(today.getFullYear(), today.getMonth(), 1));
     setSelectedDate(today);
   };
+
+  function toggleTask(id: string) {
+    setTaskMap((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        next[key] = next[key].map((t) =>
+          t.id === id ? { ...t, done: !t.done } : t
+        );
+      }
+      return next;
+    });
+    toggleTaskSvc(id).catch((err) => console.error("[CalendarView] toggleTask error:", err));
+  }
+
+  function toggleStep(_taskId: string, stepId: string) {
+    setTaskMap((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        next[key] = next[key].map((t) => {
+          if (!t.microSteps) return t;
+          return {
+            ...t,
+            microSteps: t.microSteps.map((s) =>
+              s.id === stepId ? { ...s, done: !s.done } : s
+            ),
+          };
+        });
+      }
+      return next;
+    });
+    toggleStepSvc(stepId).catch((err) => console.error("[CalendarView] toggleStep error:", err));
+  }
 
   const selectedTasks: Task[] = taskMap[toKey(selectedDate)] ?? [];
   const totalDone = selectedTasks.filter((t) => t.done).length;
@@ -266,8 +298,8 @@ export default function CalendarView() {
                 <TaskItem
                   key={task.id}
                   task={task}
-                  onToggle={() => {}}
-                  onToggleStep={() => {}}
+                  onToggle={toggleTask}
+                  onToggleStep={toggleStep}
                   animDelay={0.05 + i * 0.03}
                 />
               ))}

@@ -350,3 +350,23 @@
   max-width: 360px;
   margin: 0 auto;
 }
+
+/* ─── Refresh button ─── */
+
+.refreshBtn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--accent-soft);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  color: var(--accent);
+  font-family: 'Outfit', sans-serif;
+  margin-top: 16px;
+}
+
+.refreshBtn:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+}

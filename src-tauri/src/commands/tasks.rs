@@ -1,5 +1,6 @@
 use rusqlite::params;
 use tauri::State;
+use chrono::Local;
 use crate::models::{AppState, MicroStep, Tag, Task};
 
 fn load_tags(db: &rusqlite::Connection, task_id: &str) -> Result<Vec<Tag>, String> {
@@ -260,4 +261,44 @@ pub fn toggle_micro_step(state: State<'_, AppState>, id: String) -> Result<Micro
         },
     )
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_streak(state: State<'_, AppState>) -> Result<i32, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let today = Local::now().date_naive();
+    let mut streak: i32 = 0;
+    let mut consecutive_empty = 0;
+
+    for offset in 0i64..90 {
+        let date = today - chrono::Duration::days(offset);
+        let date_str = date.format("%Y-%m-%d").to_string();
+
+        let (total, done_count): (i32, i32) = db
+            .query_row(
+                "SELECT COUNT(*), COALESCE(SUM(done), 0) FROM tasks WHERE scheduled_date = ?1",
+                params![date_str],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(|e| e.to_string())?;
+
+        if total == 0 {
+            consecutive_empty += 1;
+            if consecutive_empty >= 3 {
+                break;
+            }
+            continue;
+        }
+        consecutive_empty = 0;
+
+        if done_count >= total {
+            streak += 1;
+        } else if offset == 0 {
+            continue;
+        } else {
+            break;
+        }
+    }
+
+    Ok(streak)
 }

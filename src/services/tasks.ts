@@ -54,3 +54,7 @@ export function setMicroSteps(taskId: string, steps: MicroStep[]): Promise<Task>
 export function toggleMicroStep(id: string): Promise<MicroStep> {
   return invoke<MicroStep>("toggle_micro_step", { id });
 }
+
+export function getStreak(): Promise<number> {
+  return invoke<number>("get_streak");
+}

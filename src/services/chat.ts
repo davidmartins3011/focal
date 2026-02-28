@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, Suggestion } from "../types";
 
 export interface AiResponse {
   content: string;
@@ -32,4 +32,8 @@ export function decomposeTask(
   context?: string,
 ): Promise<DecompStep[]> {
   return invoke<DecompStep[]>("decompose_task", { taskName, context });
+}
+
+export function generateSuggestions(): Promise<Suggestion[]> {
+  return invoke<Suggestion[]>("generate_suggestions");
 }

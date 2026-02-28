@@ -194,6 +194,20 @@ export interface Integration {
   oauthProvider?: string;
 }
 
+export type SuggestionImpact = "high" | "medium" | "low";
+export type SuggestionCategory = "planification" | "habitudes" | "focus" | "organisation" | "bien-être";
+
+export interface Suggestion {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+  source: string;
+  impact: SuggestionImpact;
+  category: SuggestionCategory;
+  confidence: number;
+}
+
 export interface OAuthCredentialsInfo {
   provider: string;
   clientId: string;
