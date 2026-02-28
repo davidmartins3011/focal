@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, AIProviderId, Task, MicroStep } from "../types";
 import { getChatMessages, sendMessage } from "../services/chat";
-import { getTasks } from "../services/tasks";
-import { setMicroSteps } from "../services/tasks";
+import { getTasks, setMicroSteps } from "../services/tasks";
 import { getSetting } from "../services/settings";
 import { chatHints } from "../data/mockChat";
 import styles from "./ChatPanel.module.css";
