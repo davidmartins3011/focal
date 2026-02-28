@@ -1,34 +1,48 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { ChatMessage } from "../types";
-import {
-  initialMessages,
-  decompositionReplies,
-  genericReplies,
-  chatHints,
-} from "../data/mockChat";
+import type { ChatMessage, AISettings, AIProviderId, Task, MicroStep } from "../types";
+import { getChatMessages, sendMessage } from "../services/chat";
+import { getTasks } from "../services/tasks";
+import { setMicroSteps } from "../services/tasks";
+import { getSetting } from "../services/settings";
+import { chatHints } from "../data/mockChat";
 import styles from "./ChatPanel.module.css";
 
-function isDecomposeRequest(text: string): boolean {
-  const lower = text.toLowerCase();
-  return (
-    lower.includes("décompose") ||
-    lower.includes("decompose") ||
-    lower.includes("découpe") ||
-    lower.includes("micro-étape") ||
-    lower.includes("étapes pour")
-  );
-}
+const PROVIDER_LABELS: Record<AIProviderId, string> = {
+  openai: "GPT-4o",
+  anthropic: "Claude Sonnet",
+  mistral: "Mistral Large",
+};
 
 export default function ChatPanel() {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [revealingMsgId, setRevealingMsgId] = useState<string | null>(null);
   const [visibleStepCount, setVisibleStepCount] = useState(0);
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [pickingFor, setPickingFor] = useState<string | null>(null);
+  const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const replyIdx = useRef(0);
-  const decompIdx = useRef(0);
+
+  useEffect(() => {
+    getChatMessages()
+      .then(setMessages)
+      .catch((err) => console.error("[ChatPanel] load error:", err));
+    getTasks("today")
+      .then(setTodayTasks)
+      .catch(() => {});
+    getSetting("ai-settings")
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const s = JSON.parse(raw) as AISettings;
+          if (s.activeProvider) setActiveModel(PROVIDER_LABELS[s.activeProvider] ?? s.activeProvider);
+        } catch { /* ignore */ }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -39,58 +53,70 @@ export default function ChatPanel() {
     if (!text || isTyping) return;
 
     const userMsg: ChatMessage = {
-      id: Date.now().toString(),
+      id: `tmp-${Date.now()}`,
       role: "user",
       content: text,
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setError(null);
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
 
     setIsTyping(true);
-    const isDecomp = isDecomposeRequest(text);
-    const thinkTime = isDecomp ? 1600 : 800;
 
-    setTimeout(() => {
-      setIsTyping(false);
+    sendMessage(text)
+      .then((response) => {
+        setIsTyping(false);
 
-      if (isDecomp) {
-        const decomp =
-          decompositionReplies[decompIdx.current % decompositionReplies.length];
-        decompIdx.current++;
-
-        const msgId = (Date.now() + 1).toString();
+        const msgId = `ai-${Date.now()}`;
+        const steps = response.steps?.map((s) => ({ text: s }));
         const aiMsg: ChatMessage = {
           id: msgId,
           role: "ai",
-          content: decomp.content,
-          steps: decomp.steps,
+          content: response.content,
+          steps,
         };
         setMessages((prev) => [...prev, aiMsg]);
 
-        setRevealingMsgId(msgId);
-        setVisibleStepCount(0);
-
-        decomp.steps.forEach((_, i) => {
-          setTimeout(() => setVisibleStepCount(i + 1), 350 * (i + 1));
-        });
-        setTimeout(() => {
-          setRevealingMsgId(null);
-        }, 350 * decomp.steps.length + 300);
-      } else {
-        const aiMsg: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: "ai",
-          content: genericReplies[replyIdx.current % genericReplies.length],
-        };
-        replyIdx.current++;
-        setMessages((prev) => [...prev, aiMsg]);
-      }
-    }, thinkTime);
+        if (steps && steps.length > 0) {
+          setRevealingMsgId(msgId);
+          setVisibleStepCount(0);
+          steps.forEach((_, i) => {
+            setTimeout(() => setVisibleStepCount(i + 1), 350 * (i + 1));
+          });
+          setTimeout(() => setRevealingMsgId(null), 350 * steps.length + 300);
+        }
+      })
+      .catch((err) => {
+        setIsTyping(false);
+        const errMsg = typeof err === "string" ? err : String(err);
+        setError(errMsg);
+        console.error("[ChatPanel] sendMessage error:", err);
+      });
   }, [input, isTyping]);
+
+  const addStepsToTask = useCallback((msgId: string, taskId: string) => {
+    const msg = messages.find((m) => m.id === msgId);
+    if (!msg?.steps) return;
+
+    const steps: MicroStep[] = msg.steps.map((s, i) => ({
+      id: `${taskId}-chat${i}`,
+      text: s.text,
+      done: false,
+    }));
+
+    setMicroSteps(taskId, steps)
+      .then(() => {
+        setPickingFor(null);
+        setTodayTasks((prev) =>
+          prev.map((t) => (t.id === taskId ? { ...t, microSteps: steps, aiDecomposed: true } : t))
+        );
+      })
+      .catch((err) => console.error("[ChatPanel] addSteps error:", err));
+  }, [messages]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -118,16 +144,27 @@ export default function ChatPanel() {
             </p>
           </div>
         </div>
-        <div className={styles.modelSelector}>
-          <div className={styles.modelDot} />
-          Claude 3.5 ▾
-        </div>
+        {activeModel && (
+          <div className={styles.modelSelector}>
+            <div className={styles.modelDot} />
+            {activeModel}
+          </div>
+        )}
       </div>
 
       <div className={styles.messages}>
-        <div className={styles.dayDivider}>
-          <span>Aujourd'hui</span>
-        </div>
+        {messages.length > 0 && (
+          <div className={styles.dayDivider}>
+            <span>Conversation</span>
+          </div>
+        )}
+
+        {messages.length === 0 && !isTyping && (
+          <div className={styles.emptyState}>
+            <span className={styles.emptyIcon}>⚡</span>
+            <p>Parle-moi d'une tâche, d'un blocage, ou demande-moi de préparer ta journée.</p>
+          </div>
+        )}
 
         {messages.map((msg) => {
           const isRevealing = msg.id === revealingMsgId;
@@ -162,13 +199,35 @@ export default function ChatPanel() {
                       </div>
                     );
                   })}
-                  <button
-                    className={`${styles.addToTasks} ${
-                      isRevealing ? styles.stepHidden : styles.stepVisible
-                    }`}
-                  >
-                    ＋ Ajouter ces étapes à la tâche
-                  </button>
+                  {pickingFor === msg.id ? (
+                    <div className={`${styles.taskPicker} ${styles.stepVisible}`}>
+                      <div className={styles.taskPickerLabel}>Associer à quelle tâche ?</div>
+                      {todayTasks.filter((t) => !t.done).map((t) => (
+                        <button
+                          key={t.id}
+                          className={styles.taskPickerItem}
+                          onClick={() => addStepsToTask(msg.id, t.id)}
+                        >
+                          {t.name}
+                        </button>
+                      ))}
+                      <button
+                        className={styles.taskPickerCancel}
+                        onClick={() => setPickingFor(null)}
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className={`${styles.addToTasks} ${
+                        isRevealing ? styles.stepHidden : styles.stepVisible
+                      }`}
+                      onClick={() => setPickingFor(msg.id)}
+                    >
+                      ＋ Ajouter ces étapes à la tâche
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -183,6 +242,13 @@ export default function ChatPanel() {
               <span className={styles.typingDot} />
               <span className={styles.typingDot} />
             </div>
+          </div>
+        )}
+
+        {error && (
+          <div className={styles.errorBanner}>
+            <span>⚠</span>
+            <span>{error}</span>
           </div>
         )}
 

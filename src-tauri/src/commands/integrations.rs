@@ -73,3 +73,35 @@ pub fn update_integration_connection(
     .map_err(|e| e.to_string())?;
     load_integration(&db, &id)
 }
+
+#[tauri::command]
+pub fn update_integration_context(
+    state: State<'_, AppState>,
+    id: String,
+    rules: Vec<IntegrationRule>,
+    extra_context: String,
+) -> Result<Integration, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+
+    db.execute(
+        "UPDATE integrations SET extra_context = ?1 WHERE id = ?2",
+        params![extra_context, id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    db.execute(
+        "DELETE FROM integration_rules WHERE integration_id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    for (pos, rule) in rules.iter().enumerate() {
+        db.execute(
+            "INSERT INTO integration_rules (id, integration_id, text, urgency, importance, position) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![rule.id, id, rule.text, rule.urgency, rule.importance, pos as i32],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    load_integration(&db, &id)
+}

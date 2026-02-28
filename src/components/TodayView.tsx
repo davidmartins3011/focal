@@ -24,12 +24,11 @@ import FocusTimer from "./FocusTimer";
 import ProgressBar from "./ProgressBar";
 import TaskItem from "./TaskItem";
 import type { Task } from "../types";
-import { mockDecompositions, mockStepDecompositions } from "../data/mockTasks";
-import { getTasks as fetchTasks, toggleTask as toggleTaskSvc, reorderTasks as reorderTasksSvc } from "../services/tasks";
+import { getTasks as fetchTasks, toggleTask as toggleTaskSvc, reorderTasks as reorderTasksSvc, setMicroSteps } from "../services/tasks";
+import { decomposeTask } from "../services/chat";
 import { getSetting, setSetting } from "../services/settings";
 import styles from "./TodayView.module.css";
 
-const DECOMPOSE_DELAY_MS = 1800;
 const MOCK_STREAK = 5;
 
 function todayKey(): string {
@@ -169,31 +168,42 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
   const decompose = useCallback(
     (taskId: string) => {
       if (isBusy) return;
+      const task = tasks.find((t) => t.id === taskId);
+      if (!task) return;
       setDecomposingId(taskId);
 
-      const steps = mockDecompositions[taskId];
-      if (!steps) {
-        setDecomposingId(null);
-        return;
-      }
+      decomposeTask(task.name)
+        .then((result) => {
+          const steps = result.map((s, i) => ({
+            id: `${taskId}-s${i}`,
+            text: s.text,
+            done: false,
+            estimatedMinutes: s.estimatedMinutes,
+          }));
 
-      setTimeout(() => {
-        setTasks((prev) =>
-          prev.map((t) =>
-            t.id === taskId
-              ? { ...t, microSteps: steps, aiDecomposed: true }
-              : t
-          )
-        );
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId
+                ? { ...t, microSteps: steps, aiDecomposed: true }
+                : t
+            )
+          );
 
-        setTimeout(() => setDecomposingId(null), steps.length * 300 + 500);
-      }, DECOMPOSE_DELAY_MS);
+          setMicroSteps(taskId, steps).catch(() => {});
+          setTimeout(() => setDecomposingId(null), steps.length * 300 + 500);
+        })
+        .catch((err) => {
+          console.error("[TodayView] decompose error:", err);
+          setDecomposingId(null);
+        });
     },
-    [isBusy]
+    [isBusy, tasks]
   );
 
   function redecompose(taskId: string) {
     if (isBusy) return;
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
 
     setTasks((prev) =>
       prev.map((t) =>
@@ -205,48 +215,74 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
 
     setDecomposingId(taskId);
 
-    const steps = mockDecompositions[taskId];
-    if (!steps) {
-      setDecomposingId(null);
-      return;
-    }
+    decomposeTask(task.name)
+      .then((result) => {
+        const steps = result.map((s, i) => ({
+          id: `${taskId}-rs${i}`,
+          text: s.text,
+          done: false,
+          estimatedMinutes: s.estimatedMinutes,
+        }));
 
-    setTimeout(() => {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === taskId
-            ? { ...t, microSteps: steps, aiDecomposed: true }
-            : t
-        )
-      );
-      setTimeout(() => setDecomposingId(null), steps.length * 300 + 500);
-    }, DECOMPOSE_DELAY_MS);
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId
+              ? { ...t, microSteps: steps, aiDecomposed: true }
+              : t
+          )
+        );
+
+        setMicroSteps(taskId, steps).catch(() => {});
+        setTimeout(() => setDecomposingId(null), steps.length * 300 + 500);
+      })
+      .catch((err) => {
+        console.error("[TodayView] redecompose error:", err);
+        setDecomposingId(null);
+      });
   }
 
   function decomposeStep(taskId: string, stepId: string) {
     if (isBusy) return;
+    const task = tasks.find((t) => t.id === taskId);
+    const step = task?.microSteps?.find((s) => s.id === stepId);
+    if (!task || !step) return;
 
     setDecomposingStepKey(`${taskId}:${stepId}`);
 
-    const subSteps = mockStepDecompositions[stepId];
-    if (!subSteps) {
-      setDecomposingStepKey(null);
-      return;
-    }
+    decomposeTask(step.text, `Sous-étape de la tâche "${task.name}"`)
+      .then((result) => {
+        const subSteps = result.map((s, i) => ({
+          id: `${stepId}-sub${i}`,
+          text: s.text,
+          done: false,
+          estimatedMinutes: s.estimatedMinutes,
+        }));
 
-    setTimeout(() => {
-      setTasks((prev) =>
-        prev.map((t) => {
-          if (t.id !== taskId || !t.microSteps) return t;
-          const idx = t.microSteps.findIndex((s) => s.id === stepId);
-          if (idx === -1) return t;
-          const newSteps = [...t.microSteps];
-          newSteps.splice(idx, 1, ...subSteps);
-          return { ...t, microSteps: newSteps };
-        })
-      );
-      setDecomposingStepKey(null);
-    }, DECOMPOSE_DELAY_MS);
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId || !t.microSteps) return t;
+            const idx = t.microSteps.findIndex((s) => s.id === stepId);
+            if (idx === -1) return t;
+            const newSteps = [...t.microSteps];
+            newSteps.splice(idx, 1, ...subSteps);
+            return { ...t, microSteps: newSteps };
+          })
+        );
+
+        setTasks((current) => {
+          const updated = current.find((t) => t.id === taskId);
+          if (updated?.microSteps) {
+            setMicroSteps(taskId, updated.microSteps).catch(() => {});
+          }
+          return current;
+        });
+
+        setDecomposingStepKey(null);
+      })
+      .catch((err) => {
+        console.error("[TodayView] decomposeStep error:", err);
+        setDecomposingStepKey(null);
+      });
   }
 
   function handleStuck(_taskId: string) {

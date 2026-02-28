@@ -69,11 +69,15 @@ export default function SettingsView({
   });
 
   const toggleProvider = (id: AIProviderId) => {
-    const updated = {
+    const wasEnabled = aiSettings.providers.find((p) => p.id === id)?.enabled;
+    const updated: AISettings = {
       ...aiSettings,
       providers: aiSettings.providers.map((p) =>
-        p.id === id ? { ...p, enabled: !p.enabled } : p
+        p.id === id
+          ? { ...p, enabled: !wasEnabled }
+          : { ...p, enabled: false }
       ),
+      activeProvider: wasEnabled ? undefined : id,
     };
     onAISettingsChange(updated);
   };

@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import styles from "./IntegrationsView.module.css";
 import type { Integration } from "../types";
 import { categoryLabels, categoryOrder } from "../data/mockIntegrations";
-import { getIntegrations, updateIntegrationConnection } from "../services/integrations";
+import { getIntegrations, updateIntegrationConnection, updateIntegrationContext } from "../services/integrations";
 import ContextPanel from "./ContextPanel";
 import { integrationLogos } from "./icons/IntegrationLogos";
 
@@ -24,6 +24,29 @@ export default function IntegrationsView({ resetSignal }: IntegrationsViewProps)
     setContextFor(null);
   }, [resetSignal]);
 
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const persistContext = useCallback((integration: Integration) => {
+    if (debounceTimers.current[integration.id]) {
+      clearTimeout(debounceTimers.current[integration.id]);
+    }
+    debounceTimers.current[integration.id] = setTimeout(() => {
+      updateIntegrationContext(
+        integration.id,
+        integration.context.rules,
+        integration.context.extraContext,
+      ).catch((err) => console.error("[IntegrationsView] persistContext error:", err));
+      delete debounceTimers.current[integration.id];
+    }, 500);
+  }, []);
+
+  useEffect(() => {
+    const timers = debounceTimers.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
+
   const toggleConnection = (id: string) => {
     const item = integrations.find((i) => i.id === id);
     if (!item) return;
@@ -38,6 +61,7 @@ export default function IntegrationsView({ resetSignal }: IntegrationsViewProps)
     setIntegrations((prev) =>
       prev.map((i) => (i.id === updated.id ? updated : i))
     );
+    persistContext(updated);
   };
 
   const activeIntegration = contextFor

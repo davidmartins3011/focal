@@ -26,6 +26,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::tasks::get_tasks,
             commands::tasks::get_tasks_by_date,
+            commands::tasks::get_tasks_by_date_range,
             commands::tasks::create_task,
             commands::tasks::update_task,
             commands::tasks::toggle_task,
@@ -46,12 +47,15 @@ pub fn run() {
             commands::chat::add_chat_message,
             commands::integrations::get_integrations,
             commands::integrations::update_integration_connection,
+            commands::integrations::update_integration_context,
             commands::profile::get_profile,
             commands::profile::update_profile,
             commands::notifications::get_notification_history,
             commands::notifications::add_notification_entry,
             commands::notifications::mark_notification_read,
             commands::notifications::mark_all_notifications_read,
+            commands::ai::send_message,
+            commands::ai::decompose_task,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

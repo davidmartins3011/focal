@@ -9,6 +9,10 @@ export function getTasksByDate(date: string): Promise<Task[]> {
   return invoke<Task[]>("get_tasks_by_date", { date });
 }
 
+export function getTasksByDateRange(startDate: string, endDate: string): Promise<Task[]> {
+  return invoke<Task[]>("get_tasks_by_date_range", { startDate, endDate });
+}
+
 export function createTask(params: {
   name: string;
   context?: string;

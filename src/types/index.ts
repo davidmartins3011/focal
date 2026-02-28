@@ -94,6 +94,7 @@ export interface AIProviderConfig {
 
 export interface AISettings {
   providers: AIProviderConfig[];
+  activeProvider?: AIProviderId;
 }
 
 export type WeekDayId = "lun" | "mar" | "mer" | "jeu" | "ven" | "sam" | "dim";

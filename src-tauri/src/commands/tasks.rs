@@ -98,6 +98,28 @@ pub fn get_tasks_by_date(state: State<'_, AppState>, date: String) -> Result<Vec
 }
 
 #[tauri::command]
+pub fn get_tasks_by_date_range(
+    state: State<'_, AppState>,
+    start_date: String,
+    end_date: String,
+) -> Result<Vec<Task>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = db
+        .prepare("SELECT id FROM tasks WHERE scheduled_date >= ?1 AND scheduled_date <= ?2 ORDER BY scheduled_date, position")
+        .map_err(|e| e.to_string())?;
+    let ids: Vec<String> = stmt
+        .query_map(params![start_date, end_date], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    let mut tasks = Vec::with_capacity(ids.len());
+    for id in &ids {
+        tasks.push(load_task(&db, id)?);
+    }
+    Ok(tasks)
+}
+
+#[tauri::command]
 pub fn create_task(
     state: State<'_, AppState>,
     name: String,

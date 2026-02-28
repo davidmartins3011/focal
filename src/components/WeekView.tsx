@@ -1,11 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import PrepBanner from "./PrepBanner";
 import TaskItem from "./TaskItem";
-import { weekDays } from "../data/mockTasks";
-import { getTasks as fetchTasks } from "../services/tasks";
+import { getTasks as fetchTasks, getTasksByDateRange } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
-import type { Task } from "../types";
+import type { Task, WeekDay } from "../types";
 import styles from "./WeekView.module.css";
+
+const DAY_NAMES = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
 function weekKey(): string {
   const now = new Date();
@@ -15,18 +16,97 @@ function weekKey(): string {
   return `weekly-prep-${now.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
 }
 
+function getMonday(d: Date): Date {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function fmtDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function buildWeekDays(monday: Date, tasksByDate: Map<string, Task[]>): WeekDay[] {
+  const today = fmtDate(new Date());
+  const days: WeekDay[] = [];
+
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const key = fmtDate(d);
+    const tasks = tasksByDate.get(key) ?? [];
+    const total = tasks.length;
+    const doneCount = tasks.filter((t) => t.done).length;
+
+    let taskSummary: string;
+    if (total === 0) {
+      taskSummary = "Aucune tâche";
+    } else if (total === 1) {
+      taskSummary = tasks[0].name.length > 24
+        ? tasks[0].name.slice(0, 22) + "…"
+        : tasks[0].name;
+    } else {
+      taskSummary = `${total} tâches`;
+      if (doneCount > 0 && doneCount < total) {
+        taskSummary += ` · ${doneCount} faite${doneCount > 1 ? "s" : ""}`;
+      }
+    }
+
+    const dots: ("done" | "pending")[] = tasks.map((t) =>
+      t.done ? "done" : "pending"
+    );
+
+    days.push({
+      name: DAY_NAMES[d.getDay()],
+      date: d.getDate(),
+      isToday: key === today,
+      taskSummary,
+      dots,
+    });
+  }
+
+  return days;
+}
+
 export default function WeekView() {
   const [prepDone, setPrepDone] = useState(true);
   const [weekPriorities, setWeekPriorities] = useState<Task[]>([]);
+  const [calendarTasks, setCalendarTasks] = useState<Task[]>([]);
+
+  const monday = useMemo(() => getMonday(new Date()), []);
 
   useEffect(() => {
     fetchTasks("week")
       .then(setWeekPriorities)
       .catch((err) => console.error("[WeekView] fetchTasks error:", err));
+
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+    getTasksByDateRange(fmtDate(monday), fmtDate(friday))
+      .then(setCalendarTasks)
+      .catch((err) => console.error("[WeekView] getTasksByDateRange error:", err));
+
     getSetting(weekKey())
       .then((val) => setPrepDone(val === "done"))
       .catch(() => {});
-  }, []);
+  }, [monday]);
+
+  const weekDays = useMemo(() => {
+    const byDate = new Map<string, Task[]>();
+    for (const task of calendarTasks) {
+      if (!task.scheduledDate) continue;
+      const list = byDate.get(task.scheduledDate) ?? [];
+      list.push(task);
+      byDate.set(task.scheduledDate, list);
+    }
+    return buildWeekDays(monday, byDate);
+  }, [monday, calendarTasks]);
 
   const dismissPrep = useCallback(() => {
     setSetting(weekKey(), "done").catch(() => {});
