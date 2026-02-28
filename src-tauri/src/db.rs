@@ -105,7 +105,23 @@ CREATE TABLE IF NOT EXISTS integrations (
     icon TEXT NOT NULL DEFAULT '',
     connected INTEGER NOT NULL DEFAULT 0,
     category TEXT NOT NULL DEFAULT 'other',
-    extra_context TEXT NOT NULL DEFAULT ''
+    extra_context TEXT NOT NULL DEFAULT '',
+    oauth_provider TEXT
+);
+
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+    provider TEXT PRIMARY KEY,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT,
+    token_type TEXT NOT NULL DEFAULT 'Bearer',
+    expires_at TEXT,
+    scopes TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS oauth_credentials (
+    provider TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    client_secret TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS integration_rules (
@@ -142,7 +158,28 @@ CREATE TABLE IF NOT EXISTS settings (
 ";
 
 pub fn create_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
-    conn.execute_batch(SCHEMA)
+    conn.execute_batch(SCHEMA)?;
+    // Migration: add oauth_provider column for pre-existing DBs
+    conn.execute("ALTER TABLE integrations ADD COLUMN oauth_provider TEXT", []).ok();
+    migrate_oauth_providers(conn);
+    Ok(())
+}
+
+fn migrate_oauth_providers(conn: &Connection) {
+    let mapping: &[(&str, &str)] = &[
+        ("google-calendar", "google"),
+        ("gmail", "google"),
+        ("google-drive", "google"),
+        ("outlook-calendar", "microsoft"),
+        ("outlook-mail", "microsoft"),
+    ];
+    for (id, provider) in mapping {
+        conn.execute(
+            "UPDATE integrations SET oauth_provider = ?1 WHERE id = ?2 AND oauth_provider IS NULL",
+            params![provider, id],
+        )
+        .ok();
+    }
 }
 
 pub fn seed_if_empty(conn: &mut Connection) -> Result<(), rusqlite::Error> {
@@ -418,23 +455,23 @@ fn seed_chat(conn: &Connection) -> Result<(), rusqlite::Error> {
 }
 
 fn seed_integrations(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let ins = |id: &str, name: &str, desc: &str, icon: &str, cat: &str| -> Result<(), rusqlite::Error> {
+    let ins = |id: &str, name: &str, desc: &str, icon: &str, cat: &str, oauth: Option<&str>| -> Result<(), rusqlite::Error> {
         conn.execute(
-            "INSERT INTO integrations (id, name, description, icon, connected, category, extra_context) VALUES (?1,?2,?3,?4,0,?5,'')",
-            params![id, name, desc, icon, cat],
+            "INSERT INTO integrations (id, name, description, icon, connected, category, extra_context, oauth_provider) VALUES (?1,?2,?3,?4,0,?5,'',?6)",
+            params![id, name, desc, icon, cat, oauth],
         )?;
         Ok(())
     };
-    ins("google-calendar", "Google Calendar", "Synchronise tes événements et bloque du temps pour tes tâches", "📅", "calendar")?;
-    ins("outlook-calendar", "Outlook Calendar", "Connecte ton calendrier professionnel Microsoft", "📆", "calendar")?;
-    ins("gmail", "Gmail", "Transforme tes emails importants en tâches", "✉️", "email")?;
-    ins("outlook-mail", "Outlook Mail", "Connecte ta messagerie professionnelle", "📧", "email")?;
-    ins("hubspot", "HubSpot", "Synchronise tes contacts et tes deals CRM", "🟠", "crm")?;
-    ins("salesforce", "Salesforce", "Intègre ton CRM Salesforce", "☁️", "crm")?;
-    ins("slack", "Slack", "Reçois et traite tes messages importants", "💬", "messaging")?;
-    ins("notion", "Notion", "Synchronise tes pages et bases de données", "📓", "storage")?;
-    ins("google-drive", "Google Drive", "Accède à tes fichiers et documents", "📁", "storage")?;
-    ins("linear", "Linear", "Synchronise tes tickets et projets", "◆", "other")?;
+    ins("google-calendar", "Google Calendar", "Synchronise tes événements et bloque du temps pour tes tâches", "📅", "calendar", Some("google"))?;
+    ins("outlook-calendar", "Outlook Calendar", "Connecte ton calendrier professionnel Microsoft", "📆", "calendar", Some("microsoft"))?;
+    ins("gmail", "Gmail", "Transforme tes emails importants en tâches", "✉️", "email", Some("google"))?;
+    ins("outlook-mail", "Outlook Mail", "Connecte ta messagerie professionnelle", "📧", "email", Some("microsoft"))?;
+    ins("hubspot", "HubSpot", "Synchronise tes contacts et tes deals CRM", "🟠", "crm", None)?;
+    ins("salesforce", "Salesforce", "Intègre ton CRM Salesforce", "☁️", "crm", None)?;
+    ins("slack", "Slack", "Reçois et traite tes messages importants", "💬", "messaging", None)?;
+    ins("notion", "Notion", "Synchronise tes pages et bases de données", "📓", "storage", None)?;
+    ins("google-drive", "Google Drive", "Accède à tes fichiers et documents", "📁", "storage", Some("google"))?;
+    ins("linear", "Linear", "Synchronise tes tickets et projets", "◆", "other", None)?;
     Ok(())
 }
 

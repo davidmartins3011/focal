@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { MONTH_NAMES } from "../data/mockStrategyReviews";
+import { MONTH_NAMES } from "../data/strategyConstants";
 import { getStrategyReviews } from "../services/reviews";
 import {
   getActiveMonths,

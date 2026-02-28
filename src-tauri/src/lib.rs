@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod models;
+mod providers;
 
 use models::AppState;
 use std::sync::Mutex;
@@ -48,12 +49,19 @@ pub fn run() {
             commands::integrations::get_integrations,
             commands::integrations::update_integration_connection,
             commands::integrations::update_integration_context,
+            commands::integrations::get_oauth_credentials,
+            commands::integrations::set_oauth_credentials,
+            commands::integrations::start_oauth,
+            commands::integrations::disconnect_integration,
+            commands::integrations::fetch_calendar_events,
+            commands::integrations::fetch_emails,
             commands::profile::get_profile,
             commands::profile::update_profile,
             commands::notifications::get_notification_history,
             commands::notifications::add_notification_entry,
             commands::notifications::mark_notification_read,
             commands::notifications::mark_all_notifications_read,
+            commands::ai::validate_api_key,
             commands::ai::send_message,
             commands::ai::decompose_task,
         ])

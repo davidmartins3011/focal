@@ -11,3 +11,7 @@ export async function setSetting(key: string, value: string): Promise<void> {
 export async function getAllSettings(): Promise<Record<string, string>> {
   return invoke<Record<string, string>>("get_all_settings");
 }
+
+export async function validateApiKey(providerId: string, apiKey: string): Promise<boolean> {
+  return invoke<boolean>("validate_api_key", { providerId, apiKey });
+}

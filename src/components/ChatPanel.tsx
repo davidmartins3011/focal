@@ -1,16 +1,38 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { ChatMessage, AISettings, AIProviderId, Task, MicroStep } from "../types";
+import type { ChatMessage, AISettings, Task, MicroStep } from "../types";
 import { getChatMessages, sendMessage } from "../services/chat";
 import { getTasks, setMicroSteps } from "../services/tasks";
-import { getSetting } from "../services/settings";
-import { chatHints } from "../data/mockChat";
+import { getSetting, setSetting } from "../services/settings";
+import { chatHints } from "../data/chatConstants";
+import { providers } from "../data/settingsData";
 import styles from "./ChatPanel.module.css";
 
-const PROVIDER_LABELS: Record<AIProviderId, string> = {
-  openai: "GPT-4o",
-  anthropic: "Claude Sonnet",
-  mistral: "Mistral Large",
-};
+interface AvailableModel {
+  id: string;
+  name: string;
+  providerName: string;
+  providerIcon: string;
+  providerIconBg: string;
+}
+
+function getAvailableModels(settings: AISettings): AvailableModel[] {
+  const result: AvailableModel[] = [];
+  for (const provider of providers) {
+    const config = settings.providers.find((p) => p.id === provider.id);
+    if (config?.enabled && config.apiKey && config.keyStatus === "valid") {
+      for (const model of provider.models) {
+        result.push({
+          id: model.id,
+          name: model.name,
+          providerName: provider.name,
+          providerIcon: provider.icon,
+          providerIconBg: provider.iconBg,
+        });
+      }
+    }
+  }
+  return result;
+}
 
 export default function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -19,11 +41,14 @@ export default function ChatPanel() {
   const [error, setError] = useState<string | null>(null);
   const [revealingMsgId, setRevealingMsgId] = useState<string | null>(null);
   const [visibleStepCount, setVisibleStepCount] = useState(0);
-  const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [pickingFor, setPickingFor] = useState<string | null>(null);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getChatMessages()
@@ -37,7 +62,59 @@ export default function ChatPanel() {
         if (!raw) return;
         try {
           const s = JSON.parse(raw) as AISettings;
-          if (s.activeProvider) setActiveModel(PROVIDER_LABELS[s.activeProvider] ?? s.activeProvider);
+          const models = getAvailableModels(s);
+          setAvailableModels(models);
+          if (s.selectedModel && models.some((m) => m.id === s.selectedModel)) {
+            setSelectedModelId(s.selectedModel);
+          } else if (models.length > 0) {
+            setSelectedModelId(models[0].id);
+          }
+        } catch { /* ignore */ }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      getSetting("ai-settings")
+        .then((raw) => {
+          if (!raw) return;
+          try {
+            const s = JSON.parse(raw) as AISettings;
+            const models = getAvailableModels(s);
+            setAvailableModels(models);
+            setSelectedModelId((prev) => {
+              if (prev && models.some((m) => m.id === prev)) return prev;
+              return models[0]?.id ?? null;
+            });
+          } catch { /* ignore */ }
+        })
+        .catch(() => {});
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!modelDropdownOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setModelDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [modelDropdownOpen]);
+
+  const handleSelectModel = useCallback((modelId: string) => {
+    setSelectedModelId(modelId);
+    setModelDropdownOpen(false);
+    getSetting("ai-settings")
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const s = JSON.parse(raw) as AISettings;
+          s.selectedModel = modelId;
+          setSetting("ai-settings", JSON.stringify(s));
         } catch { /* ignore */ }
       })
       .catch(() => {});
@@ -143,10 +220,66 @@ export default function ChatPanel() {
             </p>
           </div>
         </div>
-        {activeModel && (
-          <div className={styles.modelSelector}>
-            <div className={styles.modelDot} />
-            {activeModel}
+        {availableModels.length > 0 ? (
+          <div className={styles.modelSelectorWrap} ref={dropdownRef}>
+            <button
+              className={styles.modelSelector}
+              onClick={() => setModelDropdownOpen((v) => !v)}
+            >
+              {(() => {
+                const sel = availableModels.find((m) => m.id === selectedModelId);
+                if (!sel) return <>Choisir un modèle</>;
+                return (
+                  <>
+                    <span
+                      className={styles.modelProviderIcon}
+                      style={{ background: sel.providerIconBg }}
+                    >
+                      {sel.providerIcon}
+                    </span>
+                    {sel.name}
+                    <svg className={`${styles.chevron} ${modelDropdownOpen ? styles.chevronOpen : ""}`} width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </>
+                );
+              })()}
+            </button>
+            {modelDropdownOpen && (
+              <div className={styles.modelDropdown}>
+                {(() => {
+                  const groups: Record<string, AvailableModel[]> = {};
+                  for (const m of availableModels) {
+                    (groups[m.providerName] ??= []).push(m);
+                  }
+                  return Object.entries(groups).map(([providerName, models]) => (
+                    <div key={providerName} className={styles.modelGroup}>
+                      <div className={styles.modelGroupLabel}>
+                        <span
+                          className={styles.modelGroupIcon}
+                          style={{ background: models[0].providerIconBg }}
+                        >
+                          {models[0].providerIcon}
+                        </span>
+                        {providerName}
+                      </div>
+                      {models.map((m) => (
+                        <button
+                          key={m.id}
+                          className={`${styles.modelOption} ${m.id === selectedModelId ? styles.modelOptionActive : ""}`}
+                          onClick={() => handleSelectModel(m.id)}
+                        >
+                          {m.name}
+                          {m.id === selectedModelId && <span className={styles.modelCheck}>✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className={styles.modelSelectorEmpty}>
+            Aucune IA configurée
           </div>
         )}
       </div>

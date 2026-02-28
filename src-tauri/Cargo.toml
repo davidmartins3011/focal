@@ -21,4 +21,6 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
-tokio = { version = "1", features = ["macros"] }
+tokio = { version = "1", features = ["macros", "net", "io-util", "time", "rt"] }
+urlencoding = "2"
+open = "5"

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { NotificationSettings, NotificationHistoryEntry, WeekDayId } from "../types";
 import type { ToastData } from "../components/NotificationToast";
-import { defaultReminders } from "../data/mockSettings";
+import { defaultReminders } from "../data/settingsData";
 import { getSetting, setSetting } from "../services/settings";
 import {
   getNotificationHistory,

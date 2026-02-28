@@ -62,9 +62,6 @@ export const STRATEGY_FREQUENCY_OPTIONS: { id: StrategyFrequency; label: string 
   { id: "biannual", label: "Tous les 6 mois" },
 ];
 
-export const STRATEGY_BIMONTHLY_CYCLES = BIMONTHLY_CYCLES;
-export const STRATEGY_QUARTERLY_CYCLES = QUARTERLY_CYCLES;
-export const STRATEGY_BIANNUAL_CYCLES = BIANNUAL_CYCLES;
 
 /**
  * Returns which 0-indexed months are active for a given frequency + cycleStart.

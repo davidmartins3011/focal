@@ -8,10 +8,15 @@ export interface ThemeOption {
   colors: { bg: string; accent: string; text: string; bg2: string };
 }
 
+export interface ProviderModelMeta {
+  id: string;
+  name: string;
+}
+
 export interface ProviderMeta {
   id: AIProviderId;
   name: string;
-  models: string;
+  models: ProviderModelMeta[];
   icon: string;
   iconBg: string;
   placeholder: string;
@@ -167,7 +172,12 @@ export const providers: ProviderMeta[] = [
   {
     id: "openai",
     name: "OpenAI",
-    models: "GPT-4o, GPT-4o-mini, o1, o3-mini",
+    models: [
+      { id: "gpt-4o", name: "GPT-4o" },
+      { id: "gpt-4o-mini", name: "GPT-4o Mini" },
+      { id: "o1", name: "o1" },
+      { id: "o3-mini", name: "o3-mini" },
+    ],
     icon: "⬡",
     iconBg: "#10a37f",
     placeholder: "sk-proj-...",
@@ -175,7 +185,10 @@ export const providers: ProviderMeta[] = [
   {
     id: "anthropic",
     name: "Anthropic",
-    models: "Claude 4 Opus, Claude 4 Sonnet",
+    models: [
+      { id: "claude-4-opus", name: "Claude 4 Opus" },
+      { id: "claude-4-sonnet", name: "Claude 4 Sonnet" },
+    ],
     icon: "△",
     iconBg: "#d97757",
     placeholder: "sk-ant-...",
@@ -183,7 +196,11 @@ export const providers: ProviderMeta[] = [
   {
     id: "mistral",
     name: "Mistral AI",
-    models: "Mistral Large, Mistral Medium, Codestral",
+    models: [
+      { id: "mistral-large", name: "Mistral Large" },
+      { id: "mistral-medium", name: "Mistral Medium" },
+      { id: "codestral", name: "Codestral" },
+    ],
     icon: "◆",
     iconBg: "#f24822",
     placeholder: "sk-...",

@@ -86,15 +86,18 @@ export type ThemeId = "default" | "clair" | "sombre" | "zen" | "hyperfocus" | "a
 
 export type AIProviderId = "openai" | "anthropic" | "mistral";
 
+export type AIKeyStatus = "untested" | "validating" | "valid" | "invalid";
+
 export interface AIProviderConfig {
   id: AIProviderId;
   enabled: boolean;
   apiKey: string;
+  keyStatus?: AIKeyStatus;
 }
 
 export interface AISettings {
   providers: AIProviderConfig[];
-  activeProvider?: AIProviderId;
+  selectedModel?: string;
 }
 
 export type WeekDayId = "lun" | "mar" | "mer" | "jeu" | "ven" | "sam" | "dim";
@@ -188,4 +191,34 @@ export interface Integration {
   connected: boolean;
   category: "calendar" | "email" | "crm" | "messaging" | "storage" | "other";
   context: IntegrationContext;
+  oauthProvider?: string;
+}
+
+export interface OAuthCredentialsInfo {
+  provider: string;
+  clientId: string;
+  configured: boolean;
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description?: string;
+  start: string;
+  end: string;
+  location?: string;
+  attendees: string[];
+  source: string;
+}
+
+export interface EmailMessage {
+  id: string;
+  subject: string;
+  from: string;
+  to: string[];
+  snippet: string;
+  date: string;
+  isRead: boolean;
+  labels: string[];
+  source: string;
 }

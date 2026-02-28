@@ -45,6 +45,10 @@
   animation: pulse 2s infinite;
 }
 
+.modelSelectorWrap {
+  position: relative;
+}
+
 .modelSelector {
   display: flex;
   align-items: center;
@@ -52,18 +56,134 @@
   background: var(--bg3);
   border: 1px solid var(--border2);
   border-radius: 20px;
-  padding: 4px 10px;
+  padding: 5px 10px 5px 6px;
   font-size: 11px;
+  font-weight: 500;
   color: var(--text2);
   cursor: pointer;
   user-select: none;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
 }
 
-.modelDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--blue);
+.modelSelector:hover {
+  border-color: var(--accent-muted);
+  color: var(--text);
+}
+
+.modelProviderIcon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.chevron {
+  transition: transform 0.2s;
+  margin-left: 2px;
+  opacity: 0.5;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.modelSelectorEmpty {
+  font-size: 10px;
+  color: var(--text3);
+  padding: 4px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+}
+
+.modelDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 50;
+  padding: 6px;
+  animation: fadeUp 0.15s ease both;
+}
+
+.modelGroup {
+  padding: 2px 0;
+}
+
+.modelGroup:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+
+.modelGroupLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text3);
+  padding: 4px 8px;
+}
+
+.modelGroupIcon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.modelOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-size: 12px;
+  font-family: 'Outfit', sans-serif;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.1s;
+  text-align: left;
+}
+
+.modelOption:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.modelOptionActive {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.modelOptionActive:hover {
+  color: var(--accent);
+}
+
+.modelCheck {
+  font-size: 11px;
+  color: var(--accent);
 }
 
 /* Messages */

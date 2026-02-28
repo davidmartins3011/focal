@@ -126,6 +126,8 @@ pub struct Integration {
     pub connected: bool,
     pub category: String,
     pub context: IntegrationContext,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth_provider: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

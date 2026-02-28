@@ -18,13 +18,15 @@ struct ProviderConfig {
     enabled: bool,
     #[serde(rename = "apiKey")]
     api_key: String,
+    #[serde(default, rename = "keyStatus")]
+    _key_status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AiSettings {
     providers: Vec<ProviderConfig>,
-    active_provider: Option<String>,
+    selected_model: Option<String>,
 }
 
 fn get_active_provider(db: &rusqlite::Connection) -> Result<ProviderConfig, String> {
@@ -49,9 +51,17 @@ fn get_active_provider(db: &rusqlite::Connection) -> Result<ProviderConfig, Stri
         return Err("Aucun provider AI activé avec une clé API. Configure-le dans les paramètres.".to_string());
     }
 
-    if let Some(active_id) = &settings.active_provider {
-        if let Some(p) = ready.iter().find(|p| p.id == *active_id) {
-            return Ok(p.clone());
+    if let Some(model_id) = &settings.selected_model {
+        let provider_for_model = match model_id.as_str() {
+            "gpt-4o" | "gpt-4o-mini" | "o1" | "o3-mini" => Some("openai"),
+            "claude-4-opus" | "claude-4-sonnet" => Some("anthropic"),
+            "mistral-large" | "mistral-medium" | "codestral" => Some("mistral"),
+            _ => None,
+        };
+        if let Some(pid) = provider_for_model {
+            if let Some(p) = ready.iter().find(|p| p.id == pid) {
+                return Ok(p.clone());
+            }
         }
     }
 
@@ -329,6 +339,53 @@ fn parse_ai_text(raw: &str) -> AiResponse {
     AiResponse {
         content: raw.to_string(),
         steps: None,
+    }
+}
+
+#[tauri::command]
+pub async fn validate_api_key(provider_id: String, api_key: String) -> Result<bool, String> {
+    if api_key.trim().is_empty() {
+        return Ok(false);
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Client error: {e}"))?;
+
+    match provider_id.as_str() {
+        "openai" => {
+            let resp = client
+                .get("https://api.openai.com/v1/models")
+                .header("Authorization", format!("Bearer {api_key}"))
+                .send()
+                .await
+                .map_err(|e| format!("Erreur réseau: {e}"))?;
+            Ok(resp.status().is_success())
+        }
+        "anthropic" => {
+            let resp = client
+                .post("https://api.anthropic.com/v1/messages")
+                .header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .body(r#"{"model":"claude-sonnet-4-20250514","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}"#)
+                .send()
+                .await
+                .map_err(|e| format!("Erreur réseau: {e}"))?;
+            let status = resp.status().as_u16();
+            // 200 = valid, 401/403 = invalid key, 429 = rate-limited but key is valid
+            Ok(status == 200 || status == 429)
+        }
+        "mistral" => {
+            let resp = client
+                .get("https://api.mistral.ai/v1/models")
+                .header("Authorization", format!("Bearer {api_key}"))
+                .send()
+                .await
+                .map_err(|e| format!("Erreur réseau: {e}"))?;
+            Ok(resp.status().is_success())
+        }
+        _ => Err(format!("Provider inconnu : {provider_id}")),
     }
 }
 

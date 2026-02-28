@@ -49,7 +49,16 @@ export default function App() {
         if (s.theme && VALID_THEMES.includes(s.theme as ThemeId))
           setTheme(s.theme as ThemeId);
         if (s["ai-settings"]) {
-          try { const p = JSON.parse(s["ai-settings"]) as AISettings; if (p.providers?.length) setAISettings(p); } catch { /* ignore */ }
+          try {
+            const p = JSON.parse(s["ai-settings"]) as AISettings;
+            if (p.providers?.length) {
+              p.providers = p.providers.map((prov) => ({
+                ...prov,
+                keyStatus: prov.keyStatus === "validating" ? "untested" : prov.keyStatus,
+              }));
+              setAISettings(p);
+            }
+          } catch { /* ignore */ }
         }
         if (s["daily-priority-count"]) {
           const n = parseInt(s["daily-priority-count"], 10);

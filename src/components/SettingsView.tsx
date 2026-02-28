@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import styles from "./SettingsView.module.css";
-import type { ThemeId, AIProviderId, AISettings, NotificationSettings, ReminderFrequency, WeekDayId, StrategyFrequency, FrequencyOccurrence } from "../types";
-import { themes, providers } from "../data/mockSettings";
+import type { ThemeId, AIProviderId, AISettings, AIKeyStatus, NotificationSettings, ReminderFrequency, WeekDayId, StrategyFrequency, FrequencyOccurrence } from "../types";
+import { themes, providers, type ProviderMeta } from "../data/settingsData";
+import { validateApiKey } from "../services/settings";
 import {
   DAY_LABELS,
   FREQUENCY_OPTIONS,
@@ -10,9 +11,6 @@ import {
   BIANNUAL_CYCLES,
   QUARTERLY_CYCLES,
   STRATEGY_FREQUENCY_OPTIONS,
-  STRATEGY_BIMONTHLY_CYCLES,
-  STRATEGY_QUARTERLY_CYCLES,
-  STRATEGY_BIANNUAL_CYCLES,
 } from "../data/settingsConstants";
 
 const STRATEGY_OCCURRENCE_OPTIONS: { id: FrequencyOccurrence; label: string }[] = [
@@ -68,29 +66,101 @@ export default function SettingsView({
     mistral: false,
   });
 
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const aiSettingsRef = useRef(aiSettings);
+  aiSettingsRef.current = aiSettings;
+
+  const runValidation = useCallback((id: AIProviderId, apiKey: string) => {
+    if (!apiKey.trim()) return;
+
+    const current = aiSettingsRef.current;
+    onAISettingsChange({
+      ...current,
+      providers: current.providers.map((p) =>
+        p.id === id ? { ...p, keyStatus: "validating" as AIKeyStatus } : p
+      ),
+    });
+
+    validateApiKey(id, apiKey)
+      .then((valid) => {
+        const latest = aiSettingsRef.current;
+        onAISettingsChange({
+          ...latest,
+          providers: latest.providers.map((p) =>
+            p.id === id ? { ...p, apiKey, keyStatus: (valid ? "valid" : "invalid") as AIKeyStatus } : p
+          ),
+        });
+      })
+      .catch(() => {
+        const latest = aiSettingsRef.current;
+        onAISettingsChange({
+          ...latest,
+          providers: latest.providers.map((p) =>
+            p.id === id ? { ...p, apiKey, keyStatus: "invalid" as AIKeyStatus } : p
+          ),
+        });
+      });
+  }, [onAISettingsChange]);
+
   const toggleProvider = (id: AIProviderId) => {
-    const wasEnabled = aiSettings.providers.find((p) => p.id === id)?.enabled;
+    const config = aiSettings.providers.find((p) => p.id === id);
+    const wasEnabled = config?.enabled;
     const updated: AISettings = {
       ...aiSettings,
       providers: aiSettings.providers.map((p) =>
-        p.id === id
-          ? { ...p, enabled: !wasEnabled }
-          : { ...p, enabled: false }
+        p.id === id ? { ...p, enabled: !wasEnabled } : p
       ),
-      activeProvider: wasEnabled ? undefined : id,
     };
+    if (wasEnabled) {
+      const enabledModels = getAvailableModels(updated);
+      if (updated.selectedModel) {
+        const stillAvailable = enabledModels.some((m) => m.id === updated.selectedModel);
+        if (!stillAvailable) {
+          updated.selectedModel = enabledModels[0]?.id;
+        }
+      }
+    }
     onAISettingsChange(updated);
   };
 
+  const getAvailableModels = (settings: AISettings): { id: string; name: string; provider: ProviderMeta }[] => {
+    const result: { id: string; name: string; provider: ProviderMeta }[] = [];
+    for (const provider of providers) {
+      const config = settings.providers.find((p) => p.id === provider.id);
+      if (config?.enabled && config.apiKey && config.keyStatus === "valid") {
+        for (const model of provider.models) {
+          result.push({ id: model.id, name: model.name, provider });
+        }
+      }
+    }
+    return result;
+  };
+
   const updateApiKey = (id: AIProviderId, apiKey: string) => {
+    if (debounceTimers.current[id]) {
+      clearTimeout(debounceTimers.current[id]);
+    }
+
     const updated = {
       ...aiSettings,
       providers: aiSettings.providers.map((p) =>
-        p.id === id ? { ...p, apiKey } : p
+        p.id === id ? { ...p, apiKey, keyStatus: "untested" as AIKeyStatus } : p
       ),
     };
     onAISettingsChange(updated);
+
+    if (apiKey.trim()) {
+      debounceTimers.current[id] = setTimeout(() => {
+        runValidation(id, apiKey);
+      }, 800);
+    }
   };
+
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimers.current).forEach(clearTimeout);
+    };
+  }, []);
 
   const toggleKeyVisibility = (id: AIProviderId) => {
     setVisibleKeys((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -234,7 +304,7 @@ export default function SettingsView({
                 <div className={styles.strategyFreqRow}>
                   <label className={styles.strategyLabel}>Mois</label>
                   <div className={styles.cycleRow}>
-                    {STRATEGY_BIMONTHLY_CYCLES.map((c) => (
+                    {BIMONTHLY_CYCLES.map((c) => (
                       <button
                         key={c.start}
                         className={`${styles.cyclePill} ${strategyCycleStart === c.start ? styles.cycleActive : ""}`}
@@ -250,7 +320,7 @@ export default function SettingsView({
                 <div className={styles.strategyFreqRow}>
                   <label className={styles.strategyLabel}>Mois</label>
                   <div className={styles.cycleRow}>
-                    {STRATEGY_QUARTERLY_CYCLES.map((c) => (
+                    {QUARTERLY_CYCLES.map((c) => (
                       <button
                         key={c.start}
                         className={`${styles.cyclePill} ${strategyCycleStart === c.start ? styles.cycleActive : ""}`}
@@ -266,7 +336,7 @@ export default function SettingsView({
                 <div className={styles.strategyFreqRow}>
                   <label className={styles.strategyLabel}>Mois</label>
                   <div className={styles.cycleRow}>
-                    {STRATEGY_BIANNUAL_CYCLES.map((c) => (
+                    {BIANNUAL_CYCLES.map((c) => (
                       <button
                         key={c.start}
                         className={`${styles.cyclePill} ${strategyCycleStart === c.start ? styles.cycleActive : ""}`}
@@ -524,7 +594,7 @@ export default function SettingsView({
                   </div>
                   <div className={styles.providerInfo}>
                     <div className={styles.providerName}>{provider.name}</div>
-                    <div className={styles.providerModels}>{provider.models}</div>
+                    <div className={styles.providerModels}>{provider.models.map((m) => m.name).join(", ")}</div>
                   </div>
                   <button
                     className={`${styles.toggle} ${config.enabled ? styles.on : ""}`}
@@ -556,11 +626,51 @@ export default function SettingsView({
                       </button>
                     </div>
                     <div className={styles.apiKeyStatus}>
-                      <span className={`${styles.statusDot} ${config.apiKey ? styles.saved : styles.missing}`} />
-                      <span className={styles.statusText}>
-                        {config.apiKey ? "Clé enregistrée" : "Aucune clé configurée"}
-                      </span>
+                      {config.keyStatus === "validating" ? (
+                        <>
+                          <span className={`${styles.statusDot} ${styles.validating}`} />
+                          <span className={styles.statusText}>Vérification en cours…</span>
+                        </>
+                      ) : config.keyStatus === "valid" ? (
+                        <>
+                          <span className={`${styles.statusDot} ${styles.saved}`} />
+                          <span className={styles.statusText}>Clé valide</span>
+                        </>
+                      ) : config.keyStatus === "invalid" ? (
+                        <>
+                          <span className={`${styles.statusDot} ${styles.invalid}`} />
+                          <span className={`${styles.statusText} ${styles.statusError}`}>Clé invalide — vérifie ta clé API</span>
+                        </>
+                      ) : config.apiKey ? (
+                        <>
+                          <span className={`${styles.statusDot} ${styles.missing}`} />
+                          <span className={styles.statusText}>Clé non vérifiée</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className={`${styles.statusDot} ${styles.missing}`} />
+                          <span className={styles.statusText}>Aucune clé configurée</span>
+                        </>
+                      )}
+                      {config.apiKey && config.keyStatus !== "validating" && (
+                        <button
+                          className={styles.retestBtn}
+                          onClick={() => runValidation(provider.id, config.apiKey)}
+                        >
+                          Re-tester
+                        </button>
+                      )}
                     </div>
+                    {config.apiKey && config.keyStatus === "valid" && (
+                      <div className={styles.modelsList}>
+                        <div className={styles.modelsLabel}>Modèles disponibles</div>
+                        <div className={styles.modelTags}>
+                          {provider.models.map((m) => (
+                            <span key={m.id} className={styles.modelTag}>{m.name}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
