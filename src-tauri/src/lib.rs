@@ -67,6 +67,7 @@ pub fn run() {
             commands::ai::send_message,
             commands::ai::decompose_task,
             commands::ai::generate_suggestions,
+            commands::ai::send_onboarding_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

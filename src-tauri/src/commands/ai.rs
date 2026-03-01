@@ -712,3 +712,160 @@ pub async fn generate_suggestions(
 
     Err("L'IA n'a pas retourné des suggestions dans un format valide.".to_string())
 }
+
+// ── Onboarding ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingResponse {
+    pub content: String,
+    #[serde(default)]
+    pub profile_updates: serde_json::Value,
+    #[serde(default)]
+    pub onboarding_complete: bool,
+}
+
+fn build_onboarding_prompt(current_profile: &str) -> String {
+    format!(
+        r#"Tu es focal., l'assistant d'aide à la productivité conçu pour les personnes TDAH.
+Tu es en mode onboarding : c'est la première fois que l'utilisateur utilise l'application.
+Ton objectif est de faire connaissance avec l'utilisateur de manière naturelle et bienveillante pour remplir son profil.
+
+RÈGLES DE CONVERSATION :
+- Pose UNE question à la fois, de manière conversationnelle
+- Ne fais pas un formulaire, discute naturellement
+- Tutoie l'utilisateur
+- Sois chaleureux, bienveillant et encourageant
+- Reformule positivement ce que l'utilisateur dit
+- Ne fais jamais la morale
+
+MESSAGE DE BIENVENUE (déjà affiché à l'utilisateur) :
+"Salut ! Bienvenue sur focal. ✨
+
+Je suis ton assistant de productivité, pensé spécialement pour les cerveaux qui fonctionnent un peu différemment.
+
+Avant de commencer, j'aimerais apprendre à te connaître pour adapter l'outil à ton fonctionnement. On va discuter quelques minutes, rien de compliqué.
+
+Comment tu t'appelles ?"
+
+Le premier message de l'utilisateur sera sa réponse à cette question. Continue la conversation à partir de là.
+
+PROFIL À REMPLIR (champs et valeurs autorisées) :
+- firstName : prénom (texte libre)
+- mainContext : contexte principal → "travail_salarie", "independant", "etudes", "parent", "mix", "autre"
+- mainContextOther : si mainContext = "autre", précision (texte libre)
+- jobActivity : métier ou activité principale (texte libre)
+- adhdRecognition : reconnaissance du TDAH → "diagnostique" (diagnostiqué), "fortement" (se reconnaît fortement), "un_peu" (un peu), "non" (pas du tout / je ne sais pas)
+- blockers : ce qui bloque le plus (TABLEAU, plusieurs choix possibles) → "commencer" (savoir par quoi commencer), "oublier" (ne pas oublier), "agir" (passer à l'action), "finir" (finir ce qu'on commence), "trop_head" (trop de choses en tête), "motivation" (manque de motivation)
+- remindersPreference : préférence rappels → "clairs_frequents", "peu_choisis", "minimum", "ca_depend"
+- organizationHorizon : horizon d'organisation → "aujourdhui", "semaine", "projets_longs", "mix"
+- mainExpectation : attente principale envers focal → "me_dire_quoi_faire", "prioriser", "allege_tete", "avancer_sans_pression", "cadrer"
+- extraInfo : info supplémentaire (texte libre, optionnel)
+
+INSTRUCTIONS DE REMPLISSAGE :
+- Déduis les valeurs à partir des réponses naturelles (l'utilisateur ne connaît pas les clés techniques)
+- Exemple : "j'oublie tout et j'arrive jamais à commencer" → blockers: ["oublier", "commencer"]
+- Ordre naturel : prénom → contexte/métier → TDAH → blocages → préférences → attentes
+- Tu n'es pas obligé de remplir TOUS les champs
+- extraInfo est optionnel, propose-le seulement à la fin
+
+PROFIL ACTUEL :
+{current_profile}
+
+COMPLÉTION :
+Quand le profil contient au minimum firstName, mainContext, adhdRecognition et blockers, propose de terminer. S'il accepte, mets onboardingComplete à true avec un message de conclusion encourageant.
+
+FORMAT DE RÉPONSE :
+Réponds UNIQUEMENT en JSON valide :
+{{"content": "ton message", "profileUpdates": {{}}, "onboardingComplete": false}}
+- profileUpdates : seulement les champs nouveaux/modifiés (objet vide si rien)
+- onboardingComplete : true uniquement quand l'utilisateur confirme terminer
+- Pas de markdown dans content, utilise \n pour les paragraphes
+- Pas de texte avant ou après le JSON"#
+    )
+}
+
+fn parse_onboarding_response(raw: &str) -> Result<OnboardingResponse, String> {
+    let trimmed = raw.trim();
+
+    let clean = if trimmed.starts_with("```") {
+        trimmed
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim()
+    } else {
+        trimmed
+    };
+
+    fn extract_fields(parsed: &serde_json::Value) -> Option<OnboardingResponse> {
+        let content = parsed.get("content").and_then(|v| v.as_str())?;
+        let profile_updates = parsed
+            .get("profileUpdates")
+            .or_else(|| parsed.get("profile_updates"))
+            .cloned()
+            .unwrap_or(serde_json::Value::Object(Default::default()));
+        let onboarding_complete = parsed
+            .get("onboardingComplete")
+            .or_else(|| parsed.get("onboarding_complete"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        Some(OnboardingResponse {
+            content: content.to_string(),
+            profile_updates,
+            onboarding_complete,
+        })
+    }
+
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(clean) {
+        if let Some(resp) = extract_fields(&parsed) {
+            return Ok(resp);
+        }
+    }
+
+    // The LLM sometimes outputs free text before / after the JSON block.
+    // Try parsing from each `{` until we find valid JSON with a "content" field.
+    for (i, _) in clean.char_indices().filter(|(_, c)| *c == '{') {
+        let slice = &clean[i..];
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(slice) {
+            if let Some(resp) = extract_fields(&parsed) {
+                return Ok(resp);
+            }
+        }
+    }
+
+    Ok(OnboardingResponse {
+        content: raw.to_string(),
+        profile_updates: serde_json::Value::Object(Default::default()),
+        onboarding_complete: false,
+    })
+}
+
+#[tauri::command]
+pub async fn send_onboarding_message(
+    state: State<'_, AppState>,
+    user_message: String,
+    history: String,
+    current_profile: String,
+) -> Result<OnboardingResponse, String> {
+    let (provider_id, api_key) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let provider = get_active_provider(&db)?;
+        (provider.id, provider.api_key)
+    };
+
+    let system_prompt = build_onboarding_prompt(&current_profile);
+
+    #[derive(Deserialize)]
+    struct HistoryMsg {
+        role: String,
+        content: String,
+    }
+
+    let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
+    let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
+    msgs.push(("user".to_string(), user_message));
+
+    let raw = call_llm(&provider_id, &api_key, &system_prompt, msgs).await?;
+    parse_onboarding_response(&raw)
+}

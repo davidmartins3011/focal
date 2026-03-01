@@ -24,9 +24,9 @@ export default function NotificationCenter({
   const todayStr = new Date().toISOString().slice(0, 10);
 
   const todayEntries = history
-    .filter((e) => e.firedAt.slice(0, 10) === todayStr && !e.read)
+    .filter((e) => !e.read && (e.firedAt.slice(0, 10) === todayStr || e.missed))
     .sort((a, b) => b.firedAt.localeCompare(a.firedAt))
-    .slice(0, 5);
+    .slice(0, 8);
 
   const missedEntries = todayEntries.filter((e) => e.missed);
   const liveEntries = todayEntries.filter((e) => !e.missed);

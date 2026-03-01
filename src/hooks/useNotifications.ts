@@ -349,7 +349,7 @@ export function useNotifications() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const hasUnreadNotifs = notifHistory.some(
-    (e) => !e.read && e.firedAt.slice(0, 10) === todayStr
+    (e) => !e.read && (e.firedAt.slice(0, 10) === todayStr || e.missed)
   );
 
   return {

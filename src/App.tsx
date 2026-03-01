@@ -8,6 +8,7 @@ import ProfileView from "./components/ProfileView";
 import SuggestionsView from "./components/SuggestionsView";
 import TodoView from "./components/TodoView";
 import SettingsView from "./components/SettingsView";
+import OnboardingView from "./components/OnboardingView";
 import NotificationToast from "./components/NotificationToast";
 import NotificationCenter from "./components/NotificationCenter";
 import type { ViewTab, SidebarPage, ThemeId, AISettings, StrategyFrequency, FrequencyOccurrence, WeekDayId } from "./types";
@@ -39,6 +40,7 @@ export default function App() {
   const [strategyCycleStart, setStrategyCycleStart] = useState<number>(1);
   const [strategyOccurrence, setStrategyOccurrence] = useState<FrequencyOccurrence>("last");
   const [strategyDay, setStrategyDay] = useState<WeekDayId>("dim");
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const loaded = useRef(false);
 
   const notif = useNotifications();
@@ -74,10 +76,23 @@ export default function App() {
           setStrategyOccurrence(s["strategy-occurrence"] as FrequencyOccurrence);
         if (s["strategy-day"] && VALID_DAYS.includes(s["strategy-day"] as WeekDayId))
           setStrategyDay(s["strategy-day"] as WeekDayId);
+        if (s["onboarding-completed"] === "true") {
+          setOnboardingDone(true);
+        } else {
+          let isExistingUser = false;
+          if (s["ai-settings"]) {
+            try {
+              const parsed = JSON.parse(s["ai-settings"]) as AISettings;
+              isExistingUser = parsed.providers?.some((prov) => prov.enabled && prov.apiKey) ?? false;
+            } catch { /* ignore */ }
+          }
+          setOnboardingDone(isExistingUser);
+        }
         loaded.current = true;
       })
       .catch((err) => {
         console.error("[App] getAllSettings error:", err);
+        setOnboardingDone(true);
         loaded.current = true;
       });
   }, []);
@@ -178,6 +193,11 @@ export default function App() {
     }
   }, [notif.toasts]);
 
+  const handleStartOnboarding = useCallback(() => {
+    setSetting("onboarding-completed", "false").catch(() => {});
+    setOnboardingDone(false);
+  }, []);
+
   const renderPage = () => {
     switch (activePage) {
       case "settings":
@@ -225,6 +245,22 @@ export default function App() {
     }
   };
 
+  if (onboardingDone === null) {
+    return null;
+  }
+
+  if (!onboardingDone) {
+    return (
+      <OnboardingView
+        currentTheme={theme}
+        onThemeChange={setTheme}
+        aiSettings={aiSettings}
+        onAISettingsChange={setAISettings}
+        onComplete={() => setOnboardingDone(true)}
+      />
+    );
+  }
+
   return (
     <div className={styles.app}>
       <div className={styles.left}>
@@ -240,7 +276,7 @@ export default function App() {
         </div>
       </div>
       <div className={styles.right}>
-        <ChatPanel />
+        <ChatPanel onStartOnboarding={handleStartOnboarding} />
       </div>
       <NotificationToast
         toasts={notif.toasts}

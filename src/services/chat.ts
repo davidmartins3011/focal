@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ChatMessage, Suggestion } from "../types";
+import type { ChatMessage, Suggestion, UserProfile } from "../types";
 
 export interface AiResponse {
   content: string;
@@ -36,4 +36,22 @@ export function decomposeTask(
 
 export function generateSuggestions(): Promise<Suggestion[]> {
   return invoke<Suggestion[]>("generate_suggestions");
+}
+
+export interface OnboardingResponse {
+  content: string;
+  profileUpdates: Partial<UserProfile>;
+  onboardingComplete: boolean;
+}
+
+export function sendOnboardingMessage(
+  userMessage: string,
+  history: { role: string; content: string }[],
+  currentProfile: UserProfile,
+): Promise<OnboardingResponse> {
+  return invoke<OnboardingResponse>("send_onboarding_message", {
+    userMessage,
+    history: JSON.stringify(history),
+    currentProfile: JSON.stringify(currentProfile),
+  });
 }

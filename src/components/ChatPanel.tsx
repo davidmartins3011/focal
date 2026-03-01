@@ -34,7 +34,11 @@ function getAvailableModels(settings: AISettings): AvailableModel[] {
   return result;
 }
 
-export default function ChatPanel() {
+interface ChatPanelProps {
+  onStartOnboarding?: () => void;
+}
+
+export default function ChatPanel({ onStartOnboarding }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -128,6 +132,12 @@ export default function ChatPanel() {
     const text = input.trim();
     if (!text || isTyping) return;
 
+    if (text === "/start-onboarding" && onStartOnboarding) {
+      setInput("");
+      onStartOnboarding();
+      return;
+    }
+
     const userMsg: ChatMessage = {
       id: `tmp-${Date.now()}`,
       role: "user",
@@ -172,7 +182,7 @@ export default function ChatPanel() {
         setError(errMsg);
         console.error("[ChatPanel] sendMessage error:", err);
       });
-  }, [input, isTyping]);
+  }, [input, isTyping, onStartOnboarding]);
 
   const addStepsToTask = useCallback((msgId: string, taskId: string) => {
     const msg = messages.find((m) => m.id === msgId);
