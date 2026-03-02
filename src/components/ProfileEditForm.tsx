@@ -1,3 +1,4 @@
+import { useState } from "react";
 import styles from "./ProfileView.module.css";
 import type { UserProfile, ProfileResearchSource } from "../types";
 import {
@@ -11,6 +12,7 @@ import {
   EXPECTATION_KEYS,
 } from "../data/profileLabels";
 import { ProfileSection, FormField } from "./ProfileField";
+import { analyzeProfileUrl } from "../services/chat";
 
 interface Props {
   editForm: UserProfile;
@@ -21,6 +23,8 @@ interface Props {
 
 export default function ProfileEditForm({ editForm, onUpdate, onSave, onCancel }: Props) {
   const sources = editForm.profileResearchSources ?? [];
+  const [analyzingIndex, setAnalyzingIndex] = useState<number | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   const addSource = () => {
     onUpdate("profileResearchSources", [...sources, { source: "linkedin" as const }]);
@@ -34,6 +38,33 @@ export default function ProfileEditForm({ editForm, onUpdate, onSave, onCancel }
 
   const removeSource = (index: number) => {
     onUpdate("profileResearchSources", sources.filter((_, i) => i !== index));
+  };
+
+  const analyzeSource = (index: number) => {
+    const src = sources[index];
+    if (!src?.sourceUrl?.trim()) return;
+
+    setAnalyzingIndex(index);
+    setAnalyzeError(null);
+
+    analyzeProfileUrl(src.sourceUrl)
+      .then((result) => {
+        const existing = editForm.publicProfileSummary ?? "";
+        const newSummary = existing
+          ? `${existing}\n\n--- ${SOURCE_LABELS[src.source] || src.source} ---\n${result.summary}`
+          : `--- ${SOURCE_LABELS[src.source] || src.source} ---\n${result.summary}`;
+        onUpdate("publicProfileSummary", newSummary);
+
+        const next = [...(editForm.profileResearchSources ?? [])];
+        next[index] = { ...next[index], scrapedAt: new Date().toISOString() };
+        onUpdate("profileResearchSources", next);
+
+        setAnalyzingIndex(null);
+      })
+      .catch((err) => {
+        setAnalyzeError(typeof err === "string" ? err : String(err));
+        setAnalyzingIndex(null);
+      });
   };
 
   const toggleBlocker = (key: (typeof BLOCKER_KEYS)[number]) => {
@@ -139,6 +170,23 @@ export default function ProfileEditForm({ editForm, onUpdate, onSave, onCancel }
                   />
                   <button
                     type="button"
+                    className={`${styles.analyzeBtn} ${analyzingIndex === i ? styles.analyzeBtnLoading : ""}`}
+                    onClick={() => analyzeSource(i)}
+                    disabled={!src.sourceUrl?.trim() || analyzingIndex !== null}
+                    title={src.scrapedAt ? `Analysé le ${new Date(src.scrapedAt).toLocaleDateString()}` : "Analyser ce profil"}
+                    aria-label="Analyser"
+                  >
+                    {analyzingIndex === i ? (
+                      <span className={styles.analyzeSpinner} />
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                    )}
+                  </button>
+                  <button
+                    type="button"
                     className={styles.removeSourceBtn}
                     onClick={() => removeSource(i)}
                     title="Supprimer"
@@ -148,10 +196,23 @@ export default function ProfileEditForm({ editForm, onUpdate, onSave, onCancel }
                   </button>
                 </div>
               ))}
+              {analyzeError && (
+                <div className={styles.analyzeError}>{analyzeError}</div>
+              )}
               <button type="button" className={styles.addSourceBtn} onClick={addSource}>
                 + Ajouter une source
               </button>
             </div>
+          </FormField>
+        )}
+        {editForm.publicProfileSummary && (
+          <FormField label="Résumé de ton profil public (généré par l'IA)">
+            <textarea
+              className={`${styles.input} ${styles.textarea}`}
+              value={editForm.publicProfileSummary}
+              onChange={(e) => onUpdate("publicProfileSummary", e.target.value)}
+              rows={4}
+            />
           </FormField>
         )}
       </ProfileSection>

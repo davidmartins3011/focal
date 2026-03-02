@@ -163,6 +163,9 @@ export default function ProfileView() {
                 </ul>
               </div>
             )}
+            {profile.publicProfileSummary && (
+              <ProfileField label="Résumé du profil public" value={profile.publicProfileSummary} />
+            )}
           </ProfileSection>
 
           <ProfileSection title="Ton fonctionnement" icon="🧠">

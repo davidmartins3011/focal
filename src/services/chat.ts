@@ -44,6 +44,15 @@ export interface OnboardingResponse {
   onboardingComplete: boolean;
 }
 
+export interface ProfileAnalysis {
+  summary: string;
+  sourceUrl: string;
+}
+
+export function analyzeProfileUrl(url: string): Promise<ProfileAnalysis> {
+  return invoke<ProfileAnalysis>("analyze_profile_url", { url });
+}
+
 export function sendOnboardingMessage(
   userMessage: string,
   history: { role: string; content: string }[],

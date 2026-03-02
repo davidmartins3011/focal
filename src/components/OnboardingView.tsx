@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { ThemeId, AISettings, AIProviderId, AIKeyStatus, UserProfile } from "../types";
+import type { ThemeId, AISettings, AIProviderId, AIKeyStatus, UserProfile, ProfileResearchSource } from "../types";
 import { themes, providers } from "../data/settingsData";
 import { validateApiKey, setSetting } from "../services/settings";
-import { sendOnboardingMessage } from "../services/chat";
+import { sendOnboardingMessage, analyzeProfileUrl } from "../services/chat";
 import { updateProfile } from "../services/profile";
 import styles from "./OnboardingView.module.css";
 
@@ -166,14 +166,66 @@ export default function OnboardingView({
       .slice(0, -1);
 
     sendOnboardingMessage(text, historyForApi, profile)
-      .then((response) => {
+      .then(async (response) => {
         setIsTyping(false);
 
         const aiMsg = { role: "ai", content: response.content };
         setMessages((prev) => [...prev, aiMsg]);
 
-        if (response.profileUpdates && typeof response.profileUpdates === "object") {
-          setProfile((prev) => ({ ...prev, ...response.profileUpdates }));
+        const updates = response.profileUpdates && typeof response.profileUpdates === "object"
+          ? { ...response.profileUpdates } as Record<string, unknown>
+          : {};
+
+        // If the AI detected URLs, analyze them in the background
+        const urls = updates.profileUrls as string[] | undefined;
+        if (urls && Array.isArray(urls) && urls.length > 0) {
+          delete updates.profileUrls;
+
+          const sources: ProfileResearchSource[] = urls.map((u) => {
+            const lower = u.toLowerCase();
+            const source: ProfileResearchSource["source"] = lower.includes("linkedin") ? "linkedin"
+              : lower.includes("github") ? "autre"
+              : "site_web";
+            return { source, sourceUrl: u };
+          });
+          updates.profileResearch = true;
+          updates.profileResearchSources = sources;
+
+          setProfile((prev) => ({ ...prev, ...updates } as UserProfile));
+
+          setMessages((prev) => [...prev, {
+            role: "ai",
+            content: "Je regarde ton profil public, un instant…",
+          }]);
+
+          const summaries: string[] = [];
+          for (const src of sources) {
+            if (!src.sourceUrl) continue;
+            try {
+              const result = await analyzeProfileUrl(src.sourceUrl);
+              summaries.push(`--- ${src.source === "linkedin" ? "LinkedIn" : "Site web"} ---\n${result.summary}`);
+              src.scrapedAt = new Date().toISOString();
+            } catch {
+              summaries.push(`--- ${src.sourceUrl} ---\nImpossible d'analyser cette page.`);
+            }
+          }
+
+          const publicProfileSummary = summaries.join("\n\n");
+          setProfile((prev) => ({
+            ...prev,
+            publicProfileSummary,
+            profileResearchSources: sources,
+          }));
+
+          setMessages((prev) => {
+            const filtered = prev.filter((m) => m.content !== "Je regarde ton profil public, un instant…");
+            return [...filtered, {
+              role: "ai",
+              content: "J'ai analysé ton profil public et noté les infos utiles. On continue !",
+            }];
+          });
+        } else {
+          setProfile((prev) => ({ ...prev, ...updates } as UserProfile));
         }
 
         if (response.onboardingComplete) {

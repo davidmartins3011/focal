@@ -732,12 +732,13 @@ Tu es en mode onboarding : c'est la première fois que l'utilisateur utilise l'a
 Ton objectif est de faire connaissance avec l'utilisateur de manière naturelle et bienveillante pour remplir son profil.
 
 RÈGLES DE CONVERSATION :
-- Pose UNE question à la fois, de manière conversationnelle
+- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message, même séparées par un saut de ligne.
 - Ne fais pas un formulaire, discute naturellement
 - Tutoie l'utilisateur
 - Sois chaleureux, bienveillant et encourageant
 - Reformule positivement ce que l'utilisateur dit
 - Ne fais jamais la morale
+- Attends la réponse de l'utilisateur avant de passer au sujet suivant
 
 MESSAGE DE BIENVENUE (déjà affiché à l'utilisateur) :
 "Salut ! Bienvenue sur focal. ✨
@@ -765,9 +766,18 @@ PROFIL À REMPLIR (champs et valeurs autorisées) :
 INSTRUCTIONS DE REMPLISSAGE :
 - Déduis les valeurs à partir des réponses naturelles (l'utilisateur ne connaît pas les clés techniques)
 - Exemple : "j'oublie tout et j'arrive jamais à commencer" → blockers: ["oublier", "commencer"]
-- Ordre naturel : prénom → contexte/métier → TDAH → blocages → préférences → attentes
+- Ordre naturel : prénom → contexte/métier → LIENS PUBLICS → TDAH → blocages → préférences → attentes
 - Tu n'es pas obligé de remplir TOUS les champs
 - extraInfo est optionnel, propose-le seulement à la fin
+
+LIENS PUBLICS (étape dédiée, un message entier rien que pour ça) :
+- Après avoir compris le contexte et le métier, consacre un message ENTIER uniquement à cette question. N'ajoute AUCUNE autre question dans ce message.
+- Formule ça de manière naturelle et optionnelle, par exemple : "Au fait, si tu as un profil LinkedIn ou un site perso, tu peux me le partager — ça m'aidera à mieux cerner ton univers pro. Sinon, pas de souci, on continue !"
+- Si l'utilisateur partage une ou plusieurs URLs, mets-les dans profileUpdates avec le champ "profileUrls" (un tableau de strings)
+- Exemple : si l'utilisateur dit "voici mon LinkedIn https://linkedin.com/in/toto" → profileUpdates: {{"profileUrls": ["https://linkedin.com/in/toto"]}}
+- Si l'utilisateur ne veut pas partager, c'est OK, passe à la suite sans insister
+- Ne repose pas la question s'il a déjà répondu
+- Après sa réponse (qu'il partage un lien ou non), passe au TDAH dans le message SUIVANT
 
 PROFIL ACTUEL :
 {current_profile}
@@ -868,4 +878,105 @@ pub async fn send_onboarding_message(
 
     let raw = call_llm(&provider_id, &api_key, &system_prompt, msgs).await?;
     parse_onboarding_response(&raw)
+}
+
+// ── Analyse de profil public ──
+
+async fn fetch_url_text(url: &str) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent("Mozilla/5.0 (compatible; focal-app/1.0)")
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .map_err(|e| format!("Client HTTP error: {e}"))?;
+
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Impossible de charger l'URL: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("L'URL a retourné le statut {}", resp.status()));
+    }
+
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("Erreur de lecture du contenu: {e}"))?;
+
+    // Strip HTML tags to get readable text, keep it under ~6000 chars for the LLM
+    let text = body
+        .split('<')
+        .filter_map(|seg| {
+            seg.find('>').map(|i| &seg[i + 1..])
+        })
+        .collect::<Vec<&str>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<&str>>()
+        .join(" ");
+
+    let truncated = if text.len() > 6000 {
+        let end = text.char_indices()
+            .take_while(|(i, _)| *i < 6000)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(text.len());
+        format!("{}…", &text[..end])
+    } else {
+        text
+    };
+
+    Ok(truncated)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileAnalysis {
+    pub summary: String,
+    pub source_url: String,
+}
+
+#[tauri::command]
+pub async fn analyze_profile_url(
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<ProfileAnalysis, String> {
+    let page_text = fetch_url_text(&url).await?;
+
+    if page_text.trim().len() < 30 {
+        return Err("Le contenu de la page est trop court ou inaccessible.".to_string());
+    }
+
+    let (provider_id, api_key) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let provider = get_active_provider(&db)?;
+        (provider.id, provider.api_key)
+    };
+
+    let system = concat!(
+        "Tu es un assistant qui analyse des pages de profil public (LinkedIn, site web, portfolio, etc.).\n",
+        "Ton objectif est d'extraire un résumé concis et utile sur la personne : qui elle est, ce qu'elle fait, ",
+        "ses compétences clés, son secteur d'activité, et tout ce qui peut être pertinent pour adapter un outil de productivité.\n\n",
+        "RÈGLES :\n",
+        "- Résumé en 3 à 6 phrases maximum\n",
+        "- En français\n",
+        "- Factuel, pas de spéculation\n",
+        "- Mentionne le métier/rôle, le secteur, les compétences principales\n",
+        "- Si c'est un site d'entreprise, décris l'activité de l'entreprise et le rôle probable de la personne\n",
+        "- Réponds UNIQUEMENT avec le texte du résumé, sans JSON, sans markdown, sans préambule",
+    );
+
+    let prompt = format!(
+        "Voici le contenu textuel extrait de la page {url} :\n\n{page_text}\n\nRésume ce que tu apprends sur cette personne."
+    );
+
+    let msgs = vec![("user".to_string(), prompt)];
+    let summary = call_llm(&provider_id, &api_key, system, msgs).await?;
+
+    Ok(ProfileAnalysis {
+        summary: summary.trim().to_string(),
+        source_url: url,
+    })
 }

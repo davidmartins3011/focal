@@ -80,6 +80,8 @@ export interface UserProfile {
   organizationHorizon?: "aujourdhui" | "semaine" | "projets_longs" | "mix";
   mainExpectation?: "me_dire_quoi_faire" | "prioriser" | "allege_tete" | "avancer_sans_pression" | "cadrer";
   extraInfo?: string;
+  /** Résumé généré par l'IA à partir des profils publics (LinkedIn, site web…) */
+  publicProfileSummary?: string;
 }
 
 export type ThemeId = "default" | "clair" | "sombre" | "zen" | "hyperfocus" | "aurore" | "ocean" | "sakura" | "nord" | "solaire";
