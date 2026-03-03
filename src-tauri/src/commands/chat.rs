@@ -34,3 +34,13 @@ pub fn get_chat_messages(state: State<'_, AppState>) -> Result<Vec<ChatMessage>,
     }
     Ok(messages)
 }
+
+#[tauri::command]
+pub fn clear_chat(state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute("DELETE FROM chat_message_steps", [])
+        .map_err(|e| e.to_string())?;
+    db.execute("DELETE FROM chat_messages", [])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}

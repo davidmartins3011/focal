@@ -106,11 +106,13 @@ CREATE TABLE IF NOT EXISTS integrations (
     connected INTEGER NOT NULL DEFAULT 0,
     category TEXT NOT NULL DEFAULT 'other',
     extra_context TEXT NOT NULL DEFAULT '',
-    oauth_provider TEXT
+    oauth_provider TEXT,
+    account_email TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS oauth_tokens (
-    provider TEXT PRIMARY KEY,
+    integration_id TEXT PRIMARY KEY,
+    account_email TEXT NOT NULL DEFAULT '',
     access_token TEXT NOT NULL,
     refresh_token TEXT,
     token_type TEXT NOT NULL DEFAULT 'Bearer',
@@ -162,7 +164,87 @@ pub fn create_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     // Migration: add oauth_provider column for pre-existing DBs
     conn.execute("ALTER TABLE integrations ADD COLUMN oauth_provider TEXT", []).ok();
     migrate_oauth_providers(conn);
+    // Migration: add account_email column for pre-existing DBs
+    conn.execute("ALTER TABLE integrations ADD COLUMN account_email TEXT NOT NULL DEFAULT ''", []).ok();
+    // Migration: move oauth_tokens from provider-keyed to integration-keyed
+    migrate_oauth_tokens_to_integration(conn);
     Ok(())
+}
+
+fn migrate_oauth_tokens_to_integration(conn: &Connection) {
+    // Check if old provider-keyed table still exists (has 'provider' column)
+    let has_provider_col = conn
+        .prepare("SELECT provider FROM oauth_tokens LIMIT 0")
+        .is_ok();
+    if !has_provider_col {
+        return;
+    }
+
+    // Read existing tokens keyed by provider
+    let existing: Vec<(String, String, Option<String>, String, Option<String>, String)> = conn
+        .prepare("SELECT provider, access_token, refresh_token, token_type, expires_at, scopes FROM oauth_tokens")
+        .and_then(|mut stmt| {
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
+            })?;
+            rows.collect()
+        })
+        .unwrap_or_default();
+
+    if existing.is_empty() {
+        // No data to migrate — just recreate the table with the new schema
+        conn.execute("DROP TABLE IF EXISTS oauth_tokens", []).ok();
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS oauth_tokens (
+                integration_id TEXT PRIMARY KEY,
+                account_email TEXT NOT NULL DEFAULT '',
+                access_token TEXT NOT NULL,
+                refresh_token TEXT,
+                token_type TEXT NOT NULL DEFAULT 'Bearer',
+                expires_at TEXT,
+                scopes TEXT NOT NULL DEFAULT ''
+            )",
+            [],
+        ).ok();
+        return;
+    }
+
+    // Find connected integrations per provider and duplicate tokens
+    let mut to_insert: Vec<(String, String, Option<String>, String, Option<String>, String)> = Vec::new();
+    for (provider, access_token, refresh_token, token_type, expires_at, scopes) in &existing {
+        let integration_ids: Vec<String> = conn
+            .prepare("SELECT id FROM integrations WHERE oauth_provider = ?1 AND connected = 1")
+            .and_then(|mut stmt| {
+                let rows = stmt.query_map(params![provider], |row| row.get(0))?;
+                rows.collect()
+            })
+            .unwrap_or_default();
+
+        for iid in integration_ids {
+            to_insert.push((iid, access_token.clone(), refresh_token.clone(), token_type.clone(), expires_at.clone(), scopes.clone()));
+        }
+    }
+
+    conn.execute("DROP TABLE oauth_tokens", []).ok();
+    conn.execute(
+        "CREATE TABLE oauth_tokens (
+            integration_id TEXT PRIMARY KEY,
+            account_email TEXT NOT NULL DEFAULT '',
+            access_token TEXT NOT NULL,
+            refresh_token TEXT,
+            token_type TEXT NOT NULL DEFAULT 'Bearer',
+            expires_at TEXT,
+            scopes TEXT NOT NULL DEFAULT ''
+        )",
+        [],
+    ).ok();
+
+    for (iid, access_token, refresh_token, token_type, expires_at, scopes) in to_insert {
+        conn.execute(
+            "INSERT OR IGNORE INTO oauth_tokens (integration_id, account_email, access_token, refresh_token, token_type, expires_at, scopes) VALUES (?1, '', ?2, ?3, ?4, ?5, ?6)",
+            params![iid, access_token, refresh_token, token_type, expires_at, scopes],
+        ).ok();
+    }
 }
 
 fn migrate_oauth_providers(conn: &Connection) {

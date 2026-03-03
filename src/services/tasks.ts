@@ -31,6 +31,7 @@ export function updateTask(params: {
   priority?: string;
   estimatedMinutes?: number;
   aiDecomposed?: boolean;
+  scheduledDate?: string;
 }): Promise<Task> {
   return invoke<Task>("update_task", params);
 }

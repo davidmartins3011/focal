@@ -190,12 +190,18 @@ async fn parse_token_response(resp: reqwest::Response) -> Result<OAuthTokens, St
 
 // ─── DB helpers ───
 
-pub fn store_tokens(db: &Connection, provider: &str, tokens: &OAuthTokens) -> Result<(), String> {
+pub fn store_tokens(
+    db: &Connection,
+    integration_id: &str,
+    tokens: &OAuthTokens,
+    account_email: &str,
+) -> Result<(), String> {
     db.execute(
-        "INSERT OR REPLACE INTO oauth_tokens (provider, access_token, refresh_token, token_type, expires_at, scopes) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT OR REPLACE INTO oauth_tokens (integration_id, account_email, access_token, refresh_token, token_type, expires_at, scopes) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
-            provider,
+            integration_id,
+            account_email,
             tokens.access_token,
             tokens.refresh_token,
             tokens.token_type,
@@ -207,10 +213,10 @@ pub fn store_tokens(db: &Connection, provider: &str, tokens: &OAuthTokens) -> Re
     Ok(())
 }
 
-pub fn load_tokens(db: &Connection, provider: &str) -> Result<OAuthTokens, String> {
+pub fn load_tokens(db: &Connection, integration_id: &str) -> Result<OAuthTokens, String> {
     db.query_row(
-        "SELECT access_token, refresh_token, token_type, expires_at, scopes FROM oauth_tokens WHERE provider = ?1",
-        params![provider],
+        "SELECT access_token, refresh_token, token_type, expires_at, scopes FROM oauth_tokens WHERE integration_id = ?1",
+        params![integration_id],
         |row| {
             Ok(OAuthTokens {
                 access_token: row.get(0)?,
@@ -221,12 +227,15 @@ pub fn load_tokens(db: &Connection, provider: &str) -> Result<OAuthTokens, Strin
             })
         },
     )
-    .map_err(|_| format!("Aucun token OAuth trouvé pour le provider '{provider}'"))
+    .map_err(|_| format!("Aucun token OAuth trouvé pour l'intégration '{integration_id}'"))
 }
 
-pub fn delete_tokens(db: &Connection, provider: &str) -> Result<(), String> {
-    db.execute("DELETE FROM oauth_tokens WHERE provider = ?1", params![provider])
-        .map_err(|e| e.to_string())?;
+pub fn delete_tokens(db: &Connection, integration_id: &str) -> Result<(), String> {
+    db.execute(
+        "DELETE FROM oauth_tokens WHERE integration_id = ?1",
+        params![integration_id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 

@@ -4,6 +4,12 @@ use tauri::State;
 
 use crate::models::AppState;
 
+#[derive(Deserialize)]
+struct HistoryMsg {
+    role: String,
+    content: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiResponse {
@@ -713,12 +719,59 @@ pub async fn generate_suggestions(
     Err("L'IA n'a pas retourné des suggestions dans un format valide.".to_string())
 }
 
+/// Strip markdown fences and locate the first valid JSON object containing a "content" field.
+fn clean_and_find_json(raw: &str) -> Option<serde_json::Value> {
+    let trimmed = raw.trim();
+    let clean = if trimmed.starts_with("```") {
+        trimmed
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim()
+    } else {
+        trimmed
+    };
+
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(clean) {
+        if parsed.get("content").and_then(|v| v.as_str()).is_some() {
+            return Some(parsed);
+        }
+    }
+
+    for (i, _) in clean.char_indices().filter(|(_, c)| *c == '{') {
+        let slice = &clean[i..];
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(slice) {
+            if parsed.get("content").and_then(|v| v.as_str()).is_some() {
+                return Some(parsed);
+            }
+        }
+    }
+
+    None
+}
+
 // ── Daily Prep ──
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DailyPrepTask {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_minutes: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_date: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyPrepTaskUpdate {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub estimated_minutes: Option<i32>,
 }
@@ -730,13 +783,22 @@ pub struct DailyPrepResponse {
     #[serde(default)]
     pub tasks_to_add: Vec<DailyPrepTask>,
     #[serde(default)]
+    pub tasks_to_remove: Vec<String>,
+    #[serde(default)]
+    pub tasks_to_update: Vec<DailyPrepTaskUpdate>,
+    #[serde(default)]
     pub prep_complete: bool,
 }
 
 fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let tomorrow = (chrono::Local::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+
     let mut parts = vec![
         "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
         "Tu es en mode PRÉPARATION DU JOUR : tu aides l'utilisateur à construire sa journée en discutant avec lui.".to_string(),
+        format!("Date d'aujourd'hui : {today}"),
+        format!("Date de demain : {tomorrow}"),
         String::new(),
         "RÈGLES DE CONVERSATION :".to_string(),
         "- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string(),
@@ -759,6 +821,18 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         "- Ne les ajoute que quand l'utilisateur les mentionne ou confirme. Ne les invente pas.".to_string(),
         "- Si tu n'es pas sûr, demande confirmation avant d'ajouter.".to_string(),
         "- Le champ estimatedMinutes est optionnel — ne l'ajoute que si l'utilisateur donne une estimation ou si tu proposes et qu'il confirme.".to_string(),
+        "- Le champ priority est optionnel : \"main\" pour prioritaire, \"secondary\" pour secondaire. Ne le mets que si l'utilisateur indique la priorité.".to_string(),
+        "- Le champ scheduledDate est optionnel (format YYYY-MM-DD). Par défaut les tâches sont ajoutées pour aujourd'hui. Si l'utilisateur dit \"demain\", \"lundi prochain\", ou une autre date, mets la date correcte.".to_string(),
+        String::new(),
+        "RETRAIT DE TÂCHES :".to_string(),
+        "- Si l'utilisateur demande de retirer/supprimer une tâche, mets son ID dans tasksToRemove.".to_string(),
+        "- Confirme le retrait dans ton message.".to_string(),
+        String::new(),
+        "MODIFICATION DE TÂCHES EXISTANTES :".to_string(),
+        "- Si l'utilisateur veut changer la priorité d'une tâche, ou la déplacer à un autre jour, utilise tasksToUpdate.".to_string(),
+        "- Chaque entrée dans tasksToUpdate contient l'ID de la tâche et les champs à modifier : priority, scheduledDate, estimatedMinutes.".to_string(),
+        "- Pour déprioriser une tâche : mets priority à \"secondary\" ou null.".to_string(),
+        "- Pour déplacer une tâche à un autre jour : mets scheduledDate à la date (YYYY-MM-DD). Exemples : \"demain\" → la date de demain, \"lundi\" → la date du prochain lundi, etc.".to_string(),
         String::new(),
     ];
 
@@ -775,28 +849,36 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         }
     }
 
+    let mut priority_count = 0i32;
     if let Ok(mut stmt) = db.prepare(
-        "SELECT name, done, priority, estimated_minutes FROM tasks WHERE view_context = 'today' ORDER BY position",
+        "SELECT id, name, done, priority, estimated_minutes, scheduled_date FROM tasks WHERE view_context = 'today' ORDER BY position",
     ) {
         if let Ok(tasks) = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, bool>(1)?,
-                row.get::<_, Option<String>>(2)?,
-                row.get::<_, Option<i32>>(3)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, bool>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<i32>>(4)?,
+                row.get::<_, Option<String>>(5)?,
             ))
         }) {
             let task_lines: Vec<String> = tasks
                 .filter_map(|r| r.ok())
-                .map(|(name, done, pri, est)| {
+                .map(|(id, name, done, pri, est, sched)| {
+                    if pri.as_deref() == Some("main") && !done {
+                        priority_count += 1;
+                    }
                     let check = if done { "✓" } else { "○" };
-                    let tag = pri.map_or(String::new(), |p| format!(" [{p}]"));
+                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
                     let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
-                    format!("  {check} {name}{tag}{est_str}")
+                    let sched_str = sched.map_or(String::new(), |s| format!(" (planifié: {s})"));
+                    format!("  {check} [{id}] {name}{tag}{est_str}{sched_str}")
                 })
                 .collect();
             if !task_lines.is_empty() {
                 parts.push("TÂCHES DÉJÀ PRÉSENTES AUJOURD'HUI (pour référence, ne pas re-proposer) :".to_string());
+                parts.push("(L'ID entre crochets est à utiliser pour tasksToRemove et tasksToUpdate)".to_string());
                 parts.extend(task_lines);
                 parts.push(String::new());
             } else {
@@ -806,11 +888,19 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         }
     }
 
+    if priority_count >= 3 {
+        parts.push(format!("ATTENTION : il y a déjà {priority_count} tâches prioritaires (\"main\") aujourd'hui."));
+        parts.push("Si l'utilisateur veut ajouter une nouvelle tâche prioritaire, propose-lui de déprioriser une des tâches existantes. Liste-les dans ton message pour qu'il choisisse.".to_string());
+        parts.push(String::new());
+    }
+
     parts.push("FORMAT DE RÉPONSE :".to_string());
     parts.push("Réponds UNIQUEMENT en JSON valide :".to_string());
-    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "prepComplete": false}"#.to_string());
+    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "prepComplete": false}"#.to_string());
     parts.push("- content : ton message textuel (pas de markdown, utilise \\n pour les paragraphes)".to_string());
-    parts.push("- tasksToAdd : tableau de tâches à ajouter [{\"name\": \"...\", \"estimatedMinutes\": 30}] — vide si rien à ajouter dans ce message".to_string());
+    parts.push(format!(r#"- tasksToAdd : tableau de tâches à ajouter [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{today}"}}] — vide si rien à ajouter"#));
+    parts.push("- tasksToRemove : tableau d'IDs de tâches à supprimer [\"id1\", \"id2\"] — vide si rien à supprimer".to_string());
+    parts.push(format!(r#"- tasksToUpdate : tableau de modifications [{{"id": "...", "priority": "secondary", "scheduledDate": "{tomorrow}"}}] — vide si rien à modifier"#));
     parts.push("- prepComplete : true UNIQUEMENT quand l'utilisateur confirme que la préparation est terminée".to_string());
     parts.push("- Pas de texte avant ou après le JSON".to_string());
 
@@ -818,70 +908,82 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
 }
 
 fn parse_daily_prep_response(raw: &str) -> Result<DailyPrepResponse, String> {
-    let trimmed = raw.trim();
-
-    let clean = if trimmed.starts_with("```") {
-        trimmed
-            .trim_start_matches("```json")
-            .trim_start_matches("```")
-            .trim_end_matches("```")
-            .trim()
-    } else {
-        trimmed
+    let Some(parsed) = clean_and_find_json(raw) else {
+        return Ok(DailyPrepResponse {
+            content: raw.to_string(),
+            tasks_to_add: vec![],
+            tasks_to_remove: vec![],
+            tasks_to_update: vec![],
+            prep_complete: false,
+        });
     };
 
-    fn extract_fields(parsed: &serde_json::Value) -> Option<DailyPrepResponse> {
-        let content = parsed.get("content").and_then(|v| v.as_str())?;
-        let tasks_to_add = parsed
-            .get("tasksToAdd")
-            .or_else(|| parsed.get("tasks_to_add"))
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|t| {
-                        let name = t.get("name").and_then(|v| v.as_str())?.to_string();
-                        let estimated_minutes = t
-                            .get("estimatedMinutes")
-                            .or_else(|| t.get("estimated_minutes"))
-                            .and_then(|v| v.as_i64())
-                            .map(|m| m as i32);
-                        Some(DailyPrepTask { name, estimated_minutes })
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let prep_complete = parsed
-            .get("prepComplete")
-            .or_else(|| parsed.get("prep_complete"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        Some(DailyPrepResponse {
-            content: content.to_string(),
-            tasks_to_add,
-            prep_complete,
+    let content = parsed.get("content").and_then(|v| v.as_str()).unwrap_or(raw).to_string();
+
+    let tasks_to_add = parsed
+        .get("tasksToAdd")
+        .or_else(|| parsed.get("tasks_to_add"))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| {
+                    let name = t.get("name").and_then(|v| v.as_str())?.to_string();
+                    let estimated_minutes = t
+                        .get("estimatedMinutes")
+                        .or_else(|| t.get("estimated_minutes"))
+                        .and_then(|v| v.as_i64())
+                        .map(|m| m as i32);
+                    let priority = t.get("priority").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let scheduled_date = t
+                        .get("scheduledDate")
+                        .or_else(|| t.get("scheduled_date"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    Some(DailyPrepTask { name, estimated_minutes, priority, scheduled_date })
+                })
+                .collect()
         })
-    }
+        .unwrap_or_default();
 
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(clean) {
-        if let Some(resp) = extract_fields(&parsed) {
-            return Ok(resp);
-        }
-    }
+    let tasks_to_remove = parsed
+        .get("tasksToRemove")
+        .or_else(|| parsed.get("tasks_to_remove"))
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .unwrap_or_default();
 
-    for (i, _) in clean.char_indices().filter(|(_, c)| *c == '{') {
-        let slice = &clean[i..];
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(slice) {
-            if let Some(resp) = extract_fields(&parsed) {
-                return Ok(resp);
-            }
-        }
-    }
+    let tasks_to_update = parsed
+        .get("tasksToUpdate")
+        .or_else(|| parsed.get("tasks_to_update"))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| {
+                    let id = t.get("id").and_then(|v| v.as_str())?.to_string();
+                    let priority = t.get("priority").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let scheduled_date = t
+                        .get("scheduledDate")
+                        .or_else(|| t.get("scheduled_date"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let estimated_minutes = t
+                        .get("estimatedMinutes")
+                        .or_else(|| t.get("estimated_minutes"))
+                        .and_then(|v| v.as_i64())
+                        .map(|m| m as i32);
+                    Some(DailyPrepTaskUpdate { id, priority, scheduled_date, estimated_minutes })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
-    Ok(DailyPrepResponse {
-        content: raw.to_string(),
-        tasks_to_add: vec![],
-        prep_complete: false,
-    })
+    let prep_complete = parsed
+        .get("prepComplete")
+        .or_else(|| parsed.get("prep_complete"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    Ok(DailyPrepResponse { content, tasks_to_add, tasks_to_remove, tasks_to_update, prep_complete })
 }
 
 #[tauri::command]
@@ -896,12 +998,6 @@ pub async fn send_daily_prep_message(
         let system = build_daily_prep_prompt(&db);
         (provider.id, provider.api_key, system)
     };
-
-    #[derive(Deserialize)]
-    struct HistoryMsg {
-        role: String,
-        content: String,
-    }
 
     let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
     let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
@@ -994,59 +1090,27 @@ Réponds UNIQUEMENT en JSON valide :
 }
 
 fn parse_onboarding_response(raw: &str) -> Result<OnboardingResponse, String> {
-    let trimmed = raw.trim();
-
-    let clean = if trimmed.starts_with("```") {
-        trimmed
-            .trim_start_matches("```json")
-            .trim_start_matches("```")
-            .trim_end_matches("```")
-            .trim()
-    } else {
-        trimmed
+    let Some(parsed) = clean_and_find_json(raw) else {
+        return Ok(OnboardingResponse {
+            content: raw.to_string(),
+            profile_updates: serde_json::Value::Object(Default::default()),
+            onboarding_complete: false,
+        });
     };
 
-    fn extract_fields(parsed: &serde_json::Value) -> Option<OnboardingResponse> {
-        let content = parsed.get("content").and_then(|v| v.as_str())?;
-        let profile_updates = parsed
-            .get("profileUpdates")
-            .or_else(|| parsed.get("profile_updates"))
-            .cloned()
-            .unwrap_or(serde_json::Value::Object(Default::default()));
-        let onboarding_complete = parsed
-            .get("onboardingComplete")
-            .or_else(|| parsed.get("onboarding_complete"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        Some(OnboardingResponse {
-            content: content.to_string(),
-            profile_updates,
-            onboarding_complete,
-        })
-    }
+    let content = parsed.get("content").and_then(|v| v.as_str()).unwrap_or(raw).to_string();
+    let profile_updates = parsed
+        .get("profileUpdates")
+        .or_else(|| parsed.get("profile_updates"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Object(Default::default()));
+    let onboarding_complete = parsed
+        .get("onboardingComplete")
+        .or_else(|| parsed.get("onboarding_complete"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(clean) {
-        if let Some(resp) = extract_fields(&parsed) {
-            return Ok(resp);
-        }
-    }
-
-    // The LLM sometimes outputs free text before / after the JSON block.
-    // Try parsing from each `{` until we find valid JSON with a "content" field.
-    for (i, _) in clean.char_indices().filter(|(_, c)| *c == '{') {
-        let slice = &clean[i..];
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(slice) {
-            if let Some(resp) = extract_fields(&parsed) {
-                return Ok(resp);
-            }
-        }
-    }
-
-    Ok(OnboardingResponse {
-        content: raw.to_string(),
-        profile_updates: serde_json::Value::Object(Default::default()),
-        onboarding_complete: false,
-    })
+    Ok(OnboardingResponse { content, profile_updates, onboarding_complete })
 }
 
 #[tauri::command]
@@ -1063,12 +1127,6 @@ pub async fn send_onboarding_message(
     };
 
     let system_prompt = build_onboarding_prompt(&current_profile);
-
-    #[derive(Deserialize)]
-    struct HistoryMsg {
-        role: String,
-        content: String,
-    }
 
     let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
     let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();

@@ -10,6 +10,10 @@ export function getChatMessages(): Promise<ChatMessage[]> {
   return invoke<ChatMessage[]>("get_chat_messages");
 }
 
+export function clearChat(): Promise<void> {
+  return invoke<void>("clear_chat");
+}
+
 export function sendMessage(userMessage: string): Promise<AiResponse> {
   return invoke<AiResponse>("send_message", { userMessage });
 }
@@ -33,11 +37,22 @@ export function generateSuggestions(): Promise<Suggestion[]> {
 export interface DailyPrepTask {
   name: string;
   estimatedMinutes?: number;
+  priority?: string;
+  scheduledDate?: string;
+}
+
+export interface DailyPrepTaskUpdate {
+  id: string;
+  priority?: string;
+  scheduledDate?: string;
+  estimatedMinutes?: number;
 }
 
 export interface DailyPrepResponse {
   content: string;
   tasksToAdd: DailyPrepTask[];
+  tasksToRemove: string[];
+  tasksToUpdate: DailyPrepTaskUpdate[];
   prepComplete: boolean;
 }
 

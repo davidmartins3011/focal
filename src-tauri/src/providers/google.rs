@@ -2,9 +2,30 @@ use super::{CalendarEvent, EmailMessage};
 
 pub const AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 pub const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
+const USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
 
-pub const SCOPES: &str =
-    "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly";
+/// Fetches the email address of the authenticated Google account.
+pub async fn fetch_user_email(access_token: &str) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(USERINFO_URL)
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|e| format!("Erreur userinfo Google: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Google userinfo API {status}: {body}"));
+    }
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    data["email"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Email introuvable dans la réponse userinfo".to_string())
+}
 
 pub async fn fetch_calendar_events(
     access_token: &str,

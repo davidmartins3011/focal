@@ -58,11 +58,21 @@ pub fn provider_for_integration(integration_id: &str) -> Option<&'static str> {
     }
 }
 
-/// Returns all integration IDs that share the same OAuth provider.
-pub fn sibling_integrations(provider: &str) -> &'static [&'static str] {
-    match provider {
-        "google" => &["google-calendar", "gmail", "google-drive"],
-        "microsoft" => &["outlook-calendar", "outlook-mail"],
-        _ => &[],
+/// Returns the OAuth scopes needed for a specific integration.
+pub fn scopes_for_integration(integration_id: &str) -> Option<&'static str> {
+    match integration_id {
+        "google-calendar" => Some(
+            "https://www.googleapis.com/auth/calendar.readonly \
+             https://www.googleapis.com/auth/userinfo.email",
+        ),
+        "gmail" => Some(
+            "https://www.googleapis.com/auth/gmail.readonly \
+             https://www.googleapis.com/auth/userinfo.email",
+        ),
+        "google-drive" => Some(
+            "https://www.googleapis.com/auth/drive.readonly \
+             https://www.googleapis.com/auth/userinfo.email",
+        ),
+        _ => None,
     }
 }

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, Task, MicroStep } from "../types";
-import { getChatMessages, sendMessage, sendDailyPrepMessage } from "../services/chat";
-import { getTasks, createTask, setMicroSteps } from "../services/tasks";
+import { getChatMessages, sendMessage, sendDailyPrepMessage, clearChat, type DailyPrepResponse } from "../services/chat";
+import { getTasks, createTask, deleteTask, updateTask, setMicroSteps } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { chatHints } from "../data/chatConstants";
 import { providers } from "../data/settingsData";
@@ -133,25 +133,52 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   }, [messages, isTyping, visibleStepCount]);
 
   const handleDailyPrepResponse = useCallback(
-    async (response: { content: string; tasksToAdd: { name: string; estimatedMinutes?: number }[]; prepComplete: boolean }) => {
+    async (response: DailyPrepResponse) => {
       dailyPrepHistory.current.push({ role: "ai", content: response.content });
 
       const msgId = `ai-${Date.now()}`;
       const aiMsg: ChatMessage = { id: msgId, role: "ai", content: response.content };
       setMessages((prev) => [...prev, aiMsg]);
 
-      if (response.tasksToAdd.length > 0) {
-        for (const t of response.tasksToAdd) {
-          try {
-            const created = await createTask({
-              name: t.name,
-              context: "today",
-              estimatedMinutes: t.estimatedMinutes,
-            });
-            setTodayTasks((prev) => [...prev, created]);
-          } catch (err) {
-            console.error("[ChatPanel] createTask error:", err);
-          }
+      for (const t of response.tasksToAdd) {
+        try {
+          const created = await createTask({
+            name: t.name,
+            context: "today",
+            estimatedMinutes: t.estimatedMinutes,
+            priority: t.priority,
+            scheduledDate: t.scheduledDate,
+          });
+          setTodayTasks((prev) => [...prev, created]);
+        } catch (err) {
+          console.error("[ChatPanel] createTask error:", err);
+        }
+      }
+
+      for (const taskId of response.tasksToRemove) {
+        try {
+          await deleteTask(taskId);
+          setTodayTasks((prev) => prev.filter((t) => t.id !== taskId));
+        } catch (err) {
+          console.error("[ChatPanel] deleteTask error:", err);
+        }
+      }
+
+      for (const upd of response.tasksToUpdate) {
+        try {
+          const updated = await updateTask({
+            id: upd.id,
+            priority: upd.priority,
+            scheduledDate: upd.scheduledDate,
+            estimatedMinutes: upd.estimatedMinutes,
+          });
+          setTodayTasks((prev) =>
+            upd.scheduledDate
+              ? prev.filter((t) => t.id !== upd.id)
+              : prev.map((t) => (t.id === upd.id ? updated : t)),
+          );
+        } catch (err) {
+          console.error("[ChatPanel] updateTask error:", err);
         }
       }
 
@@ -204,25 +231,38 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     startDailyPrep();
   }, [dailyPrepPending, startDailyPrep, onDailyPrepConsumed]);
 
+  const resetInput = useCallback(() => {
+    setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+  }, []);
+
   const send = useCallback(() => {
     const text = input.trim();
     if (!text || isTyping) return;
 
     if (text === "/start-onboarding" && onStartOnboarding) {
-      setInput("");
+      resetInput();
       onStartOnboarding();
       return;
     }
 
     if (text === "/start-day") {
-      setInput("");
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      resetInput();
       startDailyPrep();
       return;
     }
 
-    setInput("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    if (text === "/clear") {
+      resetInput();
+      setMessages([]);
+      setDailyPrepMode(false);
+      dailyPrepHistory.current = [];
+      setError(null);
+      clearChat().catch((err) => console.error("[ChatPanel] clearChat error:", err));
+      return;
+    }
+
+    resetInput();
 
     if (dailyPrepMode) {
       sendPrepMessage(text);
@@ -267,7 +307,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         setError(errMsg);
         console.error("[ChatPanel] sendMessage error:", err);
       });
-  }, [input, isTyping, dailyPrepMode, onStartOnboarding, startDailyPrep, sendPrepMessage]);
+  }, [input, isTyping, dailyPrepMode, onStartOnboarding, startDailyPrep, sendPrepMessage, resetInput]);
 
   const addStepsToTask = useCallback((msgId: string, taskId: string) => {
     const msg = messages.find((m) => m.id === msgId);

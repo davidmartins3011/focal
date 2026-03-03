@@ -5,11 +5,11 @@ use crate::providers::{self, CalendarEvent, EmailMessage, OAuthCredentialsInfo};
 use crate::providers::oauth;
 
 fn load_integration(db: &rusqlite::Connection, id: &str) -> Result<Integration, String> {
-    let (iid, name, desc, icon, connected, category, extra_context, oauth_provider): (String, String, String, String, bool, String, String, Option<String>) = db
+    let (iid, name, desc, icon, connected, category, extra_context, oauth_provider, account_email): (String, String, String, String, bool, String, String, Option<String>, String) = db
         .query_row(
-            "SELECT id, name, description, icon, connected, category, extra_context, oauth_provider FROM integrations WHERE id = ?1",
+            "SELECT id, name, description, icon, connected, category, extra_context, oauth_provider, account_email FROM integrations WHERE id = ?1",
             params![id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
         )
         .map_err(|e| e.to_string())?;
 
@@ -29,6 +29,8 @@ fn load_integration(db: &rusqlite::Connection, id: &str) -> Result<Integration, 
         .filter_map(|r| r.ok())
         .collect();
 
+    let email = if account_email.is_empty() { None } else { Some(account_email) };
+
     Ok(Integration {
         id: iid,
         name,
@@ -41,6 +43,7 @@ fn load_integration(db: &rusqlite::Connection, id: &str) -> Result<Integration, 
             extra_context,
         },
         oauth_provider,
+        account_email: email,
     })
 }
 
@@ -152,31 +155,20 @@ pub async fn start_oauth(
     let provider = providers::provider_for_integration(&integration_id)
         .ok_or_else(|| format!("L'intégration '{integration_id}' ne supporte pas OAuth"))?;
 
-    // 1. Load credentials + check for existing tokens (under DB lock)
-    let (client_id, client_secret, existing_tokens) = {
+    let scopes = providers::scopes_for_integration(&integration_id)
+        .ok_or_else(|| format!("Pas de scopes définis pour '{integration_id}'"))?;
+
+    // 1. Load credentials (under DB lock)
+    let (client_id, client_secret) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        let (cid, csec) = oauth::load_credentials(&db, provider)?;
-        let tokens = oauth::load_tokens(&db, provider).ok();
-        (cid, csec, tokens)
+        oauth::load_credentials(&db, provider)?
     };
 
-    // If we already have tokens, just mark connected (no new OAuth flow needed)
-    if existing_tokens.is_some() {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
-        db.execute(
-            "UPDATE integrations SET connected = 1 WHERE id = ?1",
-            params![integration_id],
-        )
-        .map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-
     // 2. Resolve provider-specific OAuth endpoints
-    let (auth_endpoint, token_endpoint, scopes) = match provider {
+    let (auth_endpoint, token_endpoint) = match provider {
         "google" => (
             providers::google::AUTH_ENDPOINT,
             providers::google::TOKEN_ENDPOINT,
-            providers::google::SCOPES,
         ),
         _ => return Err(format!("Provider OAuth '{provider}' non supporté pour l'instant")),
     };
@@ -191,13 +183,21 @@ pub async fn start_oauth(
     )
     .await?;
 
-    // 4. Store tokens and mark integration(s) as connected
+    // 4. Fetch the connected account's email
+    let account_email = match provider {
+        "google" => providers::google::fetch_user_email(&tokens.access_token)
+            .await
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
+
+    // 5. Store tokens per integration and mark as connected
     {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        oauth::store_tokens(&db, provider, &tokens)?;
+        oauth::store_tokens(&db, &integration_id, &tokens, &account_email)?;
         db.execute(
-            "UPDATE integrations SET connected = 1 WHERE id = ?1",
-            params![integration_id],
+            "UPDATE integrations SET connected = 1, account_email = ?1 WHERE id = ?2",
+            params![account_email, integration_id],
         )
         .map_err(|e| e.to_string())?;
     }
@@ -213,29 +213,12 @@ pub fn disconnect_integration(
     let db = state.db.lock().map_err(|e| e.to_string())?;
 
     db.execute(
-        "UPDATE integrations SET connected = 0 WHERE id = ?1",
+        "UPDATE integrations SET connected = 0, account_email = '' WHERE id = ?1",
         params![integration_id],
     )
     .map_err(|e| e.to_string())?;
 
-    // If no sibling integrations are still connected, revoke/delete the tokens
-    if let Some(provider) = providers::provider_for_integration(&integration_id) {
-        let siblings = providers::sibling_integrations(provider);
-        let placeholders: Vec<String> = siblings.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
-        let sql = format!(
-            "SELECT COUNT(*) FROM integrations WHERE id IN ({}) AND connected = 1",
-            placeholders.join(",")
-        );
-        let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
-        let params: Vec<&dyn rusqlite::types::ToSql> = siblings.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
-        let still_connected: i64 = stmt
-            .query_row(params.as_slice(), |row| row.get(0))
-            .map_err(|e| e.to_string())?;
-
-        if still_connected == 0 {
-            oauth::delete_tokens(&db, provider)?;
-        }
-    }
+    oauth::delete_tokens(&db, &integration_id)?;
 
     load_integration(&db, &integration_id)
 }
@@ -252,7 +235,7 @@ pub async fn fetch_calendar_events(
     let provider = providers::provider_for_integration(&integration_id)
         .ok_or("Intégration non supportée pour le calendrier")?;
 
-    let access_token = resolve_access_token(&state, provider).await?;
+    let access_token = resolve_access_token(&state, &integration_id, provider).await?;
 
     match provider {
         "google" => providers::google::fetch_calendar_events(&access_token, &date_from, &date_to).await,
@@ -270,7 +253,7 @@ pub async fn fetch_emails(
     let provider = providers::provider_for_integration(&integration_id)
         .ok_or("Intégration non supportée pour les emails")?;
 
-    let access_token = resolve_access_token(&state, provider).await?;
+    let access_token = resolve_access_token(&state, &integration_id, provider).await?;
     let max = max_results.unwrap_or(20);
 
     match provider {
@@ -279,14 +262,15 @@ pub async fn fetch_emails(
     }
 }
 
-/// Gets a valid access token for the given provider, refreshing if needed.
+/// Gets a valid access token for the given integration, refreshing if needed.
 async fn resolve_access_token(
     state: &State<'_, AppState>,
+    integration_id: &str,
     provider: &str,
 ) -> Result<String, String> {
     let (tokens, client_id, client_secret) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        let tokens = oauth::load_tokens(&db, provider)?;
+        let tokens = oauth::load_tokens(&db, integration_id)?;
         let (cid, csec) = oauth::load_credentials(&db, provider)?;
         (tokens, cid, csec)
     };
@@ -296,7 +280,14 @@ async fn resolve_access_token(
 
     if let Some(new_tokens) = refreshed {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        oauth::store_tokens(&db, provider, &new_tokens)?;
+        let account_email: String = db
+            .query_row(
+                "SELECT account_email FROM integrations WHERE id = ?1",
+                params![integration_id],
+                |row| row.get(0),
+            )
+            .unwrap_or_default();
+        oauth::store_tokens(&db, integration_id, &new_tokens, &account_email)?;
     }
 
     Ok(access_token)

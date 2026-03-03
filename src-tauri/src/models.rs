@@ -128,6 +128,8 @@ pub struct Integration {
     pub context: IntegrationContext,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oauth_provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_email: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

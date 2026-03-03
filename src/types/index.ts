@@ -192,6 +192,7 @@ export interface Integration {
   category: "calendar" | "email" | "crm" | "messaging" | "storage" | "other";
   context: IntegrationContext;
   oauthProvider?: string;
+  accountEmail?: string;
 }
 
 export type SuggestionImpact = "high" | "medium" | "low";

@@ -135,15 +135,11 @@ function LinearLogo({ size = 28 }: LogoProps) {
 
 function LemlistLogo({ size = 28 }: LogoProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48">
-      <defs>
-        <linearGradient id="lemlist-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#6C5CE7" />
-          <stop offset="100%" stopColor="#a29bfe" />
-        </linearGradient>
-      </defs>
-      <rect width="48" height="48" rx="10" fill="url(#lemlist-grad)" />
-      <path fill="#fff" d="M14 14h4v16h10v4H14V14z" />
+    <svg width={size} height={size} viewBox="0 0 59 59">
+      <path d="M48.28 0H10.46C4.68 0 0 4.7 0 10.5v38c0 5.8 4.68 10.5 10.46 10.5h37.82c5.78 0 10.46-4.7 10.46-10.5v-38C58.74 4.7 54.06 0 48.28 0z" fill="#316BFF" />
+      <path d="M43.01 39.29v2.17c0 .86-.69 1.55-1.54 1.55H21.77c-3.24-.21-5.83-2.81-6.04-6.07V17.17c0-.86.69-1.55 1.54-1.55h2.16c.85 0 1.54.69 1.54 1.55v16.55c0 2.22 1.79 4.03 4.01 4.03h16.48c.85 0 1.54.69 1.54 1.55z" fill="#fff" />
+      <path d="M41.47 15.62H27.77c-.85 0-1.54.69-1.54 1.55v2.17c0 .86.69 1.55 1.54 1.55h13.7c.85 0 1.54-.69 1.54-1.55v-2.17c0-.86-.69-1.55-1.54-1.55z" fill="#fff" />
+      <path d="M39.02 26.68H27.77c-.85 0-1.54.69-1.54 1.55v2.17c0 .86.69 1.55 1.54 1.55h11.25c.85 0 1.54-.69 1.54-1.55v-2.17c0-.86-.69-1.55-1.54-1.55z" fill="#fff" />
     </svg>
   );
 }

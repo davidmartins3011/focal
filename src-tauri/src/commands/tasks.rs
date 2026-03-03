@@ -166,6 +166,7 @@ pub fn update_task(
     priority: Option<String>,
     estimated_minutes: Option<i32>,
     ai_decomposed: Option<bool>,
+    scheduled_date: Option<String>,
 ) -> Result<Task, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     if let Some(v) = &name {
@@ -186,6 +187,10 @@ pub fn update_task(
     }
     if let Some(v) = ai_decomposed {
         db.execute("UPDATE tasks SET ai_decomposed = ?1 WHERE id = ?2", params![v, id])
+            .map_err(|e| e.to_string())?;
+    }
+    if let Some(v) = &scheduled_date {
+        db.execute("UPDATE tasks SET scheduled_date = ?1 WHERE id = ?2", params![v, id])
             .map_err(|e| e.to_string())?;
     }
     load_task(&db, &id)

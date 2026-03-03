@@ -240,11 +240,36 @@
   color: var(--accent);
 }
 
+.oauthBannerClose {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.oauthBannerClose:hover {
+  background: rgba(0, 0, 0, 0.15);
+  color: var(--text);
+}
+
 /* ─── Connecting state ─── */
 
 .connectingBtn {
-  opacity: 0.7;
-  cursor: wait !important;
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.2);
+  color: var(--text2);
+}
+
+.connectingBtn:hover {
+  background: rgba(var(--red-rgb), 0.08);
+  border-color: rgba(var(--red-rgb), 0.25);
+  color: var(--red);
 }
 
 .spinner {
@@ -432,6 +457,124 @@
 
 .modalSaveBtn:hover {
   filter: brightness(1.1);
+}
+
+/* ─── Provider Status Popup ─── */
+
+.providerStatusIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--bg2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.providerStatusBody {
+  padding: 8px 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.providerStatusItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  transition: all 0.15s;
+}
+
+.providerStatusConnected {
+  border-color: rgba(var(--accent-rgb), 0.15);
+}
+
+.providerStatusItemLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.providerStatusItemIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--bg3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.providerStatusConnected .providerStatusItemIcon {
+  background: var(--accent-soft);
+}
+
+.providerStatusItemName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.providerStatusItemDesc {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 1px;
+}
+
+.providerStatusItemRight {
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.providerDisconnectBtn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: none;
+  border: 1px solid rgba(var(--red-rgb), 0.25);
+  color: var(--red);
+}
+
+.providerDisconnectBtn:hover {
+  background: rgba(var(--red-rgb), 0.08);
+  border-color: rgba(var(--red-rgb), 0.4);
+}
+
+.providerStatusItemEmail {
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 1px;
+  font-weight: 400;
+}
+
+.providerConnectBtn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: none;
+  border: 1px solid var(--border2);
+  color: var(--text2);
+}
+
+.providerConnectBtn:hover {
+  background: var(--bg4);
+  color: var(--text);
+  border-color: var(--text3);
 }
 
 /* ─── Context Panel ─── */
