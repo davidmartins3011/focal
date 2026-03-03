@@ -6,6 +6,7 @@ interface NotificationCenterProps {
   onDismiss: (id: string) => void;
   onDismissAll: () => void;
   onClose: () => void;
+  onAction: (reminderId: string) => void;
 }
 
 function formatTime(iso: string): string {
@@ -20,6 +21,7 @@ export default function NotificationCenter({
   onDismiss,
   onDismissAll,
   onClose,
+  onAction,
 }: NotificationCenterProps) {
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -77,7 +79,15 @@ export default function NotificationCenter({
                   </div>
                   <div className={styles.catchupItems}>
                     {missedEntries.map((entry) => (
-                      <div key={entry.id} className={styles.catchupItem}>
+                      <div
+                        key={entry.id}
+                        className={styles.catchupItem}
+                        onClick={() => {
+                          onDismiss(entry.id);
+                          onAction(entry.reminderId);
+                        }}
+                        style={{ cursor: "pointer" }}
+                      >
                         <span className={styles.catchupItemIcon}>{entry.icon}</span>
                         <span className={styles.catchupItemLabel}>{entry.label}</span>
                         <span className={styles.catchupItemTime}>{entry.scheduledTime}</span>
@@ -97,14 +107,24 @@ export default function NotificationCenter({
                 <div
                   key={entry.id}
                   className={styles.item}
-                  onClick={() => onDismiss(entry.id)}
+                  onClick={() => {
+                    onDismiss(entry.id);
+                    onAction(entry.reminderId);
+                  }}
                 >
                   <span className={styles.itemIcon}>{entry.icon}</span>
                   <div className={styles.itemBody}>
                     <div className={styles.itemLabel}>{entry.label}</div>
                     <div className={styles.itemDesc}>{entry.description}</div>
                   </div>
-                  <span className={styles.itemTime}>{formatTime(entry.firedAt)}</span>
+                  <div className={styles.itemRight}>
+                    <span className={styles.itemTime}>{formatTime(entry.firedAt)}</span>
+                    <span className={styles.itemAction}>
+                      <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+                        <path d="M6 12l4-4-4-4" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                  </div>
                 </div>
               ))}
             </>

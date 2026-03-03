@@ -220,9 +220,31 @@
   line-height: 1.3;
 }
 
+.itemRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 4px;
+  margin-top: 2px;
+}
+
 .itemTime {
   font-size: 11px;
   color: var(--text3);
-  flex-shrink: 0;
-  margin-top: 2px;
+}
+
+.itemAction {
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.item:hover .itemAction {
+  opacity: 1;
+}
+
+.catchupItem:hover {
+  background: rgba(var(--accent-rgb), 0.08);
+  border-radius: var(--radius-sm);
 }

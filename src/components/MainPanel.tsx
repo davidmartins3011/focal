@@ -2,18 +2,12 @@ import { useMemo } from "react";
 import TodayView from "./TodayView";
 import WeekView from "./WeekView";
 import StrategyView from "./StrategyView";
+import { getISOWeekNumber } from "../utils/dateFormat";
 import type { ViewTab, StrategyFrequency } from "../types";
 import styles from "./MainPanel.module.css";
 
 const DAY_NAMES = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 const MONTH_SHORT = ["jan.", "fév.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
-
-function getISOWeekNumber(d: Date): number {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-}
 
 interface Props {
   activeTab: ViewTab;

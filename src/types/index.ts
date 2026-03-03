@@ -27,7 +27,7 @@ export interface WeekDay {
   date: number;
   isToday: boolean;
   taskSummary: string;
-  dots: ("done" | "pending" | "empty")[];
+  dots: ("done" | "pending")[];
 }
 
 export interface ChatMessage {
@@ -70,8 +70,6 @@ export interface UserProfile {
   mainContextOther?: string;
   jobActivity?: string;
   profileResearch?: boolean;
-  profileResearchIdentifier?: "entreprise" | "site_web" | "linkedin" | "autre";
-  profileResearchIdentifierValue?: string;
   /** Sources à scraper (LinkedIn, site web, etc.) — plusieurs possibles */
   profileResearchSources?: ProfileResearchSource[];
   adhdRecognition?: "diagnostique" | "fortement" | "un_peu" | "non";

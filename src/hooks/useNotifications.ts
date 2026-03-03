@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { NotificationSettings, NotificationHistoryEntry, WeekDayId, NotificationReminder } from "../types";
 import { defaultReminders } from "../data/settingsData";
 import { getSetting, setSetting } from "../services/settings";
+import { getISOWeekNumber } from "../utils/dateFormat";
 import {
   getNotificationHistory,
   addNotificationEntry,
@@ -9,10 +10,11 @@ import {
   markAllNotificationsRead,
   updateBadgeCount,
 } from "../services/notifications";
+import { invoke } from "@tauri-apps/api/core";
 import {
   isPermissionGranted,
   requestPermission,
-  sendNotification,
+  onAction,
 } from "@tauri-apps/plugin-notification";
 
 const JS_DAY_TO_WEEKDAY: Record<number, WeekDayId> = {
@@ -41,20 +43,16 @@ async function ensureNativePermission(): Promise<boolean> {
   }
 }
 
-async function sendNativeNotification(title: string, body: string) {
+async function sendNativeNotification(title: string, body: string, reminderId?: string) {
   const granted = await ensureNativePermission();
   if (!granted) return;
   try {
-    sendNotification({ title, body });
+    await invoke("plugin:notification|notify", {
+      title,
+      body,
+      extra: reminderId ? { reminderId } : undefined,
+    });
   } catch { /* silently ignore */ }
-}
-
-function getISOWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
 function isMonthActiveForFrequency(
@@ -163,8 +161,22 @@ export function useNotifications() {
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(defaultNotifSettings);
   const [notifHistory, setNotifHistory] = useState<NotificationHistoryEntry[]>([]);
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const firedRef = useRef<Set<string>>(new Set());
   const loaded = useRef(false);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    onAction((notification) => {
+      const reminderId = (notification.extra as Record<string, unknown> | undefined)?.reminderId as string | undefined;
+      if (reminderId) {
+        setPendingNavigation(reminderId);
+      }
+    }).then((listener) => {
+      unlisten = () => listener.unregister();
+    });
+    return () => unlisten?.();
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -205,6 +217,7 @@ export function useNotifications() {
             sendNativeNotification(
               `${m.icon} ${m.label} (manqué)`,
               m.description,
+              m.reminderId,
             );
           }
         }
@@ -264,7 +277,7 @@ export function useNotifications() {
         if (firedRef.current.has(firedKey)) continue;
         firedRef.current.add(firedKey);
 
-        sendNativeNotification(`${r.icon} ${r.label}`, r.description);
+        sendNativeNotification(`${r.icon} ${r.label}`, r.description, r.id);
 
         addHistoryEntry({
           id: firedKey,
@@ -295,7 +308,7 @@ export function useNotifications() {
 
     const testId = `test-${Date.now()}`;
 
-    sendNativeNotification(`${sample.icon} ${sample.label}`, sample.description);
+    sendNativeNotification(`${sample.icon} ${sample.label}`, sample.description, sample.id);
 
     addHistoryEntry({
       id: testId,
@@ -320,6 +333,10 @@ export function useNotifications() {
   const handleDismissAll = useCallback(() => {
     setNotifHistory((prev) => prev.map((e) => ({ ...e, read: true })));
     markAllNotificationsRead().catch(() => {});
+  }, []);
+
+  const clearPendingNavigation = useCallback(() => {
+    setPendingNavigation(null);
   }, []);
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -347,5 +364,7 @@ export function useNotifications() {
     handleDismissAll,
     hasUnreadNotifs,
     unreadCount,
+    pendingNavigation,
+    clearPendingNavigation,
   };
 }

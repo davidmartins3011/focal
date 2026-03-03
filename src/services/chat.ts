@@ -10,14 +10,6 @@ export function getChatMessages(): Promise<ChatMessage[]> {
   return invoke<ChatMessage[]>("get_chat_messages");
 }
 
-export function addChatMessage(
-  role: string,
-  content: string,
-  steps?: string[],
-): Promise<ChatMessage> {
-  return invoke<ChatMessage>("add_chat_message", { role, content, steps });
-}
-
 export function sendMessage(userMessage: string): Promise<AiResponse> {
   return invoke<AiResponse>("send_message", { userMessage });
 }

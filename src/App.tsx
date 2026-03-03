@@ -173,6 +173,46 @@ export default function App() {
     }));
   }, [notif]);
 
+  const navigateToReminder = useCallback((reminderId: string) => {
+    switch (reminderId) {
+      case "morning-plan":
+        setActivePage("main");
+        setActiveTab("today");
+        setDailyPrepPending(true);
+        break;
+      case "focus-checkin":
+      case "lunch-break":
+      case "afternoon-boost":
+        setActivePage("main");
+        setActiveTab("today");
+        break;
+      case "daily-review":
+        setActivePage("main");
+        setActiveTab("today");
+        break;
+      case "weekly-prep":
+      case "weekly-review":
+        setActivePage("main");
+        setActiveTab("week");
+        break;
+      case "strategy-review":
+        setActivePage("main");
+        setActiveTab("strategy");
+        break;
+      default:
+        setActivePage("main");
+        setActiveTab("today");
+    }
+    notif.setNotifCenterOpen(false);
+  }, [notif]);
+
+  useEffect(() => {
+    if (notif.pendingNavigation) {
+      navigateToReminder(notif.pendingNavigation);
+      notif.clearPendingNavigation();
+    }
+  }, [notif.pendingNavigation, navigateToReminder, notif]);
+
   const handleStartOnboarding = useCallback(() => {
     setSetting("onboarding-completed", "false").catch(() => {});
     setOnboardingDone(false);
@@ -273,6 +313,7 @@ export default function App() {
           onDismiss={notif.handleDismissNotif}
           onDismissAll={notif.handleDismissAll}
           onClose={() => notif.setNotifCenterOpen(false)}
+          onAction={navigateToReminder}
         />
       )}
     </div>

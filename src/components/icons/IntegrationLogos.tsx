@@ -133,6 +133,21 @@ function LinearLogo({ size = 28 }: LogoProps) {
   );
 }
 
+function LemlistLogo({ size = 28 }: LogoProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48">
+      <defs>
+        <linearGradient id="lemlist-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#6C5CE7" />
+          <stop offset="100%" stopColor="#a29bfe" />
+        </linearGradient>
+      </defs>
+      <rect width="48" height="48" rx="10" fill="url(#lemlist-grad)" />
+      <path fill="#fff" d="M14 14h4v16h10v4H14V14z" />
+    </svg>
+  );
+}
+
 export const integrationLogos: Record<string, (props: LogoProps) => ReactNode> = {
   "google-calendar": GoogleCalendarLogo,
   "outlook-calendar": OutlookCalendarLogo,
@@ -144,4 +159,5 @@ export const integrationLogos: Record<string, (props: LogoProps) => ReactNode> =
   "notion": NotionLogo,
   "google-drive": GoogleDriveLogo,
   "linear": LinearLogo,
+  "lemlist": LemlistLogo,
 };

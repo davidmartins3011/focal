@@ -57,7 +57,6 @@ pub fn run() {
             commands::settings::get_all_settings,
             commands::reviews::get_strategy_reviews,
             commands::chat::get_chat_messages,
-            commands::chat::add_chat_message,
             commands::integrations::get_integrations,
             commands::integrations::update_integration_connection,
             commands::integrations::update_integration_context,

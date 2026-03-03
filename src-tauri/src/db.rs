@@ -472,6 +472,7 @@ fn seed_integrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     ins("notion", "Notion", "Synchronise tes pages et bases de données", "📓", "storage", None)?;
     ins("google-drive", "Google Drive", "Accède à tes fichiers et documents", "📁", "storage", Some("google"))?;
     ins("linear", "Linear", "Synchronise tes tickets et projets", "◆", "other", None)?;
+    ins("lemlist", "Lemlist", "Automatise tes campagnes d'outreach et de prospection", "📨", "crm", None)?;
     Ok(())
 }
 

@@ -289,10 +289,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep }: Tod
       });
   }
 
-  function handleStuck(_taskId: string) {
-    // Will open chat panel with context when backend is connected
-  }
-
   function selectTask(id: string) {
     setSelectedTaskId(id);
   }
@@ -429,7 +425,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep }: Tod
                 onRedecompose={redecompose}
                 onDecomposeStep={decomposeStep}
                 onEditStep={editStep}
-                onStuck={handleStuck}
                 onUpdateEstimate={updateEstimate}
                 onUpdateStepEstimate={updateStepEstimate}
                 isDecomposing={decomposingId === task.id}
@@ -464,7 +459,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep }: Tod
                     onRedecompose={redecompose}
                     onDecomposeStep={decomposeStep}
                     onEditStep={editStep}
-                    onStuck={handleStuck}
                     onUpdateEstimate={updateEstimate}
                     onUpdateStepEstimate={updateStepEstimate}
                     isDecomposing={decomposingId === task.id}
