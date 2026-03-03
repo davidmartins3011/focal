@@ -41,6 +41,16 @@ function chipLabel(review: StrategyReview, freq: StrategyFrequency): string {
   return `S${s}`;
 }
 
+function periodTitleLabel(review: StrategyReview, freq: StrategyFrequency): string {
+  const first = MONTH_NAMES[review.month];
+  if (freq === "monthly") return first;
+  const step =
+    freq === "bimonthly" ? 2 :
+    freq === "quarterly" ? 3 : 6;
+  const lastMonth = (review.month + step - 1) % 12;
+  return `${first}-${MONTH_NAMES[lastMonth]}`;
+}
+
 interface StrategyViewProps {
   frequency: StrategyFrequency;
   cycleStart: number;
@@ -122,7 +132,7 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
             <span className={styles.ctaIcon}>🧭</span>
             <div>
               <div className={styles.ctaTitle}>
-                Prise de recul — {MONTH_NAMES[review.month]} {review.year}
+                Prise de recul — {periodTitleLabel(review, frequency)} {review.year}
               </div>
               <div className={`${styles.ctaMeta} ${nudge ? styles.ctaMetaNudge : ""}`}>
                 {nudge
@@ -144,7 +154,7 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
           <span className={styles.pastIcon}>📖</span>
           <div>
             <div className={styles.pastTitle}>
-              {MONTH_NAMES[review.month]} {review.year}
+              {periodTitleLabel(review, frequency)} {review.year}
             </div>
             <div className={styles.pastMeta}>
               Revue réalisée il y a {daysSince} jours

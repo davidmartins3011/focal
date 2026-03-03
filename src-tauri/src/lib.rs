@@ -23,6 +23,16 @@ pub fn run() {
             app.manage(AppState {
                 db: Mutex::new(conn),
             });
+
+            #[cfg(target_os = "macos")]
+            if let Some(ref window) = app.get_webview_window("main") {
+                if let Ok(icon) = tauri::image::Image::from_bytes(
+                    include_bytes!("../icons/128x128.png"),
+                ) {
+                    let _ = window.set_icon(icon);
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -63,10 +73,12 @@ pub fn run() {
             commands::notifications::add_notification_entry,
             commands::notifications::mark_notification_read,
             commands::notifications::mark_all_notifications_read,
+            commands::notifications::set_badge_count,
             commands::ai::validate_api_key,
             commands::ai::send_message,
             commands::ai::decompose_task,
             commands::ai::generate_suggestions,
+            commands::ai::send_daily_prep_message,
             commands::ai::send_onboarding_message,
             commands::ai::analyze_profile_url,
         ])

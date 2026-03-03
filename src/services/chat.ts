@@ -38,6 +38,27 @@ export function generateSuggestions(): Promise<Suggestion[]> {
   return invoke<Suggestion[]>("generate_suggestions");
 }
 
+export interface DailyPrepTask {
+  name: string;
+  estimatedMinutes?: number;
+}
+
+export interface DailyPrepResponse {
+  content: string;
+  tasksToAdd: DailyPrepTask[];
+  prepComplete: boolean;
+}
+
+export function sendDailyPrepMessage(
+  userMessage: string,
+  history: { role: string; content: string }[],
+): Promise<DailyPrepResponse> {
+  return invoke<DailyPrepResponse>("send_daily_prep_message", {
+    userMessage,
+    history: JSON.stringify(history),
+  });
+}
+
 export interface OnboardingResponse {
   content: string;
   profileUpdates: Partial<UserProfile>;

@@ -64,9 +64,10 @@ function SortableTaskItem(props: React.ComponentProps<typeof TaskItem>) {
 
 interface TodayViewProps {
   dailyPriorityCount: number;
+  onLaunchDailyPrep?: () => void;
 }
 
-export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
+export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep }: TodayViewProps) {
   const [prepDone, setPrepDone] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [streak, setStreak] = useState(0);
@@ -366,7 +367,8 @@ export default function TodayView({ dailyPriorityCount }: TodayViewProps) {
 
   const launchPrep = useCallback(() => {
     dismissPrep();
-  }, [dismissPrep]);
+    onLaunchDailyPrep?.();
+  }, [dismissPrep, onLaunchDailyPrep]);
 
   return (
     <div>

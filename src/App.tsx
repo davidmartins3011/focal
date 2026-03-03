@@ -9,7 +9,6 @@ import SuggestionsView from "./components/SuggestionsView";
 import TodoView from "./components/TodoView";
 import SettingsView from "./components/SettingsView";
 import OnboardingView from "./components/OnboardingView";
-import NotificationToast from "./components/NotificationToast";
 import NotificationCenter from "./components/NotificationCenter";
 import type { ViewTab, SidebarPage, ThemeId, AISettings, StrategyFrequency, FrequencyOccurrence, WeekDayId } from "./types";
 import { useNotifications } from "./hooks/useNotifications";
@@ -41,6 +40,7 @@ export default function App() {
   const [strategyOccurrence, setStrategyOccurrence] = useState<FrequencyOccurrence>("last");
   const [strategyDay, setStrategyDay] = useState<WeekDayId>("dim");
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+  const [dailyPrepPending, setDailyPrepPending] = useState(false);
   const loaded = useRef(false);
 
   const notif = useNotifications();
@@ -173,29 +173,13 @@ export default function App() {
     }));
   }, [notif]);
 
-  const handleToastAction = useCallback((toastId: string) => {
-    const toast = notif.toasts.find((t) => t.id === toastId);
-    if (!toast?.reminderId) return;
-
-    const rid = toast.reminderId;
-    if (rid === "morning-plan") {
-      setActivePage("main");
-      setActiveTab("today");
-    } else if (rid === "weekly-prep" || rid === "weekly-review") {
-      setActivePage("main");
-      setActiveTab("week");
-    } else if (rid === "daily-review") {
-      setActivePage("main");
-      setActiveTab("today");
-    } else if (rid === "strategy-review") {
-      setActivePage("main");
-      setActiveTab("strategy");
-    }
-  }, [notif.toasts]);
-
   const handleStartOnboarding = useCallback(() => {
     setSetting("onboarding-completed", "false").catch(() => {});
     setOnboardingDone(false);
+  }, []);
+
+  const handleLaunchDailyPrep = useCallback(() => {
+    setDailyPrepPending(true);
   }, []);
 
   const renderPage = () => {
@@ -240,6 +224,7 @@ export default function App() {
             dailyPriorityCount={dailyPriorityCount}
             strategyFrequency={strategyFrequency}
             strategyCycleStart={strategyCycleStart}
+            onLaunchDailyPrep={handleLaunchDailyPrep}
           />
         );
     }
@@ -276,13 +261,12 @@ export default function App() {
         </div>
       </div>
       <div className={styles.right}>
-        <ChatPanel onStartOnboarding={handleStartOnboarding} />
+        <ChatPanel
+          onStartOnboarding={handleStartOnboarding}
+          dailyPrepPending={dailyPrepPending}
+          onDailyPrepConsumed={() => setDailyPrepPending(false)}
+        />
       </div>
-      <NotificationToast
-        toasts={notif.toasts}
-        onDismiss={notif.dismissToast}
-        onAction={handleToastAction}
-      />
       {notif.notifCenterOpen && (
         <NotificationCenter
           history={notif.notifHistory}

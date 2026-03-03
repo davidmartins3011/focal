@@ -77,3 +77,13 @@ pub fn mark_all_notifications_read(state: State<'_, AppState>) -> Result<(), Str
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[tauri::command]
+pub fn set_badge_count(app: tauri::AppHandle, count: u32) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(window) = app.get_webview_window("main") {
+        let value = if count == 0 { None } else { Some(count as i64) };
+        window.set_badge_count(value).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

@@ -24,3 +24,7 @@ export function markNotificationRead(id: string): Promise<void> {
 export function markAllNotificationsRead(): Promise<void> {
   return invoke<void>("mark_all_notifications_read");
 }
+
+export function updateBadgeCount(count: number): Promise<void> {
+  return invoke<void>("set_badge_count", { count });
+}

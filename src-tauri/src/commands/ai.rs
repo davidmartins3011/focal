@@ -713,6 +713,204 @@ pub async fn generate_suggestions(
     Err("L'IA n'a pas retourné des suggestions dans un format valide.".to_string())
 }
 
+// ── Daily Prep ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyPrepTask {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_minutes: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyPrepResponse {
+    pub content: String,
+    #[serde(default)]
+    pub tasks_to_add: Vec<DailyPrepTask>,
+    #[serde(default)]
+    pub prep_complete: bool,
+}
+
+fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
+    let mut parts = vec![
+        "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
+        "Tu es en mode PRÉPARATION DU JOUR : tu aides l'utilisateur à construire sa journée en discutant avec lui.".to_string(),
+        String::new(),
+        "RÈGLES DE CONVERSATION :".to_string(),
+        "- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string(),
+        "- Tu ne dictes PAS quoi faire. Tu DEMANDES à l'utilisateur ce qu'il a prévu, ce qui est important, etc.".to_string(),
+        "- Tu es un facilitateur : tu aides à formuler, clarifier, prioriser — mais c'est l'utilisateur qui décide.".to_string(),
+        "- Tutoie l'utilisateur. Sois chaleureux, bienveillant et encourageant.".to_string(),
+        "- Ne fais jamais la morale. Pas de jugement.".to_string(),
+        "- Sois concis : des messages courts et naturels, pas des pavés.".to_string(),
+        String::new(),
+        "DÉROULEMENT NATUREL (pas un script rigide, adapte-toi) :".to_string(),
+        "1. Demande ce que l'utilisateur a prévu ou en tête pour aujourd'hui".to_string(),
+        "2. Quand il décrit des choses à faire, propose de les ajouter comme tâches (via tasksToAdd)".to_string(),
+        "3. Continue à explorer : \"Il y a autre chose ?\" / \"Des réunions, des deadlines ?\"".to_string(),
+        "4. Quand il semble avoir tout listé, aide à prioriser : \"Si tu devais n'en faire que 2-3, lesquelles ?\"".to_string(),
+        "5. Propose d'estimer les durées si pertinent".to_string(),
+        "6. Confirme le plan et propose de lancer la journée (prepComplete: true)".to_string(),
+        String::new(),
+        "AJOUT DE TÂCHES :".to_string(),
+        "- Quand l'utilisateur mentionne quelque chose à faire, mets-le dans tasksToAdd.".to_string(),
+        "- Ne les ajoute que quand l'utilisateur les mentionne ou confirme. Ne les invente pas.".to_string(),
+        "- Si tu n'es pas sûr, demande confirmation avant d'ajouter.".to_string(),
+        "- Le champ estimatedMinutes est optionnel — ne l'ajoute que si l'utilisateur donne une estimation ou si tu proposes et qu'il confirme.".to_string(),
+        String::new(),
+    ];
+
+    if let Ok(profile_json) = db.query_row(
+        "SELECT data FROM user_profile WHERE id = 1",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        if let Ok(profile) = serde_json::from_str::<serde_json::Value>(&profile_json) {
+            if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
+                parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
+                parts.push(String::new());
+            }
+        }
+    }
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT name, done, priority, estimated_minutes FROM tasks WHERE view_context = 'today' ORDER BY position",
+    ) {
+        if let Ok(tasks) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, bool>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<i32>>(3)?,
+            ))
+        }) {
+            let task_lines: Vec<String> = tasks
+                .filter_map(|r| r.ok())
+                .map(|(name, done, pri, est)| {
+                    let check = if done { "✓" } else { "○" };
+                    let tag = pri.map_or(String::new(), |p| format!(" [{p}]"));
+                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
+                    format!("  {check} {name}{tag}{est_str}")
+                })
+                .collect();
+            if !task_lines.is_empty() {
+                parts.push("TÂCHES DÉJÀ PRÉSENTES AUJOURD'HUI (pour référence, ne pas re-proposer) :".to_string());
+                parts.extend(task_lines);
+                parts.push(String::new());
+            } else {
+                parts.push("AUCUNE TÂCHE AUJOURD'HUI — la journée est vierge, c'est le moment de la construire.".to_string());
+                parts.push(String::new());
+            }
+        }
+    }
+
+    parts.push("FORMAT DE RÉPONSE :".to_string());
+    parts.push("Réponds UNIQUEMENT en JSON valide :".to_string());
+    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "prepComplete": false}"#.to_string());
+    parts.push("- content : ton message textuel (pas de markdown, utilise \\n pour les paragraphes)".to_string());
+    parts.push("- tasksToAdd : tableau de tâches à ajouter [{\"name\": \"...\", \"estimatedMinutes\": 30}] — vide si rien à ajouter dans ce message".to_string());
+    parts.push("- prepComplete : true UNIQUEMENT quand l'utilisateur confirme que la préparation est terminée".to_string());
+    parts.push("- Pas de texte avant ou après le JSON".to_string());
+
+    parts.join("\n")
+}
+
+fn parse_daily_prep_response(raw: &str) -> Result<DailyPrepResponse, String> {
+    let trimmed = raw.trim();
+
+    let clean = if trimmed.starts_with("```") {
+        trimmed
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim()
+    } else {
+        trimmed
+    };
+
+    fn extract_fields(parsed: &serde_json::Value) -> Option<DailyPrepResponse> {
+        let content = parsed.get("content").and_then(|v| v.as_str())?;
+        let tasks_to_add = parsed
+            .get("tasksToAdd")
+            .or_else(|| parsed.get("tasks_to_add"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|t| {
+                        let name = t.get("name").and_then(|v| v.as_str())?.to_string();
+                        let estimated_minutes = t
+                            .get("estimatedMinutes")
+                            .or_else(|| t.get("estimated_minutes"))
+                            .and_then(|v| v.as_i64())
+                            .map(|m| m as i32);
+                        Some(DailyPrepTask { name, estimated_minutes })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let prep_complete = parsed
+            .get("prepComplete")
+            .or_else(|| parsed.get("prep_complete"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        Some(DailyPrepResponse {
+            content: content.to_string(),
+            tasks_to_add,
+            prep_complete,
+        })
+    }
+
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(clean) {
+        if let Some(resp) = extract_fields(&parsed) {
+            return Ok(resp);
+        }
+    }
+
+    for (i, _) in clean.char_indices().filter(|(_, c)| *c == '{') {
+        let slice = &clean[i..];
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(slice) {
+            if let Some(resp) = extract_fields(&parsed) {
+                return Ok(resp);
+            }
+        }
+    }
+
+    Ok(DailyPrepResponse {
+        content: raw.to_string(),
+        tasks_to_add: vec![],
+        prep_complete: false,
+    })
+}
+
+#[tauri::command]
+pub async fn send_daily_prep_message(
+    state: State<'_, AppState>,
+    user_message: String,
+    history: String,
+) -> Result<DailyPrepResponse, String> {
+    let (provider_id, api_key, system_prompt) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let provider = get_active_provider(&db)?;
+        let system = build_daily_prep_prompt(&db);
+        (provider.id, provider.api_key, system)
+    };
+
+    #[derive(Deserialize)]
+    struct HistoryMsg {
+        role: String,
+        content: String,
+    }
+
+    let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
+    let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
+    msgs.push(("user".to_string(), user_message));
+
+    let raw = call_llm(&provider_id, &api_key, &system_prompt, msgs).await?;
+    parse_daily_prep_response(&raw)
+}
+
 // ── Onboarding ──
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

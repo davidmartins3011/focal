@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, Task, MicroStep } from "../types";
-import { getChatMessages, sendMessage } from "../services/chat";
-import { getTasks, setMicroSteps } from "../services/tasks";
+import { getChatMessages, sendMessage, sendDailyPrepMessage } from "../services/chat";
+import { getTasks, createTask, setMicroSteps } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { chatHints } from "../data/chatConstants";
 import { providers } from "../data/settingsData";
@@ -36,9 +36,11 @@ function getAvailableModels(settings: AISettings): AvailableModel[] {
 
 interface ChatPanelProps {
   onStartOnboarding?: () => void;
+  dailyPrepPending?: boolean;
+  onDailyPrepConsumed?: () => void;
 }
 
-export default function ChatPanel({ onStartOnboarding }: ChatPanelProps) {
+export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -50,6 +52,8 @@ export default function ChatPanel({ onStartOnboarding }: ChatPanelProps) {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [pickingFor, setPickingFor] = useState<string | null>(null);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
+  const [dailyPrepMode, setDailyPrepMode] = useState(false);
+  const dailyPrepHistory = useRef<{ role: string; content: string }[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -128,6 +132,78 @@ export default function ChatPanel({ onStartOnboarding }: ChatPanelProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping, visibleStepCount]);
 
+  const handleDailyPrepResponse = useCallback(
+    async (response: { content: string; tasksToAdd: { name: string; estimatedMinutes?: number }[]; prepComplete: boolean }) => {
+      dailyPrepHistory.current.push({ role: "ai", content: response.content });
+
+      const msgId = `ai-${Date.now()}`;
+      const aiMsg: ChatMessage = { id: msgId, role: "ai", content: response.content };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      if (response.tasksToAdd.length > 0) {
+        for (const t of response.tasksToAdd) {
+          try {
+            const created = await createTask({
+              name: t.name,
+              context: "today",
+              estimatedMinutes: t.estimatedMinutes,
+            });
+            setTodayTasks((prev) => [...prev, created]);
+          } catch (err) {
+            console.error("[ChatPanel] createTask error:", err);
+          }
+        }
+      }
+
+      if (response.prepComplete) {
+        setDailyPrepMode(false);
+        dailyPrepHistory.current = [];
+      }
+    },
+    [],
+  );
+
+  const sendPrepMessage = useCallback(
+    (text: string) => {
+      if (isTyping) return;
+
+      dailyPrepHistory.current.push({ role: "user", content: text });
+
+      const userMsg: ChatMessage = { id: `tmp-${Date.now()}`, role: "user", content: text };
+      setMessages((prev) => [...prev, userMsg]);
+      setError(null);
+      setIsTyping(true);
+
+      sendDailyPrepMessage(text, dailyPrepHistory.current.slice(0, -1))
+        .then((response) => {
+          setIsTyping(false);
+          handleDailyPrepResponse(response);
+          textareaRef.current?.focus();
+        })
+        .catch((err) => {
+          setIsTyping(false);
+          const errMsg = typeof err === "string" ? err : String(err);
+          setError(errMsg);
+          console.error("[ChatPanel] daily prep error:", err);
+        });
+    },
+    [isTyping, handleDailyPrepResponse],
+  );
+
+  const startDailyPrep = useCallback(() => {
+    if (isTyping) return;
+    setDailyPrepMode(true);
+    dailyPrepHistory.current = [];
+    textareaRef.current?.focus();
+    sendPrepMessage("C'est parti, aide-moi à préparer ma journée.");
+  }, [isTyping, sendPrepMessage]);
+
+  useEffect(() => {
+    if (!dailyPrepPending) return;
+    onDailyPrepConsumed?.();
+    startDailyPrep();
+  }, [dailyPrepPending, startDailyPrep, onDailyPrepConsumed]);
+
   const send = useCallback(() => {
     const text = input.trim();
     if (!text || isTyping) return;
@@ -138,19 +214,28 @@ export default function ChatPanel({ onStartOnboarding }: ChatPanelProps) {
       return;
     }
 
+    if (text === "/start-day") {
+      setInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      startDailyPrep();
+      return;
+    }
+
+    setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+    if (dailyPrepMode) {
+      sendPrepMessage(text);
+      return;
+    }
+
     const userMsg: ChatMessage = {
       id: `tmp-${Date.now()}`,
       role: "user",
       content: text,
     };
     setMessages((prev) => [...prev, userMsg]);
-    setInput("");
     setError(null);
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
-
     setIsTyping(true);
 
     sendMessage(text)
@@ -182,7 +267,7 @@ export default function ChatPanel({ onStartOnboarding }: ChatPanelProps) {
         setError(errMsg);
         console.error("[ChatPanel] sendMessage error:", err);
       });
-  }, [input, isTyping, onStartOnboarding]);
+  }, [input, isTyping, dailyPrepMode, onStartOnboarding, startDailyPrep, sendPrepMessage]);
 
   const addStepsToTask = useCallback((msgId: string, taskId: string) => {
     const msg = messages.find((m) => m.id === msgId);

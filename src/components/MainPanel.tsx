@@ -1,8 +1,19 @@
+import { useMemo } from "react";
 import TodayView from "./TodayView";
 import WeekView from "./WeekView";
 import StrategyView from "./StrategyView";
 import type { ViewTab, StrategyFrequency } from "../types";
 import styles from "./MainPanel.module.css";
+
+const DAY_NAMES = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+const MONTH_SHORT = ["jan.", "fév.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+
+function getISOWeekNumber(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
 
 interface Props {
   activeTab: ViewTab;
@@ -10,6 +21,7 @@ interface Props {
   dailyPriorityCount: number;
   strategyFrequency: StrategyFrequency;
   strategyCycleStart: number;
+  onLaunchDailyPrep?: () => void;
 }
 
 const tabs: { id: ViewTab; label: string }[] = [
@@ -18,15 +30,24 @@ const tabs: { id: ViewTab; label: string }[] = [
   { id: "strategy", label: "Prise de recul" },
 ];
 
-export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyFrequency, strategyCycleStart }: Props) {
+export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyFrequency, strategyCycleStart, onLaunchDailyPrep }: Props) {
+  const { dayName, dayNum, monthShort, weekNum } = useMemo(() => {
+    const now = new Date();
+    return {
+      dayName: DAY_NAMES[now.getDay()],
+      dayNum: now.getDate(),
+      monthShort: MONTH_SHORT[now.getMonth()],
+      weekNum: getISOWeekNumber(now),
+    };
+  }, []);
+
   return (
     <div className={styles.main}>
       <div className={styles.header}>
         <div className={styles.dateDisplay}>
-          <h1>Mercredi 25 fév.</h1>
-          <p>Semaine 9 · 4 tâches restantes</p>
+          <h1>{dayName} {dayNum} {monthShort}</h1>
+          <p>Semaine {weekNum}</p>
         </div>
-        <div className={styles.streak}>🔥 5j de suite</div>
       </div>
 
       <div className={styles.tabs}>
@@ -42,7 +63,7 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
       </div>
 
       <div className={styles.content}>
-        {activeTab === "today" && <TodayView dailyPriorityCount={dailyPriorityCount} />}
+        {activeTab === "today" && <TodayView dailyPriorityCount={dailyPriorityCount} onLaunchDailyPrep={onLaunchDailyPrep} />}
         {activeTab === "week" && <WeekView />}
         {activeTab === "strategy" && (
           <StrategyView frequency={strategyFrequency} cycleStart={strategyCycleStart} />

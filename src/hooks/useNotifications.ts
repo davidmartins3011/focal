@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { NotificationSettings, NotificationHistoryEntry, WeekDayId, NotificationReminder } from "../types";
-import type { ToastData } from "../components/NotificationToast";
 import { defaultReminders } from "../data/settingsData";
 import { getSetting, setSetting } from "../services/settings";
 import {
@@ -8,6 +7,7 @@ import {
   addNotificationEntry,
   markNotificationRead,
   markAllNotificationsRead,
+  updateBadgeCount,
 } from "../services/notifications";
 import {
   isPermissionGranted,
@@ -46,7 +46,7 @@ async function sendNativeNotification(title: string, body: string) {
   if (!granted) return;
   try {
     sendNotification({ title, body });
-  } catch { /* silently ignore — in-app toast is the fallback */ }
+  } catch { /* silently ignore */ }
 }
 
 function getISOWeekNumber(date: Date): number {
@@ -162,7 +162,6 @@ function saveLastActive() {
 export function useNotifications() {
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(defaultNotifSettings);
   const [notifHistory, setNotifHistory] = useState<NotificationHistoryEntry[]>([]);
-  const [toasts, setToasts] = useState<ToastData[]>([]);
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
   const firedRef = useRef<Set<string>>(new Set());
   const loaded = useRef(false);
@@ -248,14 +247,6 @@ export function useNotifications() {
     }).catch(() => {});
   }, []);
 
-  const pushToast = useCallback((toast: ToastData) => {
-    setToasts((prev) => [...prev, toast]);
-  }, []);
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
   useEffect(() => {
     if (!notifSettings.enabled) return;
 
@@ -272,15 +263,6 @@ export function useNotifications() {
         const firedKey = `${r.id}-${dateKey}-${hhmm}`;
         if (firedRef.current.has(firedKey)) continue;
         firedRef.current.add(firedKey);
-
-        pushToast({
-          id: `${r.id}-${Date.now()}`,
-          icon: r.icon,
-          label: r.label,
-          description: r.description,
-          time: hhmm,
-          reminderId: r.id,
-        });
 
         sendNativeNotification(`${r.icon} ${r.label}`, r.description);
 
@@ -301,7 +283,7 @@ export function useNotifications() {
     check();
     const interval = setInterval(check, 30_000);
     return () => clearInterval(interval);
-  }, [notifSettings, pushToast, addHistoryEntry]);
+  }, [notifSettings, addHistoryEntry]);
 
   const handleTestNotification = useCallback(() => {
     const now = new Date();
@@ -311,19 +293,12 @@ export function useNotifications() {
       ? samples[Math.floor(Math.random() * samples.length)]
       : notifSettings.reminders[0];
 
-    const toastId = `test-${Date.now()}`;
-    pushToast({
-      id: toastId,
-      icon: sample.icon,
-      label: sample.label,
-      description: sample.description,
-      time: hhmm,
-    });
+    const testId = `test-${Date.now()}`;
 
     sendNativeNotification(`${sample.icon} ${sample.label}`, sample.description);
 
     addHistoryEntry({
-      id: toastId,
+      id: testId,
       reminderId: sample.id,
       icon: sample.icon,
       label: sample.label,
@@ -333,7 +308,7 @@ export function useNotifications() {
       missed: false,
       read: false,
     });
-  }, [notifSettings, pushToast, addHistoryEntry]);
+  }, [notifSettings, addHistoryEntry]);
 
   const handleDismissNotif = useCallback((id: string) => {
     setNotifHistory((prev) =>
@@ -348,21 +323,29 @@ export function useNotifications() {
   }, []);
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const hasUnreadNotifs = notifHistory.some(
-    (e) => !e.read && (e.firedAt.slice(0, 10) === todayStr || e.missed)
+  const unreadNotifs = useMemo(
+    () => notifHistory.filter(
+      (e) => !e.read && (e.firedAt.slice(0, 10) === todayStr || e.missed)
+    ),
+    [notifHistory, todayStr],
   );
+  const hasUnreadNotifs = unreadNotifs.length > 0;
+  const unreadCount = unreadNotifs.length;
+
+  useEffect(() => {
+    updateBadgeCount(unreadCount).catch(() => {});
+  }, [unreadCount]);
 
   return {
     notifSettings,
     setNotifSettings,
     notifHistory,
-    toasts,
     notifCenterOpen,
     setNotifCenterOpen,
-    dismissToast,
     handleTestNotification,
     handleDismissNotif,
     handleDismissAll,
     hasUnreadNotifs,
+    unreadCount,
   };
 }
