@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, Task, MicroStep } from "../types";
-import { getChatMessages, sendMessage, sendDailyPrepMessage, clearChat, type DailyPrepResponse } from "../services/chat";
+import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type DailyPrepResponse } from "../services/chat";
 import { getTasks, createTask, deleteTask, updateTask, setMicroSteps } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { chatHints } from "../data/chatConstants";
@@ -50,10 +50,12 @@ interface ChatPanelProps {
   onStartOnboarding?: () => void;
   dailyPrepPending?: boolean;
   onDailyPrepConsumed?: () => void;
+  weeklyPrepPending?: boolean;
+  onWeeklyPrepConsumed?: () => void;
   onTasksChanged?: () => void;
 }
 
-export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, onTasksChanged }: ChatPanelProps) {
+export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, onTasksChanged }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -65,8 +67,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [pickingFor, setPickingFor] = useState<string | null>(null);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
-  const [dailyPrepMode, setDailyPrepMode] = useState(false);
-  const dailyPrepHistory = useRef<{ role: string; content: string }[]>([]);
+  const [prepMode, setPrepMode] = useState<"daily" | "weekly" | null>(null);
+  const prepHistory = useRef<{ role: string; content: string }[]>([]);
   const todayTasksRef = useRef(todayTasks);
   todayTasksRef.current = todayTasks;
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -137,9 +139,9 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping, visibleStepCount]);
 
-  const handleDailyPrepResponse = useCallback(
+  const handlePrepResponse = useCallback(
     async (response: DailyPrepResponse) => {
-      dailyPrepHistory.current.push({ role: "ai", content: response.content });
+      prepHistory.current.push({ role: "ai", content: response.content });
 
       const msgId = `ai-${Date.now()}`;
       const aiMsg: ChatMessage = { id: msgId, role: "ai", content: response.content };
@@ -202,46 +204,55 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       }
 
       if (response.prepComplete) {
-        setDailyPrepMode(false);
-        dailyPrepHistory.current = [];
+        setPrepMode(null);
+        prepHistory.current = [];
       }
     },
     [onTasksChanged],
   );
 
   const sendPrepMessage = useCallback(
-    (text: string) => {
+    (text: string, mode: "daily" | "weekly" = "daily") => {
       if (isTyping) return;
 
-      dailyPrepHistory.current.push({ role: "user", content: text });
+      prepHistory.current.push({ role: "user", content: text });
 
       const userMsg: ChatMessage = { id: `tmp-${Date.now()}`, role: "user", content: text };
       setMessages((prev) => [...prev, userMsg]);
       setError(null);
       setIsTyping(true);
 
-      sendDailyPrepMessage(text, dailyPrepHistory.current.slice(0, -1))
+      const sendFn = mode === "weekly" ? sendWeeklyPrepMessage : sendDailyPrepMessage;
+      sendFn(text, prepHistory.current.slice(0, -1))
         .then((response) => {
           setIsTyping(false);
-          handleDailyPrepResponse(response);
+          handlePrepResponse(response);
           textareaRef.current?.focus();
         })
         .catch((err) => {
           setIsTyping(false);
           const errMsg = typeof err === "string" ? err : String(err);
           setError(errMsg);
-          console.error("[ChatPanel] daily prep error:", err);
+          console.error(`[ChatPanel] ${mode} prep error:`, err);
         });
     },
-    [isTyping, handleDailyPrepResponse],
+    [isTyping, handlePrepResponse],
   );
 
   const startDailyPrep = useCallback(() => {
     if (isTyping) return;
-    setDailyPrepMode(true);
-    dailyPrepHistory.current = [];
+    setPrepMode("daily");
+    prepHistory.current = [];
     textareaRef.current?.focus();
-    sendPrepMessage("C'est parti, aide-moi à préparer ma journée.");
+    sendPrepMessage("C'est parti ! Fais-moi un résumé de ce qui est déjà prévu pour aujourd'hui, et on ajuste ensemble.", "daily");
+  }, [isTyping, sendPrepMessage]);
+
+  const startWeeklyPrep = useCallback(() => {
+    if (isTyping) return;
+    setPrepMode("weekly");
+    prepHistory.current = [];
+    textareaRef.current?.focus();
+    sendPrepMessage("C'est parti ! Fais-moi un résumé de ce qui est prévu pour cette semaine, et on organise ensemble.", "weekly");
   }, [isTyping, sendPrepMessage]);
 
   useEffect(() => {
@@ -249,6 +260,12 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     onDailyPrepConsumed?.();
     startDailyPrep();
   }, [dailyPrepPending, startDailyPrep, onDailyPrepConsumed]);
+
+  useEffect(() => {
+    if (!weeklyPrepPending) return;
+    onWeeklyPrepConsumed?.();
+    startWeeklyPrep();
+  }, [weeklyPrepPending, startWeeklyPrep, onWeeklyPrepConsumed]);
 
   const resetInput = useCallback(() => {
     setInput("");
@@ -271,11 +288,17 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       return;
     }
 
+    if (text === "/start-week") {
+      resetInput();
+      startWeeklyPrep();
+      return;
+    }
+
     if (text === "/clear") {
       resetInput();
       setMessages([]);
-      setDailyPrepMode(false);
-      dailyPrepHistory.current = [];
+      setPrepMode(null);
+      prepHistory.current = [];
       setError(null);
       clearChat().catch((err) => console.error("[ChatPanel] clearChat error:", err));
       return;
@@ -283,8 +306,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
 
     resetInput();
 
-    if (dailyPrepMode) {
-      sendPrepMessage(text);
+    if (prepMode) {
+      sendPrepMessage(text, prepMode);
       return;
     }
 
@@ -326,7 +349,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         setError(errMsg);
         console.error("[ChatPanel] sendMessage error:", err);
       });
-  }, [input, isTyping, dailyPrepMode, onStartOnboarding, startDailyPrep, sendPrepMessage, resetInput]);
+  }, [input, isTyping, prepMode, onStartOnboarding, startDailyPrep, startWeeklyPrep, sendPrepMessage, resetInput]);
 
   const addStepsToTask = useCallback((msgId: string, taskId: string) => {
     const msg = messages.find((m) => m.id === msgId);

@@ -77,6 +77,7 @@ pub fn run() {
             commands::ai::decompose_task,
             commands::ai::generate_suggestions,
             commands::ai::send_daily_prep_message,
+            commands::ai::send_weekly_prep_message,
             commands::ai::send_onboarding_message,
             commands::ai::analyze_profile_url,
         ])

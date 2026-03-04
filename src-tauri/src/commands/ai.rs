@@ -1,3 +1,4 @@
+use chrono::Datelike;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -796,12 +797,20 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         "- Sois concis : des messages courts et naturels, pas des pavés.".to_string(),
         String::new(),
         "DÉROULEMENT NATUREL (pas un script rigide, adapte-toi) :".to_string(),
-        "1. Demande ce que l'utilisateur a prévu ou en tête pour aujourd'hui".to_string(),
-        "2. Quand il décrit des choses à faire, propose de les ajouter comme tâches (via tasksToAdd)".to_string(),
-        "3. Continue à explorer : \"Il y a autre chose ?\" / \"Des réunions, des deadlines ?\"".to_string(),
-        "4. Quand il semble avoir tout listé, aide à prioriser : \"Si tu devais n'en faire que 2-3, lesquelles ?\"".to_string(),
-        "5. Propose d'estimer les durées si pertinent".to_string(),
-        "6. Confirme le plan et propose de lancer la journée (prepComplete: true). IMPORTANT : quand tu mets prepComplete à true, ne remets PAS les tâches déjà ajoutées dans tasksToAdd — elles ont déjà été créées au fil de la conversation.".to_string(),
+        "1. COMMENCE PAR UN RÉSUMÉ de ce qui est déjà prévu : liste les tâches existantes (prioritaires, secondaires) et le reliquat des jours précédents s'il y en a. Présente ça de manière synthétique et claire.".to_string(),
+        "2. Après le résumé, demande à l'utilisateur s'il veut ajuster, ajouter ou retirer quelque chose.".to_string(),
+        "3. Quand il décrit des choses à faire, propose de les ajouter comme tâches (via tasksToAdd).".to_string(),
+        "4. Continue à explorer : \"Il y a autre chose ?\" / \"Des réunions, des deadlines ?\"".to_string(),
+        "5. Aide à prioriser : vise 2-3 tâches prioritaires max. Si il y en a trop, propose de déprioriser ou reporter certaines tâches.".to_string(),
+        "6. Propose d'estimer les durées si pertinent.".to_string(),
+        "7. Confirme le plan et propose de lancer la journée (prepComplete: true). IMPORTANT : quand tu mets prepComplete à true, ne remets PAS les tâches déjà ajoutées dans tasksToAdd — elles ont déjà été créées au fil de la conversation.".to_string(),
+        String::new(),
+        "PRIORISATION :".to_string(),
+        "- L'objectif est de garder un nombre de tâches cohérent et réaliste pour la journée (idéalement 5-8 tâches, dont 2-3 prioritaires).".to_string(),
+        "- Si la charge semble trop lourde, propose de reporter des tâches moins urgentes à demain ou plus tard (via tasksToUpdate avec scheduledDate).".to_string(),
+        "- Pour les tâches en reliquat des jours précédents, demande si l'utilisateur veut les garder pour aujourd'hui, les reporter, ou les annuler.".to_string(),
+        "- Certaines tâches ont des scores d'urgence et d'importance sur 5. Utilise ces scores pour guider la priorisation : les tâches avec une urgence élevée (4-5) doivent être traitées aujourd'hui, et celles avec une importance élevée (4-5) méritent d'être en priorité du jour.".to_string(),
+        "- Quand tu résumes les tâches, mentionne les scores d'urgence/importance s'ils existent pour aider l'utilisateur à décider.".to_string(),
         String::new(),
         "AJOUT DE TÂCHES :".to_string(),
         "- Quand l'utilisateur mentionne quelque chose à faire, mets-le dans tasksToAdd.".to_string(),
@@ -833,7 +842,7 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
 
     let mut priority_count = 0i32;
     if let Ok(mut stmt) = db.prepare(
-        "SELECT id, name, done, priority, estimated_minutes, scheduled_date FROM tasks WHERE view_context = 'today' ORDER BY position",
+        "SELECT id, name, done, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE view_context = 'today' ORDER BY position",
     ) {
         if let Ok(tasks) = stmt.query_map([], |row| {
             Ok((
@@ -843,11 +852,13 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
                 row.get::<_, Option<String>>(3)?,
                 row.get::<_, Option<i32>>(4)?,
                 row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<i32>>(6)?,
+                row.get::<_, Option<i32>>(7)?,
             ))
         }) {
             let task_lines: Vec<String> = tasks
                 .filter_map(|r| r.ok())
-                .map(|(id, name, done, pri, est, sched)| {
+                .map(|(id, name, done, pri, est, sched, urg, imp)| {
                     if pri.as_deref() == Some("main") && !done {
                         priority_count += 1;
                     }
@@ -855,7 +866,9 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
                     let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
                     let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
                     let sched_str = sched.map_or(String::new(), |s| format!(" (planifié: {s})"));
-                    format!("  {check} [{id}] {name}{tag}{est_str}{sched_str}")
+                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
+                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
+                    format!("  {check} [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -865,6 +878,40 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
                 parts.push(String::new());
             } else {
                 parts.push("AUCUNE TÂCHE AUJOURD'HUI — la journée est vierge, c'est le moment de la construire.".to_string());
+                parts.push(String::new());
+            }
+        }
+    }
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, name, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position",
+    ) {
+        if let Ok(overdue) = stmt.query_map(params![today], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<i32>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<i32>>(5)?,
+                row.get::<_, Option<i32>>(6)?,
+            ))
+        }) {
+            let overdue_lines: Vec<String> = overdue
+                .filter_map(|r| r.ok())
+                .map(|(id, name, pri, est, sched, urg, imp)| {
+                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
+                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
+                    let sched_str = sched.map_or(String::new(), |s| format!(" (prévu le: {s})"));
+                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
+                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
+                    format!("  ○ [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
+                })
+                .collect();
+            if !overdue_lines.is_empty() {
+                parts.push(format!("RELIQUAT DES JOURS PRÉCÉDENTS ({} tâches non terminées) :", overdue_lines.len()));
+                parts.push("(Ces tâches étaient prévues avant aujourd'hui et n'ont pas été faites. Propose à l'utilisateur de les intégrer à aujourd'hui, les reporter, ou les annuler.)".to_string());
+                parts.extend(overdue_lines);
                 parts.push(String::new());
             }
         }
@@ -978,6 +1025,212 @@ pub async fn send_daily_prep_message(
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let provider = get_active_provider(&db)?;
         let system = build_daily_prep_prompt(&db);
+        (provider.id, provider.api_key, system)
+    };
+
+    let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
+    let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
+    msgs.push(("user".to_string(), user_message));
+
+    let raw = call_llm(&provider_id, &api_key, &system_prompt, msgs).await?;
+    parse_daily_prep_response(&raw)
+}
+
+// ── Weekly Prep ──
+
+fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
+    let now = chrono::Local::now();
+    let today = now.format("%Y-%m-%d").to_string();
+    let weekday = now.weekday().num_days_from_monday() as i64;
+    let monday = now - chrono::Duration::days(weekday);
+    let friday = monday + chrono::Duration::days(4);
+    let monday_str = monday.format("%Y-%m-%d").to_string();
+    let friday_str = friday.format("%Y-%m-%d").to_string();
+    let next_monday = monday + chrono::Duration::days(7);
+    let next_monday_str = next_monday.format("%Y-%m-%d").to_string();
+
+    let mut parts = vec![
+        "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
+        "Tu es en mode PRÉPARATION DE LA SEMAINE : tu aides l'utilisateur à organiser sa semaine en discutant avec lui.".to_string(),
+        format!("Date d'aujourd'hui : {today}"),
+        format!("Semaine en cours : du {monday_str} au {friday_str}"),
+        String::new(),
+        "RÈGLES DE CONVERSATION :".to_string(),
+        "- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string(),
+        "- Tu ne dictes PAS quoi faire. Tu DEMANDES à l'utilisateur ce qu'il a prévu.".to_string(),
+        "- Tu es un facilitateur : tu aides à formuler, clarifier, prioriser — mais c'est l'utilisateur qui décide.".to_string(),
+        "- Tutoie l'utilisateur. Sois chaleureux, bienveillant et encourageant.".to_string(),
+        "- Ne fais jamais la morale. Pas de jugement.".to_string(),
+        "- Sois concis : des messages courts et naturels, pas des pavés.".to_string(),
+        String::new(),
+        "DÉROULEMENT NATUREL (adapte-toi, ce n'est pas un script rigide) :".to_string(),
+        "1. COMMENCE PAR UN RÉSUMÉ de la semaine : liste les priorités hebdo existantes, les tâches déjà planifiées par jour, et le reliquat de la semaine dernière.".to_string(),
+        "2. Demande à l'utilisateur s'il veut ajuster, ajouter ou retirer quelque chose.".to_string(),
+        "3. Aide à identifier 3-5 priorités clés de la semaine.".to_string(),
+        "4. Explore les engagements : réunions, deadlines, livrables importants.".to_string(),
+        "5. Aide à répartir les tâches sur les jours de la semaine (scheduledDate).".to_string(),
+        "6. Propose d'estimer les durées si pertinent.".to_string(),
+        "7. Confirme le plan et lance la semaine (prepComplete: true). IMPORTANT : quand tu mets prepComplete à true, ne remets PAS les tâches déjà ajoutées dans tasksToAdd.".to_string(),
+        String::new(),
+        "PRIORISATION :".to_string(),
+        "- L'objectif est de garder 3-5 priorités hebdo max et un nombre réaliste de tâches par jour.".to_string(),
+        "- Si la charge semble trop lourde, propose de reporter des tâches moins urgentes à la semaine suivante.".to_string(),
+        "- Utilise les scores d'urgence et d'importance (sur 5) pour guider la priorisation.".to_string(),
+        String::new(),
+        "AJOUT DE TÂCHES :".to_string(),
+        "- Quand l'utilisateur mentionne quelque chose à faire, mets-le dans tasksToAdd.".to_string(),
+        "- Ne les ajoute que quand l'utilisateur les mentionne ou confirme.".to_string(),
+        "- Pour les nouvelles tâches, propose une scheduledDate sur un des jours de la semaine.".to_string(),
+        "- Le champ priority est optionnel : \"main\" pour prioritaire.".to_string(),
+        format!("- Par défaut, scheduledDate = \"{monday_str}\" (lundi). Adapte selon le contexte."),
+        "- IMPORTANT : chaque tâche n'est ajoutée qu'UNE SEULE FOIS dans toute la conversation.".to_string(),
+        String::new(),
+        "RETRAIT DE TÂCHES :".to_string(),
+        "- Si l'utilisateur demande de retirer une tâche, mets son ID dans tasksToRemove.".to_string(),
+        String::new(),
+        "MODIFICATION DE TÂCHES EXISTANTES :".to_string(),
+        "- Utilise tasksToUpdate pour changer priority, scheduledDate, ou estimatedMinutes.".to_string(),
+        format!("- Pour reporter à la semaine prochaine : scheduledDate = \"{next_monday_str}\"."),
+        String::new(),
+    ];
+
+    if let Some(profile) = get_user_profile(db) {
+        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
+            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
+            parts.push(String::new());
+        }
+    }
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, name, done, priority, estimated_minutes, urgency, importance FROM tasks WHERE view_context = 'week' ORDER BY position",
+    ) {
+        if let Ok(tasks) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, bool>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<i32>>(4)?,
+                row.get::<_, Option<i32>>(5)?,
+                row.get::<_, Option<i32>>(6)?,
+            ))
+        }) {
+            let task_lines: Vec<String> = tasks
+                .filter_map(|r| r.ok())
+                .map(|(id, name, done, pri, est, urg, imp)| {
+                    let check = if done { "✓" } else { "○" };
+                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
+                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
+                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
+                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
+                    format!("  {check} [{id}] {name}{tag}{urg_str}{imp_str}{est_str}")
+                })
+                .collect();
+            if !task_lines.is_empty() {
+                parts.push("PRIORITÉS DE LA SEMAINE (tâches existantes) :".to_string());
+                parts.push("(L'ID entre crochets est à utiliser pour tasksToRemove et tasksToUpdate)".to_string());
+                parts.extend(task_lines);
+                parts.push(String::new());
+            }
+        }
+    }
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, name, done, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE scheduled_date >= ?1 AND scheduled_date <= ?2 ORDER BY scheduled_date, position",
+    ) {
+        if let Ok(tasks) = stmt.query_map(params![monday_str, friday_str], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, bool>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<i32>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<i32>>(6)?,
+                row.get::<_, Option<i32>>(7)?,
+            ))
+        }) {
+            let task_lines: Vec<String> = tasks
+                .filter_map(|r| r.ok())
+                .map(|(id, name, done, pri, est, sched, urg, imp)| {
+                    let check = if done { "✓" } else { "○" };
+                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
+                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
+                    let sched_str = sched.map_or(String::new(), |s| format!(" (planifié: {s})"));
+                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
+                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
+                    format!("  {check} [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
+                })
+                .collect();
+            if !task_lines.is_empty() {
+                parts.push("TÂCHES PLANIFIÉES CETTE SEMAINE :".to_string());
+                parts.push("(L'ID entre crochets est à utiliser pour tasksToRemove et tasksToUpdate)".to_string());
+                parts.extend(task_lines);
+                parts.push(String::new());
+            } else {
+                parts.push("AUCUNE TÂCHE PLANIFIÉE CETTE SEMAINE — la semaine est vierge, c'est le moment de l'organiser.".to_string());
+                parts.push(String::new());
+            }
+        }
+    }
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, name, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position",
+    ) {
+        if let Ok(overdue) = stmt.query_map(params![monday_str], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<i32>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<i32>>(5)?,
+                row.get::<_, Option<i32>>(6)?,
+            ))
+        }) {
+            let overdue_lines: Vec<String> = overdue
+                .filter_map(|r| r.ok())
+                .map(|(id, name, pri, est, sched, urg, imp)| {
+                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
+                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
+                    let sched_str = sched.map_or(String::new(), |s| format!(" (prévu le: {s})"));
+                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
+                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
+                    format!("  ○ [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
+                })
+                .collect();
+            if !overdue_lines.is_empty() {
+                parts.push(format!("RELIQUAT DE LA SEMAINE PASSÉE ({} tâches non terminées) :", overdue_lines.len()));
+                parts.push("(Ces tâches étaient prévues avant cette semaine et n'ont pas été faites. Propose à l'utilisateur de les intégrer à cette semaine, les reporter, ou les annuler.)".to_string());
+                parts.extend(overdue_lines);
+                parts.push(String::new());
+            }
+        }
+    }
+
+    parts.push("FORMAT DE RÉPONSE :".to_string());
+    parts.push("Réponds UNIQUEMENT en JSON valide :".to_string());
+    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "prepComplete": false}"#.to_string());
+    parts.push("- content : ton message textuel (pas de markdown, utilise \\n pour les paragraphes)".to_string());
+    parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{monday_str}"}}]"#));
+    parts.push("- tasksToRemove : [\"id1\", \"id2\"] — vide si rien à supprimer".to_string());
+    parts.push(format!(r#"- tasksToUpdate : [{{"id": "...", "priority": "secondary", "scheduledDate": "{next_monday_str}"}}]"#));
+    parts.push("- prepComplete : true UNIQUEMENT quand l'utilisateur confirme que la préparation est terminée".to_string());
+    parts.push("- Pas de texte avant ou après le JSON".to_string());
+
+    parts.join("\n")
+}
+
+#[tauri::command]
+pub async fn send_weekly_prep_message(
+    state: State<'_, AppState>,
+    user_message: String,
+    history: String,
+) -> Result<DailyPrepResponse, String> {
+    let (provider_id, api_key, system_prompt) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let provider = get_active_provider(&db)?;
+        let system = build_weekly_prep_prompt(&db);
         (provider.id, provider.api_key, system)
     };
 

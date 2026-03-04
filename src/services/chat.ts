@@ -66,6 +66,16 @@ export function sendDailyPrepMessage(
   });
 }
 
+export function sendWeeklyPrepMessage(
+  userMessage: string,
+  history: { role: string; content: string }[],
+): Promise<DailyPrepResponse> {
+  return invoke<DailyPrepResponse>("send_weekly_prep_message", {
+    userMessage,
+    history: JSON.stringify(history),
+  });
+}
+
 export interface OnboardingResponse {
   content: string;
   profileUpdates: Partial<UserProfile>;

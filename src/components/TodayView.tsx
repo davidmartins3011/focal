@@ -13,17 +13,16 @@ import {
 import {
   SortableContext,
   verticalListSortingStrategy,
-  useSortable,
   arrayMove,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import PrepBanner from "./PrepBanner";
 import FocusNow from "./FocusNow";
 import FocusTimer from "./FocusTimer";
 import ProgressBar from "./ProgressBar";
+import SortableTaskItem from "./SortableTaskItem";
 import TaskItem from "./TaskItem";
-import type { Task } from "../types";
+import type { Task, MicroStep } from "../types";
 import { getTasks as fetchTasks, getOverdueTasks, toggleTask as toggleTaskSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, setMicroSteps, getStreak } from "../services/tasks";
 import { decomposeTask } from "../services/chat";
 import { getSetting, setSetting } from "../services/settings";
@@ -31,34 +30,6 @@ import styles from "./TodayView.module.css";
 
 function todayKey(): string {
   return `daily-prep-${new Date().toISOString().slice(0, 10)}`;
-}
-
-function SortableTaskItem(props: React.ComponentProps<typeof TaskItem>) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: props.task.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.35 : 1,
-    position: "relative" as const,
-    zIndex: isDragging ? 10 : undefined,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      <TaskItem
-        {...props}
-        dragHandleProps={{ ...attributes, ...listeners }}
-      />
-    </div>
-  );
 }
 
 interface TodayViewProps {
@@ -127,6 +98,15 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
   function deleteTask(id: string) {
     updateTaskState((prev) => prev.filter((t) => t.id !== id));
     deleteTaskSvc(id).catch((err) => console.error("[TodayView] deleteTask error:", err));
+  }
+
+  function setPriority(id: string, field: "urgency" | "importance", value: number | undefined) {
+    updateTaskState((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, [field]: value } : t))
+    );
+    updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) =>
+      console.error("[TodayView] setPriority error:", err)
+    );
   }
 
   function setScheduledDate(id: string, date: string | undefined) {
@@ -271,7 +251,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
           estimatedMinutes: s.estimatedMinutes,
         }));
 
-        let finalSteps: typeof subSteps | undefined;
+        let finalSteps: MicroStep[] | undefined;
         updateTaskState((prev) =>
           prev.map((t) => {
             if (t.id !== taskId || !t.microSteps) return t;
@@ -455,6 +435,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
                 onDelete={deleteTask}
                 onRename={renameTask}
                 onSetScheduledDate={setScheduledDate}
+                onSetPriority={setPriority}
                 isDecomposing={decomposingId === task.id}
                 decomposingStepId={getDecomposingStepId(task.id)}
                 animDelay={0.08 + i * 0.04}
@@ -492,6 +473,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
                     onDelete={deleteTask}
                     onRename={renameTask}
                     onSetScheduledDate={setScheduledDate}
+                    onSetPriority={setPriority}
                     isDecomposing={decomposingId === task.id}
                     decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.12 + i * 0.04}
@@ -532,6 +514,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
                     onDelete={deleteTask}
                     onRename={renameTask}
                     onSetScheduledDate={setScheduledDate}
+                    onSetPriority={setPriority}
                     isDecomposing={decomposingId === task.id}
                     decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.16 + i * 0.04}

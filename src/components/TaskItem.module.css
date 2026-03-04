@@ -412,6 +412,133 @@
   background: rgba(var(--red-rgb), 0.08);
 }
 
+/* ── Importance tag ── */
+.importanceTag {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
+}
+
+/* ── Priority button & popover ── */
+.priorityWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.priorityBtn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+  opacity: 0;
+  line-height: 1;
+  color: var(--text3);
+}
+
+.item:hover .priorityBtn {
+  opacity: 0.5;
+}
+
+.priorityBtn:hover,
+.priorityBtnActive {
+  opacity: 1 !important;
+  background: var(--bg3);
+  color: var(--accent);
+}
+
+.priorityBtnSet {
+  opacity: 0.6 !important;
+  color: var(--accent);
+}
+
+.priorityPopover {
+  z-index: 1000;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  min-width: 160px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: fadeUp 0.15s ease both;
+}
+
+.priorityLabel {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text3);
+  padding: 4px 4px 4px;
+}
+
+.priorityRow {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.priorityDot {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text3);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+  font-family: 'Outfit', sans-serif;
+  padding: 0;
+}
+
+.priorityDot:hover {
+  background: var(--bg3);
+  color: var(--text2);
+}
+
+.priorityDotSelected {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.3);
+}
+
+.priorityDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.priorityClear {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.12s;
+}
+
+.priorityClear:hover {
+  color: var(--red);
+  background: rgba(var(--red-rgb), 0.08);
+}
+
 /* ── Tags ── */
 .tags {
   display: flex;

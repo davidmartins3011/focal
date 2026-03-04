@@ -41,6 +41,7 @@ export default function App() {
   const [strategyDay, setStrategyDay] = useState<WeekDayId>("dim");
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const [dailyPrepPending, setDailyPrepPending] = useState(false);
+  const [weeklyPrepPending, setWeeklyPrepPending] = useState(false);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
   const loaded = useRef(false);
 
@@ -192,6 +193,10 @@ export default function App() {
         setActiveTab("today");
         break;
       case "weekly-prep":
+        setActivePage("main");
+        setActiveTab("week");
+        setWeeklyPrepPending(true);
+        break;
       case "weekly-review":
         setActivePage("main");
         setActiveTab("week");
@@ -221,6 +226,10 @@ export default function App() {
 
   const handleLaunchDailyPrep = useCallback(() => {
     setDailyPrepPending(true);
+  }, []);
+
+  const handleLaunchWeeklyPrep = useCallback(() => {
+    setWeeklyPrepPending(true);
   }, []);
 
   const handleTasksChanged = useCallback(() => {
@@ -270,6 +279,7 @@ export default function App() {
             strategyFrequency={strategyFrequency}
             strategyCycleStart={strategyCycleStart}
             onLaunchDailyPrep={handleLaunchDailyPrep}
+            onLaunchWeeklyPrep={handleLaunchWeeklyPrep}
             taskRefreshKey={taskRefreshKey}
           />
         );
@@ -311,6 +321,8 @@ export default function App() {
           onStartOnboarding={handleStartOnboarding}
           dailyPrepPending={dailyPrepPending}
           onDailyPrepConsumed={() => setDailyPrepPending(false)}
+          weeklyPrepPending={weeklyPrepPending}
+          onWeeklyPrepConsumed={() => setWeeklyPrepPending(false)}
           onTasksChanged={handleTasksChanged}
         />
       </div>

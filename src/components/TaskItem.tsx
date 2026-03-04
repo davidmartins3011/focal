@@ -16,6 +16,8 @@ const CELEBRATIONS = [
   "Yes ! 🙌",
 ];
 
+type PriorityScore = 1 | 2 | 3 | 4 | 5;
+
 interface Props {
   task: Task;
   onToggle: (id: string) => void;
@@ -30,6 +32,7 @@ interface Props {
   onDelete?: (id: string) => void;
   onRename?: (id: string, name: string) => void;
   onSetScheduledDate?: (id: string, date: string | undefined) => void;
+  onSetPriority?: (id: string, field: "urgency" | "importance", value: PriorityScore | undefined) => void;
   isDecomposing?: boolean;
   decomposingStepId?: string | null;
   animDelay?: number;
@@ -54,6 +57,7 @@ export default function TaskItem({
   onDelete,
   onRename,
   onSetScheduledDate,
+  onSetPriority,
   isDecomposing = false,
   decomposingStepId = null,
   animDelay = 0,
@@ -74,11 +78,16 @@ export default function TaskItem({
   const [nameText, setNameText] = useState(task.name);
   const [showSchedule, setShowSchedule] = useState(false);
   const [schedulePos, setSchedulePos] = useState<{ top: number; right: number } | null>(null);
+  const [showPriority, setShowPriority] = useState(false);
+  const [priorityPos, setPriorityPos] = useState<{ top: number; right: number } | null>(null);
   const prevDoneRef = useRef(task.done);
   const stuckMenuRef = useRef<HTMLDivElement>(null);
   const scheduleRef = useRef<HTMLDivElement>(null);
   const schedulePopoverRef = useRef<HTMLDivElement>(null);
   const scheduleBtnRef = useRef<HTMLButtonElement>(null);
+  const priorityRef = useRef<HTMLDivElement>(null);
+  const priorityPopoverRef = useRef<HTMLDivElement>(null);
+  const priorityBtnRef = useRef<HTMLButtonElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const quickDates = useMemo(() => getQuickDates(), []);
 
@@ -97,7 +106,7 @@ export default function TaskItem({
   }, [task.done]);
 
   useEffect(() => {
-    if (!showStuckMenu && !showSchedule) return;
+    if (!showStuckMenu && !showSchedule && !showPriority) return;
     const handler = (e: MouseEvent) => {
       if (showStuckMenu && stuckMenuRef.current && !stuckMenuRef.current.contains(e.target as Node)) {
         setShowStuckMenu(false);
@@ -107,10 +116,15 @@ export default function TaskItem({
         const inPopover = schedulePopoverRef.current?.contains(e.target as Node);
         if (!inBtn && !inPopover) setShowSchedule(false);
       }
+      if (showPriority) {
+        const inBtn = priorityRef.current?.contains(e.target as Node);
+        const inPopover = priorityPopoverRef.current?.contains(e.target as Node);
+        if (!inBtn && !inPopover) setShowPriority(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showStuckMenu, showSchedule]);
+  }, [showStuckMenu, showSchedule, showPriority]);
 
   useEffect(() => {
     if (!task.microSteps?.length) {
@@ -256,6 +270,80 @@ export default function TaskItem({
               onChange={(m) => onUpdateEstimate?.(task.id, m)}
             />
           )}
+          {onSetPriority && !task.done && (
+            <div className={styles.priorityWrap} ref={priorityRef}>
+              <button
+                ref={priorityBtnRef}
+                className={`${styles.priorityBtn} ${showPriority ? styles.priorityBtnActive : ""} ${(task.urgency != null || task.importance != null) ? styles.priorityBtnSet : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!showPriority && priorityBtnRef.current) {
+                    const rect = priorityBtnRef.current.getBoundingClientRect();
+                    setPriorityPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                  }
+                  setShowPriority(!showPriority);
+                }}
+                title="Urgence & importance"
+              >
+                ◆
+              </button>
+              {showPriority && priorityPos && createPortal(
+                <div
+                  ref={priorityPopoverRef}
+                  className={styles.priorityPopover}
+                  style={{ position: "fixed", top: priorityPos.top, right: priorityPos.right, left: "auto" }}
+                >
+                  <div className={styles.priorityLabel}>Urgence</div>
+                  <div className={styles.priorityRow}>
+                    {([1, 2, 3, 4, 5] as PriorityScore[]).map((v) => (
+                      <button
+                        key={`u${v}`}
+                        className={`${styles.priorityDot} ${task.urgency === v ? styles.priorityDotSelected : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSetPriority(task.id, "urgency", task.urgency === v ? undefined : v);
+                        }}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  <div className={styles.priorityLabel}>Importance</div>
+                  <div className={styles.priorityRow}>
+                    {([1, 2, 3, 4, 5] as PriorityScore[]).map((v) => (
+                      <button
+                        key={`i${v}`}
+                        className={`${styles.priorityDot} ${task.importance === v ? styles.priorityDotSelected : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSetPriority(task.id, "importance", task.importance === v ? undefined : v);
+                        }}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  {(task.urgency != null || task.importance != null) && (
+                    <>
+                      <div className={styles.priorityDivider} />
+                      <button
+                        className={styles.priorityClear}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSetPriority(task.id, "urgency", undefined);
+                          onSetPriority(task.id, "importance", undefined);
+                          setShowPriority(false);
+                        }}
+                      >
+                        Retirer les priorités
+                      </button>
+                    </>
+                  )}
+                </div>,
+                document.body
+              )}
+            </div>
+          )}
           {onSetScheduledDate && !task.done && (
             <div className={styles.scheduleWrap} ref={scheduleRef}>
               <button
@@ -353,8 +441,18 @@ export default function TaskItem({
           )}
         </div>
 
-        {task.tags.length > 0 && (
+        {(task.tags.length > 0 || task.urgency != null || task.importance != null) && (
           <div className={styles.tags}>
+            {task.urgency != null && (
+              <span className={`${styles.tag} ${styles.urgent}`}>
+                🔥 U{task.urgency}
+              </span>
+            )}
+            {task.importance != null && (
+              <span className={`${styles.tag} ${styles.importanceTag}`}>
+                ⭐ I{task.importance}
+              </span>
+            )}
             {task.tags.map((tag, i) => (
               <span key={i} className={`${styles.tag} ${styles[tag.color]}`}>
                 {tag.label}
