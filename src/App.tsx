@@ -41,6 +41,7 @@ export default function App() {
   const [strategyDay, setStrategyDay] = useState<WeekDayId>("dim");
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const [dailyPrepPending, setDailyPrepPending] = useState(false);
+  const [taskRefreshKey, setTaskRefreshKey] = useState(0);
   const loaded = useRef(false);
 
   const notif = useNotifications();
@@ -222,6 +223,10 @@ export default function App() {
     setDailyPrepPending(true);
   }, []);
 
+  const handleTasksChanged = useCallback(() => {
+    setTaskRefreshKey((k) => k + 1);
+  }, []);
+
   const renderPage = () => {
     switch (activePage) {
       case "settings":
@@ -265,6 +270,7 @@ export default function App() {
             strategyFrequency={strategyFrequency}
             strategyCycleStart={strategyCycleStart}
             onLaunchDailyPrep={handleLaunchDailyPrep}
+            taskRefreshKey={taskRefreshKey}
           />
         );
     }
@@ -305,6 +311,7 @@ export default function App() {
           onStartOnboarding={handleStartOnboarding}
           dailyPrepPending={dailyPrepPending}
           onDailyPrepConsumed={() => setDailyPrepPending(false)}
+          onTasksChanged={handleTasksChanged}
         />
       </div>
       {notif.notifCenterOpen && (

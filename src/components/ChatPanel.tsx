@@ -38,9 +38,10 @@ interface ChatPanelProps {
   onStartOnboarding?: () => void;
   dailyPrepPending?: boolean;
   onDailyPrepConsumed?: () => void;
+  onTasksChanged?: () => void;
 }
 
-export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed }: ChatPanelProps) {
+export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, onTasksChanged }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -140,6 +141,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       const aiMsg: ChatMessage = { id: msgId, role: "ai", content: response.content };
       setMessages((prev) => [...prev, aiMsg]);
 
+      let tasksModified = false;
+
       for (const t of response.tasksToAdd) {
         try {
           const created = await createTask({
@@ -150,6 +153,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
             scheduledDate: t.scheduledDate,
           });
           setTodayTasks((prev) => [...prev, created]);
+          tasksModified = true;
         } catch (err) {
           console.error("[ChatPanel] createTask error:", err);
         }
@@ -159,6 +163,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         try {
           await deleteTask(taskId);
           setTodayTasks((prev) => prev.filter((t) => t.id !== taskId));
+          tasksModified = true;
         } catch (err) {
           console.error("[ChatPanel] deleteTask error:", err);
         }
@@ -177,9 +182,14 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
               ? prev.filter((t) => t.id !== upd.id)
               : prev.map((t) => (t.id === upd.id ? updated : t)),
           );
+          tasksModified = true;
         } catch (err) {
           console.error("[ChatPanel] updateTask error:", err);
         }
+      }
+
+      if (tasksModified) {
+        onTasksChanged?.();
       }
 
       if (response.prepComplete) {
@@ -187,7 +197,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         dailyPrepHistory.current = [];
       }
     },
-    [],
+    [onTasksChanged],
   );
 
   const sendPrepMessage = useCallback(

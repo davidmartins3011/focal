@@ -74,6 +74,7 @@ pub fn run() {
             commands::notifications::mark_notification_read,
             commands::notifications::mark_all_notifications_read,
             commands::notifications::set_badge_count,
+            commands::notifications::send_clickable_notification,
             commands::ai::validate_api_key,
             commands::ai::send_message,
             commands::ai::decompose_task,

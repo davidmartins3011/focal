@@ -11,11 +11,7 @@ import {
   updateBadgeCount,
 } from "../services/notifications";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  isPermissionGranted,
-  requestPermission,
-  onAction,
-} from "@tauri-apps/plugin-notification";
+import { listen } from "@tauri-apps/api/event";
 
 const JS_DAY_TO_WEEKDAY: Record<number, WeekDayId> = {
   0: "dim", 1: "lun", 2: "mar", 3: "mer", 4: "jeu", 5: "ven", 6: "sam",
@@ -26,31 +22,12 @@ const defaultNotifSettings: NotificationSettings = {
   reminders: defaultReminders,
 };
 
-let nativePermissionGranted: boolean | null = null;
-
-async function ensureNativePermission(): Promise<boolean> {
-  if (nativePermissionGranted === true) return true;
-  try {
-    let granted = await isPermissionGranted();
-    if (!granted) {
-      const result = await requestPermission();
-      granted = result === "granted";
-    }
-    nativePermissionGranted = granted;
-    return granted;
-  } catch {
-    return false;
-  }
-}
-
 async function sendNativeNotification(title: string, body: string, reminderId?: string) {
-  const granted = await ensureNativePermission();
-  if (!granted) return;
   try {
-    await invoke("plugin:notification|notify", {
+    await invoke("send_clickable_notification", {
       title,
       body,
-      extra: reminderId ? { reminderId } : undefined,
+      reminderId: reminderId ?? "",
     });
   } catch { /* silently ignore */ }
 }
@@ -167,14 +144,20 @@ export function useNotifications() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    onAction((notification) => {
-      const reminderId = (notification.extra as Record<string, unknown> | undefined)?.reminderId as string | undefined;
-      if (reminderId) {
-        setPendingNavigation(reminderId);
-      }
-    }).then((listener) => {
-      unlisten = () => listener.unregister();
-    });
+    listen<string>("notification-clicked", (event) => {
+      const reminderId = event.payload;
+      setPendingNavigation(reminderId);
+      setNotifHistory((prev) => {
+        for (const e of prev) {
+          if (e.reminderId === reminderId && !e.read) {
+            markNotificationRead(e.id).catch(() => {});
+          }
+        }
+        return prev.map((e) =>
+          e.reminderId === reminderId && !e.read ? { ...e, read: true } : e
+        );
+      });
+    }).then((fn) => { unlisten = fn; });
     return () => unlisten?.();
   }, []);
 

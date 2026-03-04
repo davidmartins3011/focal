@@ -969,6 +969,7 @@ name = "focal"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "mac-notification-sys",
  "open",
  "reqwest 0.12.28",
  "rusqlite",

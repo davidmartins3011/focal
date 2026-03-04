@@ -87,3 +87,48 @@ pub fn set_badge_count(app: tauri::AppHandle, count: u32) -> Result<(), String> 
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn send_clickable_notification(
+    app: tauri::AppHandle,
+    title: String,
+    body: String,
+    reminder_id: String,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::Emitter;
+
+        let bundle_id = if tauri::is_dev() {
+            "com.apple.Terminal"
+        } else {
+            &app.config().identifier
+        };
+        let _ = mac_notification_sys::set_application(bundle_id);
+
+        std::thread::spawn(move || {
+            let mut opts = mac_notification_sys::Notification::new();
+            opts.wait_for_click(true);
+
+            match mac_notification_sys::send_notification(&title, None, &body, Some(&opts)) {
+                Ok(mac_notification_sys::NotificationResponse::Click) => {
+                    let _ = app.emit("notification-clicked", &reminder_id);
+                }
+                _ => {}
+            }
+        });
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        use tauri_plugin_notification::NotificationExt;
+        let _ = app.notification()
+            .builder()
+            .title(title)
+            .body(body)
+            .show();
+        let _ = &reminder_id;
+    }
+
+    Ok(())
+}

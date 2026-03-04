@@ -25,3 +25,6 @@ reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["macros", "net", "io-util", "time", "rt"] }
 urlencoding = "2"
 open = "5"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+mac-notification-sys = "0.6"
