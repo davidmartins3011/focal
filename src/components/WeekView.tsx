@@ -529,57 +529,41 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey }: WeekViewPro
         />
       )}
 
-      <div className={styles.filterBar}>
-        <button
-          className={`${styles.filterPill} ${isWeekMode ? styles.filterPillActive : ""}`}
-          onClick={() => setSelectedFilter("week")}
-        >
-          Semaine
-        </button>
+      <div className={styles.grid}>
         {dayInfos.map((day) => (
-          <button
+          <div
             key={day.dateStr}
-            className={`${styles.filterPill} ${
-              selectedFilter === day.dateStr ? styles.filterPillActive : ""
-            } ${day.isToday ? styles.filterPillToday : ""}`}
-            onClick={() => setSelectedFilter(day.dateStr)}
+            className={`${styles.day} ${day.isToday ? styles.today : ""} ${
+              selectedFilter === day.dateStr ? styles.daySelected : ""
+            }`}
+            onClick={() =>
+              setSelectedFilter(
+                selectedFilter === day.dateStr ? "week" : day.dateStr,
+              )
+            }
           >
-            {day.label} {day.dayNum}
-          </button>
+            <div className={styles.dayName}>{day.label}</div>
+            <div
+              className={`${styles.dayDate} ${day.isToday ? styles.dayDateToday : ""}`}
+            >
+              {day.dayNum}
+            </div>
+            <div className={styles.dayTasks}>
+              {day.total === 0
+                ? "Aucune tâche"
+                : `${day.total} tâche${day.total > 1 ? "s" : ""}`}
+            </div>
+            <div className={styles.dots}>
+              {day.dots.map((dot, i) => (
+                <div
+                  key={i}
+                  className={`${styles.dot} ${styles[dot]}`}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </div>
-
-      {isWeekMode && (
-        <div className={styles.grid}>
-          {dayInfos.map((day) => (
-            <div
-              key={day.dateStr}
-              className={`${styles.day} ${day.isToday ? styles.today : ""}`}
-              onClick={() => setSelectedFilter(day.dateStr)}
-            >
-              <div className={styles.dayName}>{day.label}</div>
-              <div
-                className={`${styles.dayDate} ${day.isToday ? styles.dayDateToday : ""}`}
-              >
-                {day.dayNum}
-              </div>
-              <div className={styles.dayTasks}>
-                {day.total === 0
-                  ? "Aucune tâche"
-                  : `${day.total} tâche${day.total > 1 ? "s" : ""}`}
-              </div>
-              <div className={styles.dots}>
-                {day.dots.map((dot, i) => (
-                  <div
-                    key={i}
-                    className={`${styles.dot} ${styles[dot]}`}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       <DndContext
         sensors={sensors}

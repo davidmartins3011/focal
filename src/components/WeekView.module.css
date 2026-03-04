@@ -1,40 +1,3 @@
-/* ── Filter bar ── */
-.filterBar {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-
-.filterPill {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 5px 12px;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  background: var(--bg2);
-  color: var(--text3);
-  cursor: pointer;
-  font-family: 'Outfit', sans-serif;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-
-.filterPill:hover {
-  border-color: var(--border2);
-  color: var(--text2);
-}
-
-.filterPillActive {
-  background: var(--accent-soft);
-  border-color: rgba(var(--accent-rgb), 0.35);
-  color: var(--accent);
-}
-
-.filterPillToday {
-  font-weight: 700;
-}
-
 /* ── Day grid ── */
 .grid {
   display: grid;
@@ -59,6 +22,11 @@
 .today {
   border-color: rgba(var(--accent-rgb), 0.35);
   background: var(--accent-soft);
+}
+
+.daySelected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .dayName {
