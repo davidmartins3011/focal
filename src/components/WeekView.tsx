@@ -470,6 +470,12 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
   }
 
   function handleWeekDragEnd(draggedId: string, overId: string) {
+    const scrollParent = wrapperRef.current?.closest('[class*="content"]') as HTMLElement | null;
+    const scrollTop = scrollParent?.scrollTop ?? 0;
+    const restoreScroll = () => {
+      if (scrollParent) requestAnimationFrame(() => { scrollParent.scrollTop = scrollTop; });
+    };
+
     // Drop on empty week priorities zone
     if (overId === WEEK_PRI_DROP_ID) {
       const inSec = weekSecTasks.some((t) => t.id === draggedId);
@@ -483,6 +489,7 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
         setScheduledTasks((prev) => [...prev, { ...task, scheduledDate: task.scheduledDate ?? todayStr, priority: "main" as const }]);
         updateTaskSvc({ id: draggedId, scheduledDate: task.scheduledDate ?? todayStr, priority: "main" }).catch(() => {});
       }
+      restoreScroll();
       return;
     }
 
@@ -514,6 +521,7 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
     if (activeInMain !== -1 && overInSec !== -1) {
       setScheduledTasks((prev) => prev.map((t) => t.id === draggedId ? { ...t, priority: "secondary" as const } : t));
       updateTaskSvc({ id: draggedId, priority: "secondary" }).catch(() => {});
+      restoreScroll();
       return;
     }
 
@@ -532,6 +540,7 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
         updateTaskSvc({ id: draggedId, priority: "main" }).catch(() => {});
         updateTaskSvc({ id: demotedId, priority: "secondary" }).catch(() => {});
       }
+      restoreScroll();
       return;
     }
 
@@ -551,6 +560,7 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
         updateTaskSvc({ id: movedTask.id, scheduledDate: movedTask.scheduledDate ?? todayStr, priority: "main" }).catch(() => {});
         updateTaskSvc({ id: demotedId, priority: "secondary" }).catch(() => {});
       }
+      restoreScroll();
       return;
     }
 
@@ -560,6 +570,7 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
       setOverdueTasks((prev) => prev.filter((t) => t.id !== draggedId));
       setScheduledTasks((prev) => [...prev, { ...movedTask, scheduledDate: todayStr, priority: "secondary" as const }]);
       updateTaskSvc({ id: movedTask.id, scheduledDate: todayStr, priority: "secondary" }).catch(() => {});
+      restoreScroll();
     }
   }
 
