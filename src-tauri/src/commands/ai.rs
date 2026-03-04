@@ -74,6 +74,16 @@ fn get_active_provider(db: &rusqlite::Connection) -> Result<ProviderConfig, Stri
     Ok(ready.into_iter().next().unwrap())
 }
 
+fn get_user_profile(db: &rusqlite::Connection) -> Option<serde_json::Value> {
+    db.query_row(
+        "SELECT data FROM user_profile WHERE id = 1",
+        [],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|json| serde_json::from_str(&json).ok())
+}
+
 fn build_system_prompt(db: &rusqlite::Connection) -> String {
     let mut parts = vec![
         "Tu es l'assistant IA de focal., une application d'aide à la productivité pour les personnes TDAH.".to_string(),
@@ -90,32 +100,26 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
         String::new(),
     ];
 
-    if let Ok(profile_json) = db.query_row(
-        "SELECT data FROM user_profile WHERE id = 1",
-        [],
-        |row| row.get::<_, String>(0),
-    ) {
-        if let Ok(profile) = serde_json::from_str::<serde_json::Value>(&profile_json) {
-            let mut ctx = vec!["PROFIL UTILISATEUR :".to_string()];
-            if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
-                ctx.push(format!("- Prénom : {name}"));
+    if let Some(profile) = get_user_profile(db) {
+        let mut ctx = vec!["PROFIL UTILISATEUR :".to_string()];
+        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
+            ctx.push(format!("- Prénom : {name}"));
+        }
+        if let Some(job) = profile.get("jobActivity").and_then(|v| v.as_str()) {
+            ctx.push(format!("- Activité : {job}"));
+        }
+        if let Some(adhd) = profile.get("adhdRecognition").and_then(|v| v.as_str()) {
+            ctx.push(format!("- TDAH : {adhd}"));
+        }
+        if let Some(blockers) = profile.get("blockers").and_then(|v| v.as_array()) {
+            let b: Vec<&str> = blockers.iter().filter_map(|v| v.as_str()).collect();
+            if !b.is_empty() {
+                ctx.push(format!("- Blocages principaux : {}", b.join(", ")));
             }
-            if let Some(job) = profile.get("jobActivity").and_then(|v| v.as_str()) {
-                ctx.push(format!("- Activité : {job}"));
-            }
-            if let Some(adhd) = profile.get("adhdRecognition").and_then(|v| v.as_str()) {
-                ctx.push(format!("- TDAH : {adhd}"));
-            }
-            if let Some(blockers) = profile.get("blockers").and_then(|v| v.as_array()) {
-                let b: Vec<&str> = blockers.iter().filter_map(|v| v.as_str()).collect();
-                if !b.is_empty() {
-                    ctx.push(format!("- Blocages principaux : {}", b.join(", ")));
-                }
-            }
-            if ctx.len() > 1 {
-                parts.push(ctx.join("\n"));
-                parts.push(String::new());
-            }
+        }
+        if ctx.len() > 1 {
+            parts.push(ctx.join("\n"));
+            parts.push(String::new());
         }
     }
 
@@ -329,7 +333,7 @@ async fn call_llm(
 }
 
 fn parse_ai_text(raw: &str) -> AiResponse {
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(raw) {
+    if let Some(parsed) = clean_and_find_json(raw) {
         let content = parsed
             .get("content")
             .and_then(|v| v.as_str())
@@ -613,23 +617,6 @@ fn collect_task_stats(db: &rusqlite::Connection) -> String {
         "- Tâches programmées : {scheduled}, non programmées et actives : {unscheduled}"
     ));
 
-    let todo_total: i32 = db
-        .query_row("SELECT COUNT(*) FROM todos", [], |r| r.get(0))
-        .unwrap_or(0);
-    let todo_done: i32 = db
-        .query_row("SELECT COUNT(*) FROM todos WHERE done = 1", [], |r| r.get(0))
-        .unwrap_or(0);
-    let todo_unscheduled: i32 = db
-        .query_row(
-            "SELECT COUNT(*) FROM todos WHERE scheduled_date IS NULL AND done = 0",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap_or(0);
-    lines.push(format!(
-        "- Todos : {todo_total} (terminés: {todo_done}, sans date et actifs: {todo_unscheduled})"
-    ));
-
     lines.join("\n")
 }
 
@@ -814,7 +801,7 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         "3. Continue à explorer : \"Il y a autre chose ?\" / \"Des réunions, des deadlines ?\"".to_string(),
         "4. Quand il semble avoir tout listé, aide à prioriser : \"Si tu devais n'en faire que 2-3, lesquelles ?\"".to_string(),
         "5. Propose d'estimer les durées si pertinent".to_string(),
-        "6. Confirme le plan et propose de lancer la journée (prepComplete: true)".to_string(),
+        "6. Confirme le plan et propose de lancer la journée (prepComplete: true). IMPORTANT : quand tu mets prepComplete à true, ne remets PAS les tâches déjà ajoutées dans tasksToAdd — elles ont déjà été créées au fil de la conversation.".to_string(),
         String::new(),
         "AJOUT DE TÂCHES :".to_string(),
         "- Quand l'utilisateur mentionne quelque chose à faire, mets-le dans tasksToAdd.".to_string(),
@@ -823,6 +810,7 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         "- Le champ estimatedMinutes est optionnel — ne l'ajoute que si l'utilisateur donne une estimation ou si tu proposes et qu'il confirme.".to_string(),
         "- Le champ priority est optionnel : \"main\" pour prioritaire, \"secondary\" pour secondaire. Ne le mets que si l'utilisateur indique la priorité.".to_string(),
         "- Le champ scheduledDate est optionnel (format YYYY-MM-DD). Par défaut les tâches sont ajoutées pour aujourd'hui. Si l'utilisateur dit \"demain\", \"lundi prochain\", ou une autre date, mets la date correcte.".to_string(),
+        "- IMPORTANT : chaque tâche n'est ajoutée qu'UNE SEULE FOIS dans toute la conversation. Ne remets JAMAIS dans tasksToAdd une tâche que tu as déjà ajoutée dans un message précédent.".to_string(),
         String::new(),
         "RETRAIT DE TÂCHES :".to_string(),
         "- Si l'utilisateur demande de retirer/supprimer une tâche, mets son ID dans tasksToRemove.".to_string(),
@@ -836,16 +824,10 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         String::new(),
     ];
 
-    if let Ok(profile_json) = db.query_row(
-        "SELECT data FROM user_profile WHERE id = 1",
-        [],
-        |row| row.get::<_, String>(0),
-    ) {
-        if let Ok(profile) = serde_json::from_str::<serde_json::Value>(&profile_json) {
-            if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
-                parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
-                parts.push(String::new());
-            }
+    if let Some(profile) = get_user_profile(db) {
+        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
+            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
+            parts.push(String::new());
         }
     }
 

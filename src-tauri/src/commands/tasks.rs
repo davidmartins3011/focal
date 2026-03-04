@@ -63,6 +63,24 @@ fn load_task(db: &rusqlite::Connection, task_id: &str) -> Result<Task, String> {
 }
 
 #[tauri::command]
+pub fn get_all_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = db
+        .prepare("SELECT id FROM tasks ORDER BY position")
+        .map_err(|e| e.to_string())?;
+    let ids: Vec<String> = stmt
+        .query_map([], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    let mut tasks = Vec::with_capacity(ids.len());
+    for id in &ids {
+        tasks.push(load_task(&db, id)?);
+    }
+    Ok(tasks)
+}
+
+#[tauri::command]
 pub fn get_tasks(state: State<'_, AppState>, context: String) -> Result<Vec<Task>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = db
@@ -110,6 +128,25 @@ pub fn get_tasks_by_date_range(
         .map_err(|e| e.to_string())?;
     let ids: Vec<String> = stmt
         .query_map(params![start_date, end_date], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    let mut tasks = Vec::with_capacity(ids.len());
+    for id in &ids {
+        tasks.push(load_task(&db, id)?);
+    }
+    Ok(tasks)
+}
+
+#[tauri::command]
+pub fn get_overdue_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let today = Local::now().format("%Y-%m-%d").to_string();
+    let mut stmt = db
+        .prepare("SELECT id FROM tasks WHERE scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position")
+        .map_err(|e| e.to_string())?;
+    let ids: Vec<String> = stmt
+        .query_map(params![today], |row| row.get(0))
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();

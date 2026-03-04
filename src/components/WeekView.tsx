@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import PrepBanner from "./PrepBanner";
 import TaskItem from "./TaskItem";
-import { getTasks as fetchTasks, getTasksByDateRange, toggleTask as toggleTaskSvc, toggleMicroStep as toggleStepSvc } from "../services/tasks";
+import { getTasks as fetchTasks, getTasksByDateRange, toggleTask as toggleTaskSvc, toggleMicroStep as toggleStepSvc, updateTask as updateTaskSvc } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import type { Task, WeekDay } from "../types";
 import styles from "./WeekView.module.css";
@@ -130,6 +130,13 @@ export default function WeekView() {
     toggleStepSvc(stepId).catch((err) => console.error("[WeekView] toggleStep error:", err));
   }
 
+  function setScheduledDate(id: string, date: string | undefined) {
+    setWeekPriorities((prev) =>
+      prev.map((t) => t.id === id ? { ...t, scheduledDate: date } : t)
+    );
+    updateTaskSvc({ id, scheduledDate: date }).catch((err) => console.error("[WeekView] setScheduledDate error:", err));
+  }
+
   const dismissPrep = useCallback(() => {
     setSetting(weekKey(), "done").catch(() => {});
     setPrepDone(true);
@@ -176,6 +183,7 @@ export default function WeekView() {
             task={task}
             onToggle={toggleTask}
             onToggleStep={toggleStep}
+            onSetScheduledDate={setScheduledDate}
           />
         ))}
       </div>

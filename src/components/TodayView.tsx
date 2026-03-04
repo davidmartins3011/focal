@@ -24,11 +24,10 @@ import FocusTimer from "./FocusTimer";
 import ProgressBar from "./ProgressBar";
 import TaskItem from "./TaskItem";
 import type { Task } from "../types";
-import { getTasks as fetchTasks, toggleTask as toggleTaskSvc, reorderTasks as reorderTasksSvc, setMicroSteps, getStreak } from "../services/tasks";
+import { getTasks as fetchTasks, getOverdueTasks, toggleTask as toggleTaskSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, setMicroSteps, getStreak } from "../services/tasks";
 import { decomposeTask } from "../services/chat";
 import { getSetting, setSetting } from "../services/settings";
 import styles from "./TodayView.module.css";
-
 
 function todayKey(): string {
   return `daily-prep-${new Date().toISOString().slice(0, 10)}`;
@@ -71,13 +70,21 @@ interface TodayViewProps {
 export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refreshKey }: TodayViewProps) {
   const [prepDone, setPrepDone] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
   const [streak, setStreak] = useState(0);
   const [decomposingId, setDecomposingId] = useState<string | null>(null);
+  const [decomposingStepKey, setDecomposingStepKey] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [timerTaskId, setTimerTaskId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTasks("today")
       .then(setTasks)
       .catch((err) => console.error("[TodayView] fetchTasks error:", err));
+    getOverdueTasks()
+      .then(setOverdueTasks)
+      .catch((err) => console.error("[TodayView] getOverdueTasks error:", err));
     getStreak()
       .then(setStreak)
       .catch((err) => console.error("[TodayView] getStreak error:", err));
@@ -85,10 +92,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
       .then((val) => setPrepDone(val === "done"))
       .catch(() => {});
   }, [refreshKey]);
-  const [decomposingStepKey, setDecomposingStepKey] = useState<string | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [timerTaskId, setTimerTaskId] = useState<string | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -109,15 +112,48 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
 
   const isBusy = !!decomposingId || !!decomposingStepKey;
 
+  function updateTaskState(updater: (tasks: Task[]) => Task[]) {
+    setTasks(updater);
+    setOverdueTasks(updater);
+  }
+
   function toggleTask(id: string) {
-    setTasks((prev) =>
+    updateTaskState((prev) =>
       prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
     );
     toggleTaskSvc(id);
   }
 
+  function deleteTask(id: string) {
+    updateTaskState((prev) => prev.filter((t) => t.id !== id));
+    deleteTaskSvc(id).catch((err) => console.error("[TodayView] deleteTask error:", err));
+  }
+
+  function setScheduledDate(id: string, date: string | undefined) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (date === today || date === undefined) {
+      const overdueTask = overdueTasks.find((t) => t.id === id);
+      if (overdueTask) {
+        setOverdueTasks((prev) => prev.filter((t) => t.id !== id));
+        setTasks((prev) => [...prev, { ...overdueTask, scheduledDate: date }]);
+      } else {
+        setTasks((prev) => prev.map((t) => t.id === id ? { ...t, scheduledDate: date } : t));
+      }
+    } else {
+      updateTaskState((prev) => prev.filter((t) => t.id !== id));
+    }
+    updateTaskSvc({ id, scheduledDate: date }).catch((err) => console.error("[TodayView] setScheduledDate error:", err));
+  }
+
+  function renameTask(id: string, name: string) {
+    updateTaskState((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, name } : t))
+    );
+    updateTaskSvc({ id, name }).catch((err) => console.error("[TodayView] renameTask error:", err));
+  }
+
   function toggleStep(taskId: string, stepId: string) {
-    setTasks((prev) =>
+    updateTaskState((prev) =>
       prev.map((t) => {
         if (t.id !== taskId || !t.microSteps) return t;
         return {
@@ -131,7 +167,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
   }
 
   function updateEstimate(taskId: string, minutes: number | undefined) {
-    setTasks((prev) =>
+    updateTaskState((prev) =>
       prev.map((t) =>
         t.id === taskId ? { ...t, estimatedMinutes: minutes } : t
       )
@@ -143,7 +179,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     stepId: string,
     minutes: number | undefined
   ) {
-    setTasks((prev) =>
+    updateTaskState((prev) =>
       prev.map((t) => {
         if (t.id !== taskId || !t.microSteps) return t;
         return {
@@ -157,7 +193,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
   }
 
   function editStep(taskId: string, stepId: string, text: string) {
-    setTasks((prev) =>
+    updateTaskState((prev) =>
       prev.map((t) => {
         if (t.id !== taskId || !t.microSteps) return t;
         return {
@@ -170,66 +206,38 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     );
   }
 
-  const decompose = useCallback(
-    (taskId: string) => {
-      if (isBusy) return;
-      const task = tasks.find((t) => t.id === taskId);
-      if (!task) return;
-      setDecomposingId(taskId);
+  function findTask(taskId: string): Task | undefined {
+    return tasks.find((t) => t.id === taskId) ?? overdueTasks.find((t) => t.id === taskId);
+  }
 
-      decomposeTask(task.name)
-        .then((result) => {
-          const steps = result.map((s, i) => ({
-            id: `${taskId}-s${i}`,
-            text: s.text,
-            done: false,
-            estimatedMinutes: s.estimatedMinutes,
-          }));
-
-          setTasks((prev) =>
-            prev.map((t) =>
-              t.id === taskId
-                ? { ...t, microSteps: steps, aiDecomposed: true }
-                : t
-            )
-          );
-
-          setMicroSteps(taskId, steps).catch(() => {});
-          setTimeout(() => setDecomposingId(null), steps.length * 300 + 500);
-        })
-        .catch((err) => {
-          console.error("[TodayView] decompose error:", err);
-          setDecomposingId(null);
-        });
-    },
-    [isBusy, tasks]
-  );
-
-  function redecompose(taskId: string) {
+  function decompose(taskId: string, redo = false) {
     if (isBusy) return;
-    const task = tasks.find((t) => t.id === taskId);
+    const task = findTask(taskId);
     if (!task) return;
 
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? { ...t, microSteps: undefined, aiDecomposed: false }
-          : t
-      )
-    );
+    if (redo) {
+      updateTaskState((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? { ...t, microSteps: undefined, aiDecomposed: false }
+            : t
+        )
+      );
+    }
 
     setDecomposingId(taskId);
 
     decomposeTask(task.name)
       .then((result) => {
+        const prefix = redo ? "rs" : "s";
         const steps = result.map((s, i) => ({
-          id: `${taskId}-rs${i}`,
+          id: `${taskId}-${prefix}${i}`,
           text: s.text,
           done: false,
           estimatedMinutes: s.estimatedMinutes,
         }));
 
-        setTasks((prev) =>
+        updateTaskState((prev) =>
           prev.map((t) =>
             t.id === taskId
               ? { ...t, microSteps: steps, aiDecomposed: true }
@@ -241,14 +249,14 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
         setTimeout(() => setDecomposingId(null), steps.length * 300 + 500);
       })
       .catch((err) => {
-        console.error("[TodayView] redecompose error:", err);
+        console.error("[TodayView] decompose error:", err);
         setDecomposingId(null);
       });
   }
 
   function decomposeStep(taskId: string, stepId: string) {
     if (isBusy) return;
-    const task = tasks.find((t) => t.id === taskId);
+    const task = findTask(taskId);
     const step = task?.microSteps?.find((s) => s.id === stepId);
     if (!task || !step) return;
 
@@ -263,24 +271,22 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
           estimatedMinutes: s.estimatedMinutes,
         }));
 
-        setTasks((prev) =>
+        let finalSteps: typeof subSteps | undefined;
+        updateTaskState((prev) =>
           prev.map((t) => {
             if (t.id !== taskId || !t.microSteps) return t;
             const idx = t.microSteps.findIndex((s) => s.id === stepId);
             if (idx === -1) return t;
             const newSteps = [...t.microSteps];
             newSteps.splice(idx, 1, ...subSteps);
+            finalSteps = newSteps;
             return { ...t, microSteps: newSteps };
           })
         );
 
-        setTasks((current) => {
-          const updated = current.find((t) => t.id === taskId);
-          if (updated?.microSteps) {
-            setMicroSteps(taskId, updated.microSteps).catch(() => {});
-          }
-          return current;
-        });
+        if (finalSteps) {
+          setMicroSteps(taskId, finalSteps).catch(() => {});
+        }
 
         setDecomposingStepKey(null);
       })
@@ -300,7 +306,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
 
   function completeTimerTask() {
     if (timerTaskId) {
-      setTasks((prev) =>
+      updateTaskState((prev) =>
         prev.map((t) => (t.id === timerTaskId ? { ...t, done: true } : t))
       );
       toggleTaskSvc(timerTaskId);
@@ -311,11 +317,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     setTimerTaskId(null);
   }
 
-  function skipTimerTask() {
-    setTimerTaskId(null);
-  }
-
-  function cancelTimer() {
+  function stopTimer() {
     setTimerTaskId(null);
   }
 
@@ -343,19 +345,41 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = tasks.findIndex((t) => t.id === active.id);
-    const newIndex = tasks.findIndex((t) => t.id === over.id);
-    const reordered = arrayMove(tasks, oldIndex, newIndex);
-    setTasks(reordered);
-    reorderTasksSvc(reordered.map((t) => t.id));
+    const activeInToday = tasks.findIndex((t) => t.id === active.id);
+    const activeInOverdue = overdueTasks.findIndex((t) => t.id === active.id);
+    const overInToday = tasks.findIndex((t) => t.id === over.id);
+
+    if (activeInOverdue !== -1 && overInToday !== -1) {
+      const movedTask = overdueTasks[activeInOverdue];
+      const today = new Date().toISOString().slice(0, 10);
+      setOverdueTasks((prev) => prev.filter((t) => t.id !== active.id));
+      setTasks((prev) => {
+        const updated = [...prev];
+        updated.splice(overInToday, 0, { ...movedTask, scheduledDate: today });
+        return updated;
+      });
+      updateTaskSvc({ id: movedTask.id, scheduledDate: today }).catch((err) =>
+        console.error("[TodayView] move overdue to today error:", err)
+      );
+      setTasks((current) => {
+        reorderTasksSvc(current.map((t) => t.id));
+        return current;
+      });
+    } else if (activeInToday !== -1 && overInToday !== -1) {
+      const reordered = arrayMove(tasks, activeInToday, overInToday);
+      setTasks(reordered);
+      reorderTasksSvc(reordered.map((t) => t.id));
+    }
   }
 
   function handleDragCancel() {
     setActiveId(null);
   }
 
-  const activeTask = activeId ? tasks.find((t) => t.id === activeId) : null;
-  const taskIds = tasks.map((t) => t.id);
+  const activeTask = activeId
+    ? (tasks.find((t) => t.id === activeId) ?? overdueTasks.find((t) => t.id === activeId))
+    : null;
+  const allSortableIds = [...tasks.map((t) => t.id), ...overdueTasks.map((t) => t.id)];
 
   const dismissPrep = useCallback(() => {
     setSetting(todayKey(), "done").catch(() => {});
@@ -381,8 +405,8 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
             estimatedMinutes={timerTask.estimatedMinutes}
             nextTaskName={getNextFocusTask()}
             onComplete={completeTimerTask}
-            onSkip={skipTimerTask}
-            onCancel={cancelTimer}
+            onSkip={stopTimer}
+            onCancel={stopTimer}
           />
         </div>
       )}
@@ -404,7 +428,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+        <SortableContext items={allSortableIds} strategy={verticalListSortingStrategy}>
           <div className={styles.sectionHeader}>
             <span className={styles.sectionTitle}>
               <span className={styles.priorityIcon}>⚡</span>
@@ -423,11 +447,14 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
                 onToggle={toggleTask}
                 onToggleStep={toggleStep}
                 onDecompose={decompose}
-                onRedecompose={redecompose}
+                onRedecompose={(id) => decompose(id, true)}
                 onDecomposeStep={decomposeStep}
                 onEditStep={editStep}
                 onUpdateEstimate={updateEstimate}
                 onUpdateStepEstimate={updateStepEstimate}
+                onDelete={deleteTask}
+                onRename={renameTask}
+                onSetScheduledDate={setScheduledDate}
                 isDecomposing={decomposingId === task.id}
                 decomposingStepId={getDecomposingStepId(task.id)}
                 animDelay={0.08 + i * 0.04}
@@ -457,11 +484,14 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
                     onToggle={toggleTask}
                     onToggleStep={toggleStep}
                     onDecompose={decompose}
-                    onRedecompose={redecompose}
+                    onRedecompose={(id) => decompose(id, true)}
                     onDecomposeStep={decomposeStep}
                     onEditStep={editStep}
                     onUpdateEstimate={updateEstimate}
                     onUpdateStepEstimate={updateStepEstimate}
+                    onDelete={deleteTask}
+                    onRename={renameTask}
+                    onSetScheduledDate={setScheduledDate}
                     isDecomposing={decomposingId === task.id}
                     decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.12 + i * 0.04}
@@ -469,6 +499,43 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
                     isSelected={effectiveSelectedId === task.id}
                     hasRunningTimer={timerTaskId === task.id}
                     onSelect={selectTask}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {overdueTasks.length > 0 && (
+            <>
+              <div className={`${styles.sectionHeader} ${styles.overdueHeader}`}>
+                <span className={`${styles.sectionTitle} ${styles.overdueTitle}`}>
+                  <span className={styles.priorityIcon}>📋</span>
+                  Reliquat des jours précédents
+                </span>
+                <span className={styles.sectionCount}>
+                  {overdueTasks.length}
+                </span>
+              </div>
+
+              <div className={styles.taskList}>
+                {overdueTasks.map((task, i) => (
+                  <SortableTaskItem
+                    key={task.id}
+                    task={task}
+                    onToggle={toggleTask}
+                    onToggleStep={toggleStep}
+                    onDecompose={decompose}
+                    onRedecompose={(id) => decompose(id, true)}
+                    onDecomposeStep={decomposeStep}
+                    onEditStep={editStep}
+                    onUpdateEstimate={updateEstimate}
+                    onUpdateStepEstimate={updateStepEstimate}
+                    onDelete={deleteTask}
+                    onRename={renameTask}
+                    onSetScheduledDate={setScheduledDate}
+                    isDecomposing={decomposingId === task.id}
+                    decomposingStepId={getDecomposingStepId(task.id)}
+                    animDelay={0.16 + i * 0.04}
+                    isSecondary
                   />
                 ))}
               </div>

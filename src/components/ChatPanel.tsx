@@ -34,6 +34,18 @@ function getAvailableModels(settings: AISettings): AvailableModel[] {
   return result;
 }
 
+function parseAISettings(raw: string | null): { models: AvailableModel[]; selectedModel: string | null } | null {
+  if (!raw) return null;
+  try {
+    const s = JSON.parse(raw) as AISettings;
+    const models = getAvailableModels(s);
+    const selectedModel = s.selectedModel && models.some((m) => m.id === s.selectedModel) ? s.selectedModel : models[0]?.id ?? null;
+    return { models, selectedModel };
+  } catch {
+    return null;
+  }
+}
+
 interface ChatPanelProps {
   onStartOnboarding?: () => void;
   dailyPrepPending?: boolean;
@@ -55,6 +67,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [dailyPrepMode, setDailyPrepMode] = useState(false);
   const dailyPrepHistory = useRef<{ role: string; content: string }[]>([]);
+  const todayTasksRef = useRef(todayTasks);
+  todayTasksRef.current = todayTasks;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -68,17 +82,10 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       .catch(() => {});
     getSetting("ai-settings")
       .then((raw) => {
-        if (!raw) return;
-        try {
-          const s = JSON.parse(raw) as AISettings;
-          const models = getAvailableModels(s);
-          setAvailableModels(models);
-          if (s.selectedModel && models.some((m) => m.id === s.selectedModel)) {
-            setSelectedModelId(s.selectedModel);
-          } else if (models.length > 0) {
-            setSelectedModelId(models[0].id);
-          }
-        } catch { /* ignore */ }
+        const parsed = parseAISettings(raw);
+        if (!parsed) return;
+        setAvailableModels(parsed.models);
+        setSelectedModelId(parsed.selectedModel);
       })
       .catch(() => {});
   }, []);
@@ -87,16 +94,13 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     const interval = setInterval(() => {
       getSetting("ai-settings")
         .then((raw) => {
-          if (!raw) return;
-          try {
-            const s = JSON.parse(raw) as AISettings;
-            const models = getAvailableModels(s);
-            setAvailableModels(models);
-            setSelectedModelId((prev) => {
-              if (prev && models.some((m) => m.id === prev)) return prev;
-              return models[0]?.id ?? null;
-            });
-          } catch { /* ignore */ }
+          const parsed = parseAISettings(raw);
+          if (!parsed) return;
+          setAvailableModels(parsed.models);
+          setSelectedModelId((prev) => {
+            if (prev && parsed.models.some((m) => m.id === prev)) return prev;
+            return parsed.models[0]?.id ?? null;
+          });
         })
         .catch(() => {});
     }, 2000);
@@ -144,6 +148,11 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       let tasksModified = false;
 
       for (const t of response.tasksToAdd) {
+        const alreadyExists = todayTasksRef.current.some(
+          (existing) => existing.name.toLowerCase() === t.name.toLowerCase(),
+        );
+        if (alreadyExists) continue;
+
         try {
           const created = await createTask({
             name: t.name,

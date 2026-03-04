@@ -41,22 +41,6 @@ pub struct Task {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TodoItem {
-    pub id: String,
-    pub text: String,
-    pub done: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub urgency: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub importance: Option<i32>,
-    pub source: String,
-    pub created_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub scheduled_date: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessageStep {
     pub text: String,
 }

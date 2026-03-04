@@ -144,6 +144,7 @@ export const defaultReminders: NotificationReminder[] = [
     enabled: true,
     days: ["lun"],
     icon: "📋",
+    frequency: "weekly",
   },
   {
     id: "weekly-review",
@@ -153,6 +154,7 @@ export const defaultReminders: NotificationReminder[] = [
     enabled: true,
     days: ["dim"],
     icon: "📊",
+    frequency: "weekly",
   },
   {
     id: "strategy-review",

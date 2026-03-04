@@ -34,17 +34,6 @@ CREATE TABLE IF NOT EXISTS micro_steps (
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS todos (
-    id TEXT PRIMARY KEY,
-    text TEXT NOT NULL,
-    done INTEGER NOT NULL DEFAULT 0,
-    urgency INTEGER,
-    importance INTEGER,
-    source TEXT NOT NULL DEFAULT 'manual',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    scheduled_date TEXT
-);
-
 CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY,
     role TEXT NOT NULL,
@@ -271,7 +260,6 @@ pub fn seed_if_empty(conn: &mut Connection) -> Result<(), rusqlite::Error> {
     }
     let tx = conn.transaction()?;
     seed_tasks(&tx)?;
-    seed_todos(&tx)?;
     seed_reviews(&tx)?;
     seed_chat(&tx)?;
     seed_integrations(&tx)?;
@@ -413,25 +401,6 @@ fn seed_tasks(conn: &Connection) -> Result<(), rusqlite::Error> {
     insert_task("c19", "Réunion kick-off projet CRM", true, None, None, false, "calendar", Some(&d), 1)?;
     insert_tag("c19", "CRM", "crm", 0)?;
 
-    Ok(())
-}
-
-fn seed_todos(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let ins = |id: &str, text: &str, done: bool, urg: Option<i32>, imp: Option<i32>, src: &str, at: &str, sched: Option<&str>| -> Result<(), rusqlite::Error> {
-        conn.execute(
-            "INSERT INTO todos (id, text, done, urgency, importance, source, created_at, scheduled_date) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-            params![id, text, done, urg, imp, src, at, sched],
-        )?;
-        Ok(())
-    };
-    ins("t1", "Finaliser la maquette du dashboard client", false, Some(4), Some(5), "manual", "2026-02-27T08:30:00", Some("2026-02-27"))?;
-    ins("t2", "Répondre au mail de Marie concernant le planning Q2", false, Some(3), Some(3), "manual", "2026-02-27T09:15:00", Some("2026-02-27"))?;
-    ins("t3", "Penser à relancer le devis freelance (>48h sans réponse)", false, Some(2), Some(4), "ai", "2026-02-27T10:00:00", None)?;
-    ins("t4", "Acheter du café et des post-it", false, None, None, "manual", "2026-02-26T14:00:00", None)?;
-    ins("t5", "Prendre RDV dentiste", true, None, None, "manual", "2026-02-25T11:00:00", Some("2026-02-25"))?;
-    ins("t6", "Tu n'as pas ouvert le doc « Stratégie Produit » depuis 5 jours — à revoir ?", false, None, Some(3), "ai", "2026-02-27T07:00:00", None)?;
-    ins("t7", "Lire l'article sur les design tokens envoyé par Lucas", false, None, None, "manual", "2026-02-26T18:30:00", Some("2026-03-02"))?;
-    ins("t8", "Mettre à jour le README du repo principal", false, Some(1), Some(2), "manual", "2026-02-24T16:00:00", None)?;
     Ok(())
 }
 

@@ -1,26 +1,27 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { TodoItem, TodoPriority } from "../types";
+import type { Task } from "../types";
 import TodoItemRow from "./TodoItemRow";
-import * as todoService from "../services/todos";
+import { getAllTasks, createTask, toggleTask as toggleTaskSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, reorderTasks } from "../services/tasks";
 import styles from "./TodoView.module.css";
 
 type Filter = "all" | "done" | "ai" | "prioritized" | "unscheduled";
 type PopoverType = "priority" | "schedule";
 
 interface PopoverState {
-  todoId: string;
+  taskId: string;
   type: PopoverType;
 }
 
 export default function TodoView() {
-  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [newText, setNewText] = useState("");
 
   useEffect(() => {
-    todoService.getTodos()
-      .then(setTodos)
-      .catch((err) => console.error("[TodoView] getTodos error:", err));
+    getAllTasks()
+      .then(setTasks)
+      .catch((err) => console.error("[TodoView] getAllTasks error:", err));
   }, []);
+
   const [filter, setFilter] = useState<Filter>("all");
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -42,27 +43,27 @@ export default function TodoView() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const addTodo = () => {
+  const addTask = () => {
     const text = newText.trim();
     if (!text) return;
     setNewText("");
-    todoService.createTodo({ text })
-      .then((todo) => {
-        setTodos((prev) => [todo, ...prev]);
+    createTask({ name: text })
+      .then((task) => {
+        setTasks((prev) => [task, ...prev]);
       })
-      .catch((err) => console.error("[TodoView] createTodo error:", err));
+      .catch((err) => console.error("[TodoView] createTask error:", err));
   };
 
   const toggleDone = (id: string) => {
-    setTodos((prev) =>
+    setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
     );
-    todoService.toggleTodo(id);
+    toggleTaskSvc(id).catch((err) => console.error("[TodoView] toggleTask error:", err));
   };
 
-  const deleteTodo = (id: string) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-    todoService.deleteTodo(id);
+  const deleteItem = (id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    deleteTaskSvc(id).catch((err) => console.error("[TodoView] deleteTask error:", err));
   };
 
   const startEditing = (id: string, currentText: string) => {
@@ -74,10 +75,12 @@ export default function TodoView() {
     if (!editingId) return;
     const trimmed = editText.trim();
     if (trimmed) {
-      setTodos((prev) =>
-        prev.map((t) => (t.id === editingId ? { ...t, text: trimmed } : t))
+      setTasks((prev) =>
+        prev.map((t) => (t.id === editingId ? { ...t, name: trimmed } : t))
       );
-      todoService.updateTodo({ id: editingId, text: trimmed });
+      updateTaskSvc({ id: editingId, name: trimmed }).catch((err) =>
+        console.error("[TodoView] updateTask error:", err)
+      );
     }
     setEditingId(null);
     setEditText("");
@@ -88,27 +91,27 @@ export default function TodoView() {
     setEditText("");
   };
 
-  const setPriority = (
-    id: string,
-    field: "urgency" | "importance",
-    value: TodoPriority | undefined
-  ) => {
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, [field]: value } : t))
+  const setPriority = (id: string, value: "main" | "secondary" | undefined) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, priority: value } : t))
     );
-    todoService.updateTodo({ id, [field]: value ?? null });
+    updateTaskSvc({ id, priority: value ?? "" }).catch((err) =>
+      console.error("[TodoView] updateTask error:", err)
+    );
   };
 
   const setScheduledDate = (id: string, date: string | undefined) => {
-    setTodos((prev) =>
+    setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, scheduledDate: date } : t))
     );
-    todoService.updateTodo({ id, scheduledDate: date });
+    updateTaskSvc({ id, scheduledDate: date ?? "" }).catch((err) =>
+      console.error("[TodoView] updateTask error:", err)
+    );
   };
 
-  const openPopover = (todoId: string, type: PopoverType) => {
+  const openPopover = (taskId: string, type: PopoverType) => {
     setPopover((prev) =>
-      prev?.todoId === todoId && prev.type === type ? null : { todoId, type }
+      prev?.taskId === taskId && prev.type === type ? null : { taskId, type }
     );
   };
 
@@ -137,7 +140,7 @@ export default function TodoView() {
         return;
       }
 
-      setTodos((prev) => {
+      setTasks((prev) => {
         const arr = [...prev];
         const fromIdx = arr.findIndex((t) => t.id === draggedId);
         if (fromIdx === -1) return prev;
@@ -146,6 +149,7 @@ export default function TodoView() {
         if (toIdx === -1) return prev;
         if (dragOverSide === "bottom") toIdx += 1;
         arr.splice(toIdx, 0, moved);
+        reorderTasks(arr.map((t) => t.id)).catch(() => {});
         return arr;
       });
 
@@ -162,14 +166,14 @@ export default function TodoView() {
 
   const showDone = filter === "done";
 
-  const filtered = todos.filter((t) => {
+  const filtered = tasks.filter((t) => {
     switch (filter) {
       case "done":
         return t.done;
       case "ai":
-        return t.source === "ai" && !t.done;
+        return t.aiDecomposed && !t.done;
       case "prioritized":
-        return (t.urgency !== undefined || t.importance !== undefined) && !t.done;
+        return t.priority != null && !t.done;
       case "unscheduled":
         return !t.scheduledDate && !t.done;
       default:
@@ -177,10 +181,10 @@ export default function TodoView() {
     }
   });
 
-  const totalActive = todos.filter((t) => !t.done).length;
-  const totalDone = todos.filter((t) => t.done).length;
-  const totalAI = todos.filter((t) => t.source === "ai").length;
-  const totalUnscheduled = todos.filter((t) => !t.scheduledDate && !t.done).length;
+  const totalActive = tasks.filter((t) => !t.done).length;
+  const totalDone = tasks.filter((t) => t.done).length;
+  const totalAI = tasks.filter((t) => t.aiDecomposed).length;
+  const totalUnscheduled = tasks.filter((t) => !t.scheduledDate && !t.done).length;
 
   const filters: { key: Filter; label: string }[] = [
     { key: "all", label: "Tous" },
@@ -190,28 +194,28 @@ export default function TodoView() {
     { key: "done", label: `Terminés (${totalDone})` },
   ];
 
-  const renderTodoList = (items: TodoItem[]) => (
+  const renderTaskList = (items: Task[]) => (
     <div className={styles.todoList}>
-      {items.map((todo) => (
+      {items.map((task) => (
         <TodoItemRow
-          key={todo.id}
-          todo={todo}
+          key={task.id}
+          task={task}
           onToggle={toggleDone}
-          onDelete={deleteTodo}
+          onDelete={deleteItem}
           onSetPriority={setPriority}
           onSetScheduledDate={setScheduledDate}
-          activePopover={popover?.todoId === todo.id ? popover.type : null}
+          activePopover={popover?.taskId === task.id ? popover.type : null}
           onOpenPopover={openPopover}
-          popoverRef={popover?.todoId === todo.id ? popoverRef : undefined}
-          isEditing={editingId === todo.id}
-          editText={editingId === todo.id ? editText : ""}
+          popoverRef={popover?.taskId === task.id ? popoverRef : undefined}
+          isEditing={editingId === task.id}
+          editText={editingId === task.id ? editText : ""}
           onStartEdit={startEditing}
           onEditChange={setEditText}
           onConfirmEdit={confirmEdit}
           onCancelEdit={cancelEdit}
-          isDragging={draggedId === todo.id}
-          isDragOver={dragOverId === todo.id && draggedId !== todo.id}
-          dragOverSide={dragOverId === todo.id ? dragOverSide : undefined}
+          isDragging={draggedId === task.id}
+          isDragOver={dragOverId === task.id && draggedId !== task.id}
+          dragOverSide={dragOverId === task.id ? dragOverSide : undefined}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
@@ -229,7 +233,7 @@ export default function TodoView() {
           ToDo
         </div>
         <div className={styles.subtitle}>
-          Capture rapide — note tes idées, tâches et rappels. L'IA peut aussi en ajouter.
+          Toutes tes tâches au même endroit — planifie, priorise et avance.
         </div>
         <div className={styles.statsRow}>
           <span className={styles.stat}>
@@ -255,10 +259,10 @@ export default function TodoView() {
             className={styles.addInput}
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addTodo()}
-            placeholder="Ajouter un todo…"
+            onKeyDown={(e) => e.key === "Enter" && addTask()}
+            placeholder="Ajouter une tâche…"
           />
-          <button className={styles.addBtn} onClick={addTodo}>
+          <button className={styles.addBtn} onClick={addTask}>
             Ajouter
           </button>
         </div>
@@ -279,18 +283,18 @@ export default function TodoView() {
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>{showDone ? "🎉" : "✨"}</div>
             <div className={styles.emptyTitle}>
-              {showDone ? "Aucun todo terminé" : "Rien ici"}
+              {showDone ? "Aucune tâche terminée" : "Rien ici"}
             </div>
             <div className={styles.emptyText}>
               {filter === "all"
-                ? "Ajoute ton premier todo pour commencer."
+                ? "Ajoute ta première tâche pour commencer."
                 : filter === "done"
-                  ? "Les todos que tu termines apparaîtront ici."
-                  : "Aucun todo ne correspond à ce filtre."}
+                  ? "Les tâches que tu termines apparaîtront ici."
+                  : "Aucune tâche ne correspond à ce filtre."}
             </div>
           </div>
         ) : (
-          renderTodoList(filtered)
+          renderTaskList(filtered)
         )}
       </div>
     </div>

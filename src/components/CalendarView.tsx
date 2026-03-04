@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import type { Task } from "../types";
-import { getTasks as fetchTasks, toggleTask as toggleTaskSvc, toggleMicroStep as toggleStepSvc } from "../services/tasks";
+import { getTasksByDateRange, toggleTask as toggleTaskSvc, toggleMicroStep as toggleStepSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc } from "../services/tasks";
 import TaskItem from "./TaskItem";
 import styles from "./CalendarView.module.css";
 
@@ -109,8 +109,16 @@ export default function CalendarView() {
   const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [taskMap, setTaskMap] = useState<Record<string, Task[]>>({});
 
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const calendarDays = useMemo(() => buildCalendarDays(year, month), [year, month]);
+
   useEffect(() => {
-    fetchTasks("calendar")
+    const days = buildCalendarDays(year, month);
+    const startDate = toKey(days[0]);
+    const endDate = toKey(days[days.length - 1]);
+
+    getTasksByDateRange(startDate, endDate)
       .then((tasks) => {
         const map: Record<string, Task[]> = {};
         for (const t of tasks) {
@@ -119,12 +127,8 @@ export default function CalendarView() {
         }
         setTaskMap(map);
       })
-      .catch((err) => console.error("[CalendarView] fetchTasks error:", err));
-  }, []);
-
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const calendarDays = useMemo(() => buildCalendarDays(year, month), [year, month]);
+      .catch((err) => console.error("[CalendarView] fetch error:", err));
+  }, [year, month]);
 
   const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
   const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
@@ -163,6 +167,30 @@ export default function CalendarView() {
       return next;
     });
     toggleStepSvc(stepId).catch((err) => console.error("[CalendarView] toggleStep error:", err));
+  }
+
+  function deleteTask(id: string) {
+    setTaskMap((prev) => {
+      const next: Record<string, Task[]> = {};
+      for (const key of Object.keys(prev)) {
+        next[key] = prev[key].filter((t) => t.id !== id);
+      }
+      return next;
+    });
+    deleteTaskSvc(id).catch((err) => console.error("[CalendarView] deleteTask error:", err));
+  }
+
+  function renameTask(id: string, name: string) {
+    setTaskMap((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        next[key] = next[key].map((t) =>
+          t.id === id ? { ...t, name } : t
+        );
+      }
+      return next;
+    });
+    updateTaskSvc({ id, name }).catch((err) => console.error("[CalendarView] renameTask error:", err));
   }
 
   const selectedTasks: Task[] = taskMap[toKey(selectedDate)] ?? [];
@@ -300,6 +328,8 @@ export default function CalendarView() {
                   task={task}
                   onToggle={toggleTask}
                   onToggleStep={toggleStep}
+                  onDelete={deleteTask}
+                  onRename={renameTask}
                   animDelay={0.05 + i * 0.03}
                 />
               ))}

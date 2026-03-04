@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import type { Task } from "../types";
 import EditableEstimate from "./EditableEstimate";
+import { getQuickDates, formatQuickDateHint } from "../utils/dateFormat";
 import styles from "./TaskItem.module.css";
 
 const CELEBRATIONS = [
@@ -25,6 +26,9 @@ interface Props {
   onStuck?: (id: string) => void;
   onUpdateEstimate?: (taskId: string, minutes: number | undefined) => void;
   onUpdateStepEstimate?: (taskId: string, stepId: string, minutes: number | undefined) => void;
+  onDelete?: (id: string) => void;
+  onRename?: (id: string, name: string) => void;
+  onSetScheduledDate?: (id: string, date: string | undefined) => void;
   isDecomposing?: boolean;
   decomposingStepId?: string | null;
   animDelay?: number;
@@ -46,6 +50,9 @@ export default function TaskItem({
   onStuck,
   onUpdateEstimate,
   onUpdateStepEstimate,
+  onDelete,
+  onRename,
+  onSetScheduledDate,
   isDecomposing = false,
   decomposingStepId = null,
   animDelay = 0,
@@ -62,8 +69,14 @@ export default function TaskItem({
   const [celebrationMsg, setCelebrationMsg] = useState<string | null>(null);
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const [nameText, setNameText] = useState(task.name);
+  const [showSchedule, setShowSchedule] = useState(false);
   const prevDoneRef = useRef(task.done);
   const stuckMenuRef = useRef<HTMLDivElement>(null);
+  const scheduleRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const quickDates = useMemo(() => getQuickDates(), []);
 
   const hasSteps = task.microSteps && task.microSteps.length > 0;
   const canDecompose = !task.done && !hasSteps && !isDecomposing;
@@ -80,15 +93,18 @@ export default function TaskItem({
   }, [task.done]);
 
   useEffect(() => {
-    if (!showStuckMenu) return;
+    if (!showStuckMenu && !showSchedule) return;
     const handler = (e: MouseEvent) => {
-      if (stuckMenuRef.current && !stuckMenuRef.current.contains(e.target as Node)) {
+      if (showStuckMenu && stuckMenuRef.current && !stuckMenuRef.current.contains(e.target as Node)) {
         setShowStuckMenu(false);
+      }
+      if (showSchedule && scheduleRef.current && !scheduleRef.current.contains(e.target as Node)) {
+        setShowSchedule(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showStuckMenu]);
+  }, [showStuckMenu, showSchedule]);
 
   useEffect(() => {
     if (!task.microSteps?.length) {
@@ -124,6 +140,31 @@ export default function TaskItem({
     justDecomposed &&
     visibleSteps === (task.microSteps?.length ?? 0) &&
     visibleSteps > 0;
+
+  useEffect(() => {
+    setNameText(task.name);
+  }, [task.name]);
+
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.selectionStart = nameInputRef.current.value.length;
+    }
+  }, [editingName]);
+
+  function startEditName() {
+    if (!onRename) return;
+    setNameText(task.name);
+    setEditingName(true);
+  }
+
+  function commitEditName() {
+    const trimmed = nameText.trim();
+    if (trimmed && trimmed !== task.name) {
+      onRename?.(task.id, trimmed);
+    }
+    setEditingName(false);
+  }
 
   function startEditStep(stepId: string, text: string) {
     setEditingStepId(stepId);
@@ -176,9 +217,27 @@ export default function TaskItem({
 
       <div className={styles.body}>
         <div className={styles.nameRow}>
-          <div className={`${styles.name} ${task.done ? styles.nameDone : ""}`}>
-            {task.name}
-          </div>
+          {editingName ? (
+            <input
+              ref={nameInputRef}
+              className={styles.nameEditInput}
+              value={nameText}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setNameText(e.target.value)}
+              onBlur={commitEditName}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEditName();
+                if (e.key === "Escape") setEditingName(false);
+              }}
+            />
+          ) : (
+            <div
+              className={`${styles.name} ${task.done ? styles.nameDone : ""}`}
+              onDoubleClick={(e) => { e.stopPropagation(); startEditName(); }}
+            >
+              {task.name}
+            </div>
+          )}
           {hasRunningTimer && (
             <span className={styles.timerBadge}>
               <span className={styles.timerDot} />
@@ -190,6 +249,88 @@ export default function TaskItem({
               minutes={task.estimatedMinutes}
               onChange={(m) => onUpdateEstimate?.(task.id, m)}
             />
+          )}
+          {onSetScheduledDate && !task.done && (
+            <div className={styles.scheduleWrap} ref={scheduleRef}>
+              <button
+                className={`${styles.scheduleBtn} ${showSchedule ? styles.scheduleBtnActive : ""}`}
+                onClick={(e) => { e.stopPropagation(); setShowSchedule(!showSchedule); }}
+                title="Planifier"
+              >
+                📅
+              </button>
+              {showSchedule && (
+                <div className={styles.schedulePopover}>
+                  <div className={styles.scheduleLabel}>Planifier</div>
+                  <button
+                    className={`${styles.scheduleOption} ${task.scheduledDate === quickDates.today ? styles.scheduleSelected : ""}`}
+                    onClick={(e) => { e.stopPropagation(); onSetScheduledDate(task.id, quickDates.today); setShowSchedule(false); }}
+                  >
+                    <span>☀️</span>
+                    <span>Aujourd'hui</span>
+                  </button>
+                  <button
+                    className={`${styles.scheduleOption} ${task.scheduledDate === quickDates.tomorrow ? styles.scheduleSelected : ""}`}
+                    onClick={(e) => { e.stopPropagation(); onSetScheduledDate(task.id, quickDates.tomorrow); setShowSchedule(false); }}
+                  >
+                    <span>→</span>
+                    <span>Demain</span>
+                  </button>
+                  <div className={styles.scheduleDivider} />
+                  <div className={styles.scheduleLabel}>Début de semaine</div>
+                  <button
+                    className={`${styles.scheduleOption} ${task.scheduledDate === quickDates.nextMonday ? styles.scheduleSelected : ""}`}
+                    onClick={(e) => { e.stopPropagation(); onSetScheduledDate(task.id, quickDates.nextMonday); setShowSchedule(false); }}
+                  >
+                    <span>📆</span>
+                    <span>Semaine prochaine <span className={styles.scheduleHint}>{formatQuickDateHint(quickDates.nextMonday)}</span></span>
+                  </button>
+                  <button
+                    className={`${styles.scheduleOption} ${task.scheduledDate === quickDates.twoWeeksMonday ? styles.scheduleSelected : ""}`}
+                    onClick={(e) => { e.stopPropagation(); onSetScheduledDate(task.id, quickDates.twoWeeksMonday); setShowSchedule(false); }}
+                  >
+                    <span>⏩</span>
+                    <span>Dans 2 semaines <span className={styles.scheduleHint}>{formatQuickDateHint(quickDates.twoWeeksMonday)}</span></span>
+                  </button>
+                  <button
+                    className={`${styles.scheduleOption} ${task.scheduledDate === quickDates.oneMonthMonday ? styles.scheduleSelected : ""}`}
+                    onClick={(e) => { e.stopPropagation(); onSetScheduledDate(task.id, quickDates.oneMonthMonday); setShowSchedule(false); }}
+                  >
+                    <span>📅</span>
+                    <span>Dans 1 mois <span className={styles.scheduleHint}>{formatQuickDateHint(quickDates.oneMonthMonday)}</span></span>
+                  </button>
+                  <div className={styles.scheduleDivider} />
+                  <div className={styles.scheduleLabel}>Date précise</div>
+                  <input
+                    type="date"
+                    className={styles.scheduleDateInput}
+                    value={task.scheduledDate ?? ""}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => { onSetScheduledDate(task.id, e.target.value || undefined); setShowSchedule(false); }}
+                  />
+                  {task.scheduledDate && (
+                    <>
+                      <div className={styles.scheduleDivider} />
+                      <button
+                        className={styles.scheduleClear}
+                        onClick={(e) => { e.stopPropagation(); onSetScheduledDate(task.id, undefined); setShowSchedule(false); }}
+                      >
+                        Retirer la planification
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {onDelete && (
+            <button
+              className={styles.deleteBtn}
+              onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
+              title="Supprimer"
+            >
+              ×
+            </button>
           )}
         </div>
 

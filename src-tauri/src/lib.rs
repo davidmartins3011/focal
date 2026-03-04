@@ -36,9 +36,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::tasks::get_all_tasks,
             commands::tasks::get_tasks,
             commands::tasks::get_tasks_by_date,
             commands::tasks::get_tasks_by_date_range,
+            commands::tasks::get_overdue_tasks,
             commands::tasks::create_task,
             commands::tasks::update_task,
             commands::tasks::toggle_task,
@@ -47,11 +49,6 @@ pub fn run() {
             commands::tasks::set_micro_steps,
             commands::tasks::toggle_micro_step,
             commands::tasks::get_streak,
-            commands::todos::get_todos,
-            commands::todos::create_todo,
-            commands::todos::update_todo,
-            commands::todos::toggle_todo,
-            commands::todos::delete_todo,
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::settings::get_all_settings,
