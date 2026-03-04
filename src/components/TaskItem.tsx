@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import type { Task } from "../types";
 import EditableEstimate from "./EditableEstimate";
 import { getQuickDates, formatQuickDateHint } from "../utils/dateFormat";
@@ -72,9 +73,12 @@ export default function TaskItem({
   const [editingName, setEditingName] = useState(false);
   const [nameText, setNameText] = useState(task.name);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [schedulePos, setSchedulePos] = useState<{ top: number; right: number } | null>(null);
   const prevDoneRef = useRef(task.done);
   const stuckMenuRef = useRef<HTMLDivElement>(null);
   const scheduleRef = useRef<HTMLDivElement>(null);
+  const schedulePopoverRef = useRef<HTMLDivElement>(null);
+  const scheduleBtnRef = useRef<HTMLButtonElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const quickDates = useMemo(() => getQuickDates(), []);
 
@@ -98,8 +102,10 @@ export default function TaskItem({
       if (showStuckMenu && stuckMenuRef.current && !stuckMenuRef.current.contains(e.target as Node)) {
         setShowStuckMenu(false);
       }
-      if (showSchedule && scheduleRef.current && !scheduleRef.current.contains(e.target as Node)) {
-        setShowSchedule(false);
+      if (showSchedule) {
+        const inBtn = scheduleRef.current?.contains(e.target as Node);
+        const inPopover = schedulePopoverRef.current?.contains(e.target as Node);
+        if (!inBtn && !inPopover) setShowSchedule(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -253,14 +259,26 @@ export default function TaskItem({
           {onSetScheduledDate && !task.done && (
             <div className={styles.scheduleWrap} ref={scheduleRef}>
               <button
+                ref={scheduleBtnRef}
                 className={`${styles.scheduleBtn} ${showSchedule ? styles.scheduleBtnActive : ""}`}
-                onClick={(e) => { e.stopPropagation(); setShowSchedule(!showSchedule); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!showSchedule && scheduleBtnRef.current) {
+                    const rect = scheduleBtnRef.current.getBoundingClientRect();
+                    setSchedulePos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                  }
+                  setShowSchedule(!showSchedule);
+                }}
                 title="Planifier"
               >
                 📅
               </button>
-              {showSchedule && (
-                <div className={styles.schedulePopover}>
+              {showSchedule && schedulePos && createPortal(
+                <div
+                  ref={schedulePopoverRef}
+                  className={styles.schedulePopover}
+                  style={{ position: "fixed", top: schedulePos.top, right: schedulePos.right, left: "auto" }}
+                >
                   <div className={styles.scheduleLabel}>Planifier</div>
                   <button
                     className={`${styles.scheduleOption} ${task.scheduledDate === quickDates.today ? styles.scheduleSelected : ""}`}
@@ -319,7 +337,8 @@ export default function TaskItem({
                       </button>
                     </>
                   )}
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           )}

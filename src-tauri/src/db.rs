@@ -150,6 +150,9 @@ CREATE TABLE IF NOT EXISTS settings (
 
 pub fn create_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(SCHEMA)?;
+    // Migration: add urgency/importance to tasks for pre-existing DBs
+    conn.execute("ALTER TABLE tasks ADD COLUMN urgency INTEGER", []).ok();
+    conn.execute("ALTER TABLE tasks ADD COLUMN importance INTEGER", []).ok();
     // Migration: add oauth_provider column for pre-existing DBs
     conn.execute("ALTER TABLE integrations ADD COLUMN oauth_provider TEXT", []).ok();
     migrate_oauth_providers(conn);

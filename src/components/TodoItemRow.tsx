@@ -5,11 +5,13 @@ import styles from "./TodoView.module.css";
 
 type PopoverType = "priority" | "schedule";
 
+type PriorityScore = 1 | 2 | 3 | 4 | 5;
+
 export interface TodoItemRowProps {
   task: Task;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
-  onSetPriority: (id: string, value: "main" | "secondary" | undefined) => void;
+  onSetPriority: (id: string, field: "urgency" | "importance", value: PriorityScore | undefined) => void;
   onSetScheduledDate: (id: string, date: string | undefined) => void;
   activePopover: PopoverType | null;
   onOpenPopover: (taskId: string, type: PopoverType) => void;
@@ -139,20 +141,20 @@ export default function TodoItemRow({
           </div>
         )}
         <div className={styles.todoMeta}>
-          {task.priority === "main" && (
+          {task.urgency != null && (
             <button
               className={`${styles.badge} ${styles.urgencyBadge} ${styles.badgeClickable}`}
               onClick={() => onOpenPopover(task.id, "priority")}
             >
-              🔴 Principale
+              🔥 U{task.urgency}
             </button>
           )}
-          {task.priority === "secondary" && (
+          {task.importance != null && (
             <button
               className={`${styles.badge} ${styles.importanceBadge} ${styles.badgeClickable}`}
               onClick={() => onOpenPopover(task.id, "priority")}
             >
-              🔵 Secondaire
+              ⭐ I{task.importance}
             </button>
           )}
           {task.tags && task.tags.length > 0 && task.tags.map((tag) => (
@@ -193,37 +195,51 @@ export default function TodoItemRow({
           <button
             className={`${styles.actionBtn} ${activePopover === "priority" ? styles.actionBtnActive : ""}`}
             onClick={() => onOpenPopover(task.id, "priority")}
-            title="Priorité"
+            title="Urgence & importance"
           >
             ◆
           </button>
           {activePopover === "priority" && (
             <div className={styles.popover} ref={popoverRef}>
-              <div className={styles.popoverLabel}>Priorité</div>
-              <div className={styles.scheduleOptions}>
-                <button
-                  className={`${styles.scheduleOption} ${task.priority === "main" ? styles.selected : ""}`}
-                  onClick={() => onSetPriority(task.id, task.priority === "main" ? undefined : "main")}
-                >
-                  <span className={styles.scheduleOptionIcon}>🔴</span>
-                  <span className={styles.scheduleOptionText}>Principale</span>
-                </button>
-                <button
-                  className={`${styles.scheduleOption} ${task.priority === "secondary" ? styles.selected : ""}`}
-                  onClick={() => onSetPriority(task.id, task.priority === "secondary" ? undefined : "secondary")}
-                >
-                  <span className={styles.scheduleOptionIcon}>🔵</span>
-                  <span className={styles.scheduleOptionText}>Secondaire</span>
-                </button>
+              <div className={styles.popoverLabel}>Urgence</div>
+              <div className={styles.popoverRow}>
+                {([1, 2, 3, 4, 5] as PriorityScore[]).map((v) => (
+                  <button
+                    key={`u${v}`}
+                    className={`${styles.popoverDot} ${task.urgency === v ? styles.selected : ""}`}
+                    onClick={() =>
+                      onSetPriority(task.id, "urgency", task.urgency === v ? undefined : v)
+                    }
+                  >
+                    {v}
+                  </button>
+                ))}
               </div>
-              {task.priority && (
+              <div className={styles.popoverLabel}>Importance</div>
+              <div className={styles.popoverRow}>
+                {([1, 2, 3, 4, 5] as PriorityScore[]).map((v) => (
+                  <button
+                    key={`i${v}`}
+                    className={`${styles.popoverDot} ${task.importance === v ? styles.selected : ""}`}
+                    onClick={() =>
+                      onSetPriority(task.id, "importance", task.importance === v ? undefined : v)
+                    }
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              {(task.urgency != null || task.importance != null) && (
                 <>
                   <div className={styles.popoverDivider} />
                   <button
                     className={styles.popoverClear}
-                    onClick={() => onSetPriority(task.id, undefined)}
+                    onClick={() => {
+                      onSetPriority(task.id, "urgency", undefined);
+                      onSetPriority(task.id, "importance", undefined);
+                    }}
                   >
-                    Retirer la priorité
+                    Retirer les priorités
                   </button>
                 </>
               )}

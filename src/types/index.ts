@@ -15,6 +15,8 @@ export interface Task {
   estimatedMinutes?: number;
   priority?: "main" | "secondary";
   scheduledDate?: string;
+  urgency?: number;
+  importance?: number;
 }
 
 export interface Tag {

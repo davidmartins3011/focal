@@ -91,11 +91,11 @@ export default function TodoView() {
     setEditText("");
   };
 
-  const setPriority = (id: string, value: "main" | "secondary" | undefined) => {
+  const setPriority = (id: string, field: "urgency" | "importance", value: number | undefined) => {
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, priority: value } : t))
+      prev.map((t) => (t.id === id ? { ...t, [field]: value } : t))
     );
-    updateTaskSvc({ id, priority: value ?? "" }).catch((err) =>
+    updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) =>
       console.error("[TodoView] updateTask error:", err)
     );
   };
@@ -173,7 +173,7 @@ export default function TodoView() {
       case "ai":
         return t.aiDecomposed && !t.done;
       case "prioritized":
-        return t.priority != null && !t.done;
+        return (t.urgency != null || t.importance != null) && !t.done;
       case "unscheduled":
         return !t.scheduledDate && !t.done;
       default:

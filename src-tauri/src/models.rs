@@ -38,6 +38,10 @@ pub struct Task {
     pub priority: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduled_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub urgency: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub importance: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

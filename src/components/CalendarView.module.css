@@ -277,6 +277,56 @@
   background: var(--green);
 }
 
+/* ── Drop target highlight ── */
+
+.dropTarget {
+  border-color: var(--accent) !important;
+  background: rgba(var(--accent-rgb), 0.18) !important;
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.30);
+  transform: scale(1.06);
+  transition: all 0.12s ease;
+}
+
+.dropTarget .cellDate {
+  color: var(--accent) !important;
+}
+
+/* ── Draggable tasks ── */
+
+.draggableTask {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  transition: opacity 0.15s;
+}
+
+.dragging {
+  opacity: 0.35;
+}
+
+/* ── Drag ghost ── */
+
+.dragGhost {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  transform: translate(-50%, -110%);
+  max-width: 260px;
+  padding: 8px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(var(--accent-rgb), 0.20);
+  font-family: 'Outfit', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.92;
+}
+
 /* ── Detail panel ── */
 
 .detail {

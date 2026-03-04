@@ -317,10 +317,7 @@
 }
 
 .schedulePopover {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 20;
+  z-index: 1000;
   background: var(--bg2);
   border: 1px solid var(--border2);
   border-radius: var(--radius-sm);
