@@ -124,7 +124,6 @@ interface WeekViewProps {
 
 export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays = DEFAULT_WORKING_DAYS, dailyPriorityCount = 3 }: WeekViewProps) {
   const [selectedFilter, setSelectedFilter] = useState<"week" | string>("week");
-  const [weekPriorities, setWeekPriorities] = useState<Task[]>([]);
   const [scheduledTasks, setScheduledTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
   const [prepDone, setPrepDone] = useState(true);
@@ -164,25 +163,42 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
   }, [monday, todayStr, scheduledTasks, activeDays]);
 
   useEffect(() => {
-    fetchTasks("week")
-      .then(setWeekPriorities)
-      .catch((err) => console.error("[WeekView] fetchTasks error:", err));
-
     const lastDay = activeDays.length > 0 ? activeDays[activeDays.length - 1] : ALL_DAY_LABELS[4];
     const endDate = new Date(monday);
     endDate.setDate(monday.getDate() + lastDay.offset);
-    getTasksByDateRange(fmtDate(monday), fmtDate(endDate))
-      .then((fetched) => {
+    const mondayStr = fmtDate(monday);
+
+    Promise.all([
+      fetchTasks("week"),
+      getTasksByDateRange(mondayStr, fmtDate(endDate)),
+      getOverdueTasks(),
+    ])
+      .then(([weekCtxTasks, dateTasks, overdueAll]) => {
+        const dateIds = new Set(dateTasks.map((t) => t.id));
+        const merged = [...dateTasks];
+
+        for (const t of weekCtxTasks) {
+          if (dateIds.has(t.id)) {
+            const idx = merged.findIndex((m) => m.id === t.id);
+            if (idx !== -1 && merged[idx].priority !== "main") {
+              merged[idx] = { ...merged[idx], priority: "main" as const };
+              updateTaskSvc({ id: t.id, priority: "main" }).catch(() => {});
+            }
+          } else {
+            merged.push({ ...t, priority: "main" as const, scheduledDate: t.scheduledDate ?? todayStr });
+          }
+        }
+
         const byDate = new Map<string, Task[]>();
-        for (const t of fetched) {
+        for (const t of merged) {
           const date = t.scheduledDate ?? "";
           if (!byDate.has(date)) byDate.set(date, []);
           byDate.get(date)!.push(t);
         }
         const initialized: Task[] = [];
-        for (const [, dateTasks] of byDate) {
-          let mainCount = dateTasks.filter((t) => t.priority === "main").length;
-          for (const t of dateTasks) {
+        for (const [, tasks] of byDate) {
+          let mainCount = tasks.filter((t) => t.priority === "main").length;
+          for (const t of tasks) {
             if (t.priority === "main" || t.priority === "secondary") {
               initialized.push(t);
               continue;
@@ -194,13 +210,13 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
           }
         }
         setScheduledTasks(initialized);
-      })
-      .catch((err) => console.error("[WeekView] getTasksByDateRange error:", err));
 
-    const mondayStr = fmtDate(monday);
-    getOverdueTasks()
-      .then((tasks) => setOverdueTasks(tasks.filter((t) => !t.scheduledDate || t.scheduledDate < mondayStr)))
-      .catch((err) => console.error("[WeekView] getOverdueTasks error:", err));
+        const allIds = new Set(initialized.map((t) => t.id));
+        setOverdueTasks(
+          overdueAll.filter((t) => (!t.scheduledDate || t.scheduledDate < mondayStr) && !allIds.has(t.id)),
+        );
+      })
+      .catch((err) => console.error("[WeekView] fetch error:", err));
 
     getSetting(weekKey())
       .then((val) => setPrepDone(val === "done"))
@@ -229,24 +245,30 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
   }, [dailyPriorityCount]);
 
   useEffect(() => {
-    setWeekPriorities((prev) => {
-      if (prev.length <= weekPriorityLimit) return prev;
-      const kept = prev.slice(0, weekPriorityLimit);
-      const excess = prev.slice(weekPriorityLimit);
-      excess.forEach((t) => {
-        updateTaskSvc({ id: t.id, viewContext: "calendar", scheduledDate: todayStr, priority: "secondary" }).catch(() => {});
-      });
-      setScheduledTasks((s) => [...s, ...excess.map((t) => ({ ...t, scheduledDate: todayStr, priority: "secondary" as const }))]);
-      return kept;
+    setScheduledTasks((prev) => {
+      const mainTasks = prev.filter((t) => t.priority === "main");
+      if (mainTasks.length <= weekPriorityLimit) return prev;
+      const excessIds = new Set(mainTasks.slice(weekPriorityLimit).map((t) => t.id));
+      excessIds.forEach((id) => updateTaskSvc({ id, priority: "secondary" }).catch(() => {}));
+      return prev.map((t) => excessIds.has(t.id) ? { ...t, priority: "secondary" as const } : t);
     });
-  }, [weekPriorityLimit]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [weekPriorityLimit]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // Day mode derived lists
+  // Derived lists
+  const weekMainTasks = useMemo(
+    () => scheduledTasks.filter((t) => t.priority === "main"),
+    [scheduledTasks],
+  );
+  const weekSecTasks = useMemo(
+    () => scheduledTasks.filter((t) => t.priority !== "main"),
+    [scheduledTasks],
+  );
+
   const allDayTasks = useMemo(
     () => isWeekMode ? [] : scheduledTasks.filter((t) => t.scheduledDate === selectedFilter),
     [isWeekMode, selectedFilter, scheduledTasks],
@@ -254,12 +276,11 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
   const dayMainTasks = allDayTasks.filter((t) => t.priority === "main");
   const daySecTasks = allDayTasks.filter((t) => t.priority !== "main");
 
-  const prioritiesDone = isWeekMode ? weekPriorities.filter((t) => t.done).length : dayMainTasks.filter((t) => t.done).length;
-  const secondaryDone = isWeekMode ? scheduledTasks.filter((t) => t.done).length : daySecTasks.filter((t) => t.done).length;
+  const prioritiesDone = isWeekMode ? weekMainTasks.filter((t) => t.done).length : dayMainTasks.filter((t) => t.done).length;
+  const secondaryDone = isWeekMode ? weekSecTasks.filter((t) => t.done).length : daySecTasks.filter((t) => t.done).length;
   const dayPriorityOverflow = !isWeekMode && dayMainTasks.length > dailyPriorityCount;
 
   function updateTaskState(updater: (tasks: Task[]) => Task[]) {
-    setWeekPriorities(updater);
     setScheduledTasks(updater);
     setOverdueTasks(updater);
   }
@@ -304,12 +325,12 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
       const overdueTask = overdueTasks.find((t) => t.id === id);
       if (overdueTask) {
         setOverdueTasks((prev) => prev.filter((t) => t.id !== id));
-        setScheduledTasks((prev) => [...prev, { ...overdueTask, scheduledDate: date, priority: "secondary" as const }]);
-        updateTaskSvc({ id, scheduledDate: date, priority: "secondary" }).catch((err) => console.error("[WeekView] setScheduledDate error:", err));
+        const keepPriority = overdueTask.priority ?? "secondary";
+        setScheduledTasks((prev) => [...prev, { ...overdueTask, scheduledDate: date, priority: keepPriority }]);
+        updateTaskSvc({ id, scheduledDate: date }).catch((err) => console.error("[WeekView] setScheduledDate error:", err));
         return;
       }
       setScheduledTasks((prev) => prev.map((t) => t.id === id ? { ...t, scheduledDate: date } : t));
-      setWeekPriorities((prev) => prev.map((t) => t.id === id ? { ...t, scheduledDate: date } : t));
     } else {
       updateTaskState((prev) => prev.filter((t) => t.id !== id));
     }
@@ -349,7 +370,7 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
   }
 
   function findTask(taskId: string): Task | undefined {
-    return weekPriorities.find((t) => t.id === taskId) ?? scheduledTasks.find((t) => t.id === taskId) ?? overdueTasks.find((t) => t.id === taskId);
+    return scheduledTasks.find((t) => t.id === taskId) ?? overdueTasks.find((t) => t.id === taskId);
   }
 
   function decompose(taskId: string, redo = false) {
@@ -413,18 +434,19 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
     const scrollParent = wrapperRef.current?.closest('[class*="content"]') as HTMLElement | null;
     const scrollTop = scrollParent?.scrollTop ?? 0;
 
+    const keepPriority = task.priority ?? "secondary";
+
     const wasOverdue = overdueTasks.some((t) => t.id === taskId);
     if (wasOverdue) setOverdueTasks((prev) => prev.filter((t) => t.id !== taskId));
 
     if (scheduledTasks.some((t) => t.id === taskId)) {
-      setScheduledTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, scheduledDate: targetDate, priority: "secondary" as const } : t));
+      setScheduledTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, scheduledDate: targetDate } : t));
     } else {
-      setScheduledTasks((prev) => [...prev, { ...task, scheduledDate: targetDate, priority: "secondary" as const }]);
+      setScheduledTasks((prev) => [...prev, { ...task, scheduledDate: targetDate, priority: keepPriority }]);
     }
-    setWeekPriorities((prev) => prev.map((t) => t.id === taskId ? { ...t, scheduledDate: targetDate } : t));
 
     if (scrollParent) requestAnimationFrame(() => { scrollParent.scrollTop = scrollTop; });
-    updateTaskSvc({ id: taskId, scheduledDate: targetDate, priority: "secondary" }).catch((err) => console.error("[WeekView] rescheduleToDay error:", err));
+    updateTaskSvc({ id: taskId, scheduledDate: targetDate }).catch((err) => console.error("[WeekView] rescheduleToDay error:", err));
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -450,111 +472,93 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
   function handleWeekDragEnd(draggedId: string, overId: string) {
     // Drop on empty week priorities zone
     if (overId === WEEK_PRI_DROP_ID) {
-      const schedIdx = scheduledTasks.findIndex((t) => t.id === draggedId);
+      const inSec = weekSecTasks.some((t) => t.id === draggedId);
       const overdueIdx = overdueTasks.findIndex((t) => t.id === draggedId);
-      if (schedIdx !== -1 && weekPriorities.length < weekPriorityLimit) {
-        const task = scheduledTasks[schedIdx];
-        setScheduledTasks((prev) => prev.filter((t) => t.id !== task.id));
-        setWeekPriorities((prev) => [...prev, task]);
-        updateTaskSvc({ id: task.id, viewContext: "week" }).catch(() => {});
-      } else if (overdueIdx !== -1 && weekPriorities.length < weekPriorityLimit) {
+      if (inSec && weekMainTasks.length < weekPriorityLimit) {
+        setScheduledTasks((prev) => prev.map((t) => t.id === draggedId ? { ...t, priority: "main" as const } : t));
+        updateTaskSvc({ id: draggedId, priority: "main" }).catch(() => {});
+      } else if (overdueIdx !== -1 && weekMainTasks.length < weekPriorityLimit) {
         const task = overdueTasks[overdueIdx];
         setOverdueTasks((prev) => prev.filter((t) => t.id !== draggedId));
-        setWeekPriorities((prev) => [...prev, task]);
-        updateTaskSvc({ id: task.id, viewContext: "week", scheduledDate: todayStr }).catch(() => {});
+        setScheduledTasks((prev) => [...prev, { ...task, scheduledDate: task.scheduledDate ?? todayStr, priority: "main" as const }]);
+        updateTaskSvc({ id: draggedId, scheduledDate: task.scheduledDate ?? todayStr, priority: "main" }).catch(() => {});
       }
       return;
     }
 
-    const activeInPri = weekPriorities.findIndex((t) => t.id === draggedId);
-    const activeInSched = scheduledTasks.findIndex((t) => t.id === draggedId);
+    const activeInMain = weekMainTasks.findIndex((t) => t.id === draggedId);
+    const activeInSec = weekSecTasks.findIndex((t) => t.id === draggedId);
     const activeInOverdue = overdueTasks.findIndex((t) => t.id === draggedId);
-    const overInPri = weekPriorities.findIndex((t) => t.id === overId);
-    const overInSched = scheduledTasks.findIndex((t) => t.id === overId);
+    const overInMain = weekMainTasks.findIndex((t) => t.id === overId);
+    const overInSec = weekSecTasks.findIndex((t) => t.id === overId);
 
-    // Within week priorities
-    if (activeInPri !== -1 && overInPri !== -1) {
-      const reordered = arrayMove(weekPriorities, activeInPri, overInPri);
-      setWeekPriorities(reordered);
+    // Reorder within main
+    if (activeInMain !== -1 && overInMain !== -1) {
+      const reordered = arrayMove(weekMainTasks, activeInMain, overInMain);
+      const nonMain = scheduledTasks.filter((t) => t.priority !== "main");
+      setScheduledTasks([...reordered, ...nonMain]);
       reorderTasksSvc(reordered.map((t) => t.id));
       return;
     }
 
-    // Within scheduled
-    if (activeInSched !== -1 && overInSched !== -1) {
-      const reordered = arrayMove(scheduledTasks, activeInSched, overInSched);
-      setScheduledTasks(reordered);
+    // Reorder within secondary
+    if (activeInSec !== -1 && overInSec !== -1) {
+      const reordered = arrayMove(weekSecTasks, activeInSec, overInSec);
+      const mainTasks = scheduledTasks.filter((t) => t.priority === "main");
+      setScheduledTasks([...mainTasks, ...reordered]);
       reorderTasksSvc(reordered.map((t) => t.id));
       return;
     }
 
-    // Week priorities → scheduled (demote)
-    if (activeInPri !== -1 && overInSched !== -1) {
-      const task = weekPriorities[activeInPri];
-      setWeekPriorities((prev) => prev.filter((t) => t.id !== task.id));
-      setScheduledTasks((prev) => {
-        const updated = [...prev];
-        updated.splice(overInSched, 0, { ...task, scheduledDate: task.scheduledDate ?? todayStr, priority: "secondary" as const });
-        return updated;
-      });
-      updateTaskSvc({ id: task.id, viewContext: "calendar", scheduledDate: task.scheduledDate ?? todayStr, priority: "secondary" }).catch(() => {});
+    // Main → Secondary (demote)
+    if (activeInMain !== -1 && overInSec !== -1) {
+      setScheduledTasks((prev) => prev.map((t) => t.id === draggedId ? { ...t, priority: "secondary" as const } : t));
+      updateTaskSvc({ id: draggedId, priority: "secondary" }).catch(() => {});
       return;
     }
 
-    // Scheduled → week priorities (promote or swap)
-    if (activeInSched !== -1 && overInPri !== -1) {
-      const task = scheduledTasks[activeInSched];
-      if (weekPriorities.length < weekPriorityLimit) {
-        setScheduledTasks((prev) => prev.filter((t) => t.id !== task.id));
-        setWeekPriorities((prev) => {
-          const updated = [...prev];
-          updated.splice(overInPri, 0, task);
-          return updated;
-        });
-        updateTaskSvc({ id: task.id, viewContext: "week" }).catch(() => {});
+    // Secondary → Main (promote or swap)
+    if (activeInSec !== -1 && overInMain !== -1) {
+      if (weekMainTasks.length < weekPriorityLimit) {
+        setScheduledTasks((prev) => prev.map((t) => t.id === draggedId ? { ...t, priority: "main" as const } : t));
+        updateTaskSvc({ id: draggedId, priority: "main" }).catch(() => {});
       } else {
-        const demoted = weekPriorities[overInPri];
-        setWeekPriorities((prev) => prev.map((t) => t.id === demoted.id ? task : t));
-        setScheduledTasks((prev) => prev.map((t) => t.id === task.id
-          ? { ...demoted, scheduledDate: demoted.scheduledDate ?? todayStr, priority: "secondary" as const }
-          : t
-        ));
-        updateTaskSvc({ id: task.id, viewContext: "week" }).catch(() => {});
-        updateTaskSvc({ id: demoted.id, viewContext: "calendar", scheduledDate: demoted.scheduledDate ?? todayStr, priority: "secondary" }).catch(() => {});
+        const demotedId = weekMainTasks[overInMain].id;
+        setScheduledTasks((prev) => prev.map((t) => {
+          if (t.id === draggedId) return { ...t, priority: "main" as const };
+          if (t.id === demotedId) return { ...t, priority: "secondary" as const };
+          return t;
+        }));
+        updateTaskSvc({ id: draggedId, priority: "main" }).catch(() => {});
+        updateTaskSvc({ id: demotedId, priority: "secondary" }).catch(() => {});
       }
       return;
     }
 
-    // Overdue → week priorities (promote or swap)
-    if (activeInOverdue !== -1 && overInPri !== -1) {
+    // Overdue → Main (promote or swap)
+    if (activeInOverdue !== -1 && overInMain !== -1) {
       const movedTask = overdueTasks[activeInOverdue];
       setOverdueTasks((prev) => prev.filter((t) => t.id !== draggedId));
-      if (weekPriorities.length < weekPriorityLimit) {
-        setWeekPriorities((prev) => {
-          const updated = [...prev];
-          updated.splice(overInPri, 0, movedTask);
-          return updated;
-        });
-        updateTaskSvc({ id: movedTask.id, viewContext: "week", scheduledDate: todayStr }).catch(() => {});
+      if (weekMainTasks.length < weekPriorityLimit) {
+        setScheduledTasks((prev) => [...prev, { ...movedTask, scheduledDate: movedTask.scheduledDate ?? todayStr, priority: "main" as const }]);
+        updateTaskSvc({ id: movedTask.id, scheduledDate: movedTask.scheduledDate ?? todayStr, priority: "main" }).catch(() => {});
       } else {
-        const demoted = weekPriorities[overInPri];
-        setWeekPriorities((prev) => prev.map((t) => t.id === demoted.id ? movedTask : t));
-        setScheduledTasks((prev) => [...prev, { ...demoted, scheduledDate: demoted.scheduledDate ?? todayStr, priority: "secondary" as const }]);
-        updateTaskSvc({ id: movedTask.id, viewContext: "week", scheduledDate: todayStr }).catch(() => {});
-        updateTaskSvc({ id: demoted.id, viewContext: "calendar", scheduledDate: demoted.scheduledDate ?? todayStr, priority: "secondary" }).catch(() => {});
+        const demotedId = weekMainTasks[overInMain].id;
+        setScheduledTasks((prev) => [
+          ...prev.map((t) => t.id === demotedId ? { ...t, priority: "secondary" as const } : t),
+          { ...movedTask, scheduledDate: movedTask.scheduledDate ?? todayStr, priority: "main" as const },
+        ]);
+        updateTaskSvc({ id: movedTask.id, scheduledDate: movedTask.scheduledDate ?? todayStr, priority: "main" }).catch(() => {});
+        updateTaskSvc({ id: demotedId, priority: "secondary" }).catch(() => {});
       }
       return;
     }
 
-    // Overdue → scheduled
-    if (activeInOverdue !== -1 && overInSched !== -1) {
+    // Overdue → Secondary
+    if (activeInOverdue !== -1 && overInSec !== -1) {
       const movedTask = overdueTasks[activeInOverdue];
       setOverdueTasks((prev) => prev.filter((t) => t.id !== draggedId));
-      setScheduledTasks((prev) => {
-        const updated = [...prev];
-        updated.splice(overInSched, 0, { ...movedTask, scheduledDate: todayStr, priority: "secondary" as const });
-        return updated;
-      });
+      setScheduledTasks((prev) => [...prev, { ...movedTask, scheduledDate: todayStr, priority: "secondary" as const }]);
       updateTaskSvc({ id: movedTask.id, scheduledDate: todayStr, priority: "secondary" }).catch(() => {});
     }
   }
@@ -723,15 +727,15 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
                 Priorités de la semaine
               </span>
               <span className={styles.sectionCount}>
-                {prioritiesDone}/{weekPriorities.length}
+                {prioritiesDone}/{weekMainTasks.length}
               </span>
             </div>
-            <SortableContext items={weekPriorities.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={weekMainTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <div className={styles.taskList}>
-                {weekPriorities.length === 0 && (
+                {weekMainTasks.length === 0 && (
                   <DroppableEmptyZone id={WEEK_PRI_DROP_ID} label="Glisse une tâche ici pour la prioriser" />
                 )}
-                {weekPriorities.map((task, i) => (
+                {weekMainTasks.map((task, i) => (
                   <SortableTaskItem key={task.id} task={task} {...taskCallbacks}
                     isDecomposing={decomposingId === task.id} decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.08 + i * 0.04} />
@@ -739,15 +743,15 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
               </div>
             </SortableContext>
 
-            {scheduledTasks.length > 0 && (
+            {weekSecTasks.length > 0 && (
               <>
                 <div className={`${styles.sectionHeader} ${styles.secondaryHeader}`}>
                   <span className={`${styles.sectionTitle} ${styles.secondaryTitle}`}>Aussi prévu cette semaine</span>
-                  <span className={styles.sectionCount}>{secondaryDone}/{scheduledTasks.length}</span>
+                  <span className={styles.sectionCount}>{secondaryDone}/{weekSecTasks.length}</span>
                 </div>
-                <SortableContext items={scheduledTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                <SortableContext items={weekSecTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   <div className={styles.taskList}>
-                    {scheduledTasks.map((task, i) => (
+                    {weekSecTasks.map((task, i) => (
                       <SortableTaskItem key={task.id} task={task} {...taskCallbacks}
                         isDecomposing={decomposingId === task.id} decomposingStepId={getDecomposingStepId(task.id)}
                         animDelay={0.08 + i * 0.04} isSecondary />

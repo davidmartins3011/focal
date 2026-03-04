@@ -145,8 +145,9 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
       const overdueTask = overdueTasks.find((t) => t.id === id);
       if (overdueTask) {
         setOverdueTasks((prev) => prev.filter((t) => t.id !== id));
-        setTasks((prev) => [...prev, { ...overdueTask, scheduledDate: date, priority: "secondary" as const }]);
-        updateTaskSvc({ id, scheduledDate: date, priority: "secondary" }).catch((err) => console.error("[TodayView] setScheduledDate error:", err));
+        const keepPriority = overdueTask.priority ?? "secondary";
+        setTasks((prev) => [...prev, { ...overdueTask, scheduledDate: date, priority: keepPriority }]);
+        updateTaskSvc({ id, scheduledDate: date }).catch((err) => console.error("[TodayView] setScheduledDate error:", err));
         return;
       }
       setTasks((prev) => prev.map((t) => t.id === id ? { ...t, scheduledDate: date } : t));
