@@ -29,6 +29,8 @@ export default function TodoView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
 
+  const [searchQuery, setSearchQuery] = useState("");
+
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragOverSide, setDragOverSide] = useState<"top" | "bottom">("bottom");
@@ -167,18 +169,23 @@ export default function TodoView() {
   const showDone = filter === "done";
 
   const filtered = tasks.filter((t) => {
-    switch (filter) {
-      case "done":
-        return t.done;
-      case "ai":
-        return t.aiDecomposed && !t.done;
-      case "prioritized":
-        return (t.urgency != null || t.importance != null) && !t.done;
-      case "unscheduled":
-        return !t.scheduledDate && !t.done;
-      default:
-        return !t.done;
-    }
+    const matchesFilter = (() => {
+      switch (filter) {
+        case "done":
+          return t.done;
+        case "ai":
+          return t.aiDecomposed && !t.done;
+        case "prioritized":
+          return (t.urgency != null || t.importance != null) && !t.done;
+        case "unscheduled":
+          return !t.scheduledDate && !t.done;
+        default:
+          return !t.done;
+      }
+    })();
+    if (!matchesFilter) return false;
+    if (!searchQuery.trim()) return true;
+    return t.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
   });
 
   const totalActive = tasks.filter((t) => !t.done).length;
@@ -267,6 +274,28 @@ export default function TodoView() {
           </button>
         </div>
 
+        <div className={styles.searchArea}>
+          <svg className={styles.searchIcon} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            className={styles.searchInput}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Rechercher une tâche…"
+          />
+          {searchQuery && (
+            <button
+              className={styles.searchClear}
+              onClick={() => setSearchQuery("")}
+              aria-label="Effacer la recherche"
+            >
+              ×
+            </button>
+          )}
+        </div>
+
         <div className={styles.filters}>
           {filters.map((f) => (
             <button
@@ -283,14 +312,18 @@ export default function TodoView() {
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>{showDone ? "🎉" : "✨"}</div>
             <div className={styles.emptyTitle}>
-              {showDone ? "Aucune tâche terminée" : "Rien ici"}
+              {searchQuery.trim()
+                ? "Aucun résultat"
+                : showDone ? "Aucune tâche terminée" : "Rien ici"}
             </div>
             <div className={styles.emptyText}>
-              {filter === "all"
-                ? "Ajoute ta première tâche pour commencer."
-                : filter === "done"
-                  ? "Les tâches que tu termines apparaîtront ici."
-                  : "Aucune tâche ne correspond à ce filtre."}
+              {searchQuery.trim()
+                ? `Aucune tâche ne correspond à « ${searchQuery.trim()} ».`
+                : filter === "all"
+                  ? "Ajoute ta première tâche pour commencer."
+                  : filter === "done"
+                    ? "Les tâches que tu termines apparaîtront ici."
+                    : "Aucune tâche ne correspond à ce filtre."}
             </div>
           </div>
         ) : (

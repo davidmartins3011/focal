@@ -39,6 +39,14 @@ fn load_steps(db: &rusqlite::Connection, task_id: &str) -> Result<Vec<MicroStep>
     Ok(steps)
 }
 
+fn load_tasks(db: &rusqlite::Connection, ids: &[String]) -> Result<Vec<Task>, String> {
+    let mut tasks = Vec::with_capacity(ids.len());
+    for id in ids {
+        tasks.push(load_task(db, id)?);
+    }
+    Ok(tasks)
+}
+
 fn load_task(db: &rusqlite::Connection, task_id: &str) -> Result<Task, String> {
     let (id, name, done, est, pri, ai, sched, urg, imp): (String, String, bool, Option<i32>, Option<String>, bool, Option<String>, Option<i32>, Option<i32>) = db
         .query_row(
@@ -75,11 +83,7 @@ pub fn get_all_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
-    let mut tasks = Vec::with_capacity(ids.len());
-    for id in &ids {
-        tasks.push(load_task(&db, id)?);
-    }
-    Ok(tasks)
+    load_tasks(&db, &ids)
 }
 
 #[tauri::command]
@@ -88,7 +92,7 @@ pub fn get_tasks(state: State<'_, AppState>, context: String) -> Result<Vec<Task
     let ids: Vec<String> = if context == "today" {
         let today = Local::now().format("%Y-%m-%d").to_string();
         let mut stmt = db
-            .prepare("SELECT id FROM tasks WHERE view_context = ?1 AND (scheduled_date IS NULL OR scheduled_date = ?2) ORDER BY position")
+            .prepare("SELECT id FROM tasks WHERE (view_context = ?1 AND scheduled_date IS NULL) OR scheduled_date = ?2 ORDER BY position")
             .map_err(|e| e.to_string())?;
         let result: Vec<String> = stmt
             .query_map(params![context, today], |row| row.get(0))
@@ -107,11 +111,7 @@ pub fn get_tasks(state: State<'_, AppState>, context: String) -> Result<Vec<Task
             .collect();
         result
     };
-    let mut tasks = Vec::with_capacity(ids.len());
-    for id in &ids {
-        tasks.push(load_task(&db, id)?);
-    }
-    Ok(tasks)
+    load_tasks(&db, &ids)
 }
 
 #[tauri::command]
@@ -125,11 +125,7 @@ pub fn get_tasks_by_date(state: State<'_, AppState>, date: String) -> Result<Vec
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
-    let mut tasks = Vec::with_capacity(ids.len());
-    for id in &ids {
-        tasks.push(load_task(&db, id)?);
-    }
-    Ok(tasks)
+    load_tasks(&db, &ids)
 }
 
 #[tauri::command]
@@ -147,11 +143,7 @@ pub fn get_tasks_by_date_range(
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
-    let mut tasks = Vec::with_capacity(ids.len());
-    for id in &ids {
-        tasks.push(load_task(&db, id)?);
-    }
-    Ok(tasks)
+    load_tasks(&db, &ids)
 }
 
 #[tauri::command]
@@ -166,11 +158,7 @@ pub fn get_overdue_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
-    let mut tasks = Vec::with_capacity(ids.len());
-    for id in &ids {
-        tasks.push(load_task(&db, id)?);
-    }
-    Ok(tasks)
+    load_tasks(&db, &ids)
 }
 
 #[tauri::command]

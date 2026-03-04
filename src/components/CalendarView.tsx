@@ -144,59 +144,38 @@ export default function CalendarView() {
     setSelectedDate(today);
   };
 
-  function toggleTask(id: string) {
+  function updateTaskInMap(updater: (tasks: Task[]) => Task[]) {
     setTaskMap((prev) => {
-      const next = { ...prev };
-      for (const key of Object.keys(next)) {
-        next[key] = next[key].map((t) =>
-          t.id === id ? { ...t, done: !t.done } : t
-        );
+      const next: Record<string, Task[]> = {};
+      for (const key of Object.keys(prev)) {
+        next[key] = updater(prev[key]);
       }
       return next;
     });
+  }
+
+  function toggleTask(id: string) {
+    updateTaskInMap((tasks) => tasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
     toggleTaskSvc(id).catch((err) => console.error("[CalendarView] toggleTask error:", err));
   }
 
   function toggleStep(_taskId: string, stepId: string) {
-    setTaskMap((prev) => {
-      const next = { ...prev };
-      for (const key of Object.keys(next)) {
-        next[key] = next[key].map((t) => {
-          if (!t.microSteps) return t;
-          return {
-            ...t,
-            microSteps: t.microSteps.map((s) =>
-              s.id === stepId ? { ...s, done: !s.done } : s
-            ),
-          };
-        });
-      }
-      return next;
-    });
+    updateTaskInMap((tasks) =>
+      tasks.map((t) => {
+        if (!t.microSteps) return t;
+        return { ...t, microSteps: t.microSteps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) };
+      })
+    );
     toggleStepSvc(stepId).catch((err) => console.error("[CalendarView] toggleStep error:", err));
   }
 
   function deleteTask(id: string) {
-    setTaskMap((prev) => {
-      const next: Record<string, Task[]> = {};
-      for (const key of Object.keys(prev)) {
-        next[key] = prev[key].filter((t) => t.id !== id);
-      }
-      return next;
-    });
+    updateTaskInMap((tasks) => tasks.filter((t) => t.id !== id));
     deleteTaskSvc(id).catch((err) => console.error("[CalendarView] deleteTask error:", err));
   }
 
   function renameTask(id: string, name: string) {
-    setTaskMap((prev) => {
-      const next = { ...prev };
-      for (const key of Object.keys(next)) {
-        next[key] = next[key].map((t) =>
-          t.id === id ? { ...t, name } : t
-        );
-      }
-      return next;
-    });
+    updateTaskInMap((tasks) => tasks.map((t) => (t.id === id ? { ...t, name } : t)));
     updateTaskSvc({ id, name }).catch((err) => console.error("[CalendarView] renameTask error:", err));
   }
 
@@ -489,13 +468,7 @@ export default function CalendarView() {
           className={styles.dragGhost}
           style={{ left: ghostPos.x, top: ghostPos.y }}
         >
-          {(() => {
-            for (const tasks of Object.values(taskMap)) {
-              const t = tasks.find((t) => t.id === draggedTaskId);
-              if (t) return t.name;
-            }
-            return "";
-          })()}
+          {Object.values(taskMap).flat().find((t) => t.id === draggedTaskId)?.name ?? ""}
         </div>,
         document.body
       )}
