@@ -39,13 +39,14 @@ export default function App() {
   const [strategyCycleStart, setStrategyCycleStart] = useState<number>(1);
   const [strategyOccurrence, setStrategyOccurrence] = useState<FrequencyOccurrence>("last");
   const [strategyDay, setStrategyDay] = useState<WeekDayId>("dim");
+  const [workingDays, setWorkingDays] = useState<WeekDayId[]>(["lun", "mar", "mer", "jeu", "ven"]);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const [dailyPrepPending, setDailyPrepPending] = useState(false);
   const [weeklyPrepPending, setWeeklyPrepPending] = useState(false);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
   const loaded = useRef(false);
 
-  const notif = useNotifications();
+  const notif = useNotifications(workingDays);
 
   useEffect(() => {
     getAllSettings()
@@ -78,6 +79,13 @@ export default function App() {
           setStrategyOccurrence(s["strategy-occurrence"] as FrequencyOccurrence);
         if (s["strategy-day"] && VALID_DAYS.includes(s["strategy-day"] as WeekDayId))
           setStrategyDay(s["strategy-day"] as WeekDayId);
+        if (s["working-days"]) {
+          try {
+            const parsed = JSON.parse(s["working-days"]) as WeekDayId[];
+            if (Array.isArray(parsed) && parsed.every((d) => VALID_DAYS.includes(d)))
+              setWorkingDays(parsed);
+          } catch { /* ignore */ }
+        }
         if (s["onboarding-completed"] === "true") {
           setOnboardingDone(true);
         } else {
@@ -134,6 +142,10 @@ export default function App() {
   useEffect(() => {
     if (loaded.current) setSetting("strategy-day", strategyDay);
   }, [strategyDay]);
+
+  useEffect(() => {
+    if (loaded.current) setSetting("working-days", JSON.stringify(workingDays));
+  }, [workingDays]);
 
   const handleStrategyFrequencyChange = useCallback((freq: StrategyFrequency) => {
     setStrategyFrequency(freq);
@@ -258,6 +270,8 @@ export default function App() {
             onStrategyOccurrenceChange={handleStrategyOccurrenceChange}
             strategyDay={strategyDay}
             onStrategyDayChange={handleStrategyDayChange}
+            workingDays={workingDays}
+            onWorkingDaysChange={setWorkingDays}
           />
         );
       case "calendar":
@@ -281,6 +295,7 @@ export default function App() {
             onLaunchDailyPrep={handleLaunchDailyPrep}
             onLaunchWeeklyPrep={handleLaunchWeeklyPrep}
             taskRefreshKey={taskRefreshKey}
+            workingDays={workingDays}
           />
         );
     }

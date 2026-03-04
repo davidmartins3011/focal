@@ -210,6 +210,7 @@ pub fn update_task(
     scheduled_date: Option<String>,
     urgency: Option<i32>,
     importance: Option<i32>,
+    view_context: Option<String>,
 ) -> Result<Task, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     if let Some(v) = &name {
@@ -244,6 +245,10 @@ pub fn update_task(
     if let Some(v) = importance {
         let val: Option<i32> = if v == 0 { None } else { Some(v) };
         db.execute("UPDATE tasks SET importance = ?1 WHERE id = ?2", params![val, id])
+            .map_err(|e| e.to_string())?;
+    }
+    if let Some(v) = &view_context {
+        db.execute("UPDATE tasks SET view_context = ?1 WHERE id = ?2", params![v, id])
             .map_err(|e| e.to_string())?;
     }
     load_task(&db, &id)

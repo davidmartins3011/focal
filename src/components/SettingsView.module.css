@@ -592,6 +592,39 @@
   color: #fff;
 }
 
+.dayPill:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.workingDayPill {
+  width: 36px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text3);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workingDayPill:hover {
+  border-color: var(--text3);
+  color: var(--text2);
+}
+
+.workingDayPill.workingDayActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .freqPills {
   display: flex;
   flex-wrap: wrap;

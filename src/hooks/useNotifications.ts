@@ -42,8 +42,9 @@ function isMonthActiveForFrequency(
   return month % step === start;
 }
 
-function shouldReminderFireOnDate(r: NotificationReminder, date: Date): boolean {
+function shouldReminderFireOnDate(r: NotificationReminder, date: Date, workingDays: WeekDayId[]): boolean {
   const dayId = JS_DAY_TO_WEEKDAY[date.getDay()];
+  if (!workingDays.includes(dayId)) return false;
   if (!r.days.includes(dayId)) return false;
   if (!r.frequency) return true;
   if (r.frequency === "weekly") return true;
@@ -77,6 +78,7 @@ function detectMissedNotifications(
   settings: NotificationSettings,
   existingHistory: NotificationHistoryEntry[],
   lastActive: string | null,
+  workingDays: WeekDayId[],
 ): NotificationHistoryEntry[] {
   if (!settings.enabled || !lastActive) return [];
 
@@ -97,7 +99,7 @@ function detectMissedNotifications(
     lowerBound.setHours(0, 0, 0, 0);
 
     while (cursor >= lowerBound) {
-      if (!shouldReminderFireOnDate(r, cursor)) {
+      if (!shouldReminderFireOnDate(r, cursor, workingDays)) {
         cursor.setDate(cursor.getDate() - 1);
         continue;
       }
@@ -134,7 +136,7 @@ function saveLastActive() {
   setSetting("last-active", new Date().toISOString()).catch(() => {});
 }
 
-export function useNotifications() {
+export function useNotifications(workingDays: WeekDayId[]) {
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>(defaultNotifSettings);
   const [notifHistory, setNotifHistory] = useState<NotificationHistoryEntry[]>([]);
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
@@ -183,7 +185,7 @@ export function useNotifications() {
         setNotifSettings(settings);
         setNotifHistory(history);
 
-        const missed = detectMissedNotifications(settings, history, lastActive);
+        const missed = detectMissedNotifications(settings, history, lastActive, workingDays);
         if (missed.length > 0) {
           setNotifHistory((prev) => [...prev, ...missed]);
           setNotifCenterOpen(true);
@@ -254,7 +256,7 @@ export function useNotifications() {
       for (const r of notifSettings.reminders) {
         if (!r.enabled) continue;
         if (r.time !== hhmm) continue;
-        if (!shouldReminderFireOnDate(r, now)) continue;
+        if (!shouldReminderFireOnDate(r, now, workingDays)) continue;
 
         const firedKey = `${r.id}-${dateKey}-${hhmm}`;
         if (firedRef.current.has(firedKey)) continue;
@@ -279,7 +281,7 @@ export function useNotifications() {
     check();
     const interval = setInterval(check, 30_000);
     return () => clearInterval(interval);
-  }, [notifSettings, addHistoryEntry]);
+  }, [notifSettings, addHistoryEntry, workingDays]);
 
   const handleTestNotification = useCallback(() => {
     const now = new Date();

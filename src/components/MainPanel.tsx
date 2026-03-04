@@ -3,7 +3,7 @@ import TodayView from "./TodayView";
 import WeekView from "./WeekView";
 import StrategyView from "./StrategyView";
 import { getISOWeekNumber } from "../utils/dateFormat";
-import type { ViewTab, StrategyFrequency } from "../types";
+import type { ViewTab, StrategyFrequency, WeekDayId } from "../types";
 import styles from "./MainPanel.module.css";
 
 const DAY_NAMES = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
@@ -18,6 +18,7 @@ interface Props {
   onLaunchDailyPrep?: () => void;
   onLaunchWeeklyPrep?: () => void;
   taskRefreshKey?: number;
+  workingDays?: WeekDayId[];
 }
 
 const tabs: { id: ViewTab; label: string }[] = [
@@ -26,7 +27,7 @@ const tabs: { id: ViewTab; label: string }[] = [
   { id: "strategy", label: "Prise de recul" },
 ];
 
-export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchWeeklyPrep, taskRefreshKey }: Props) {
+export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchWeeklyPrep, taskRefreshKey, workingDays }: Props) {
   const { dayName, dayNum, monthShort, weekNum } = useMemo(() => {
     const now = new Date();
     return {
@@ -60,7 +61,7 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
 
       <div className={styles.content}>
         {activeTab === "today" && <TodayView dailyPriorityCount={dailyPriorityCount} onLaunchDailyPrep={onLaunchDailyPrep} refreshKey={taskRefreshKey} />}
-        {activeTab === "week" && <WeekView onLaunchWeeklyPrep={onLaunchWeeklyPrep} refreshKey={taskRefreshKey} />}
+        {activeTab === "week" && <WeekView onLaunchWeeklyPrep={onLaunchWeeklyPrep} refreshKey={taskRefreshKey} workingDays={workingDays} dailyPriorityCount={dailyPriorityCount} />}
         {activeTab === "strategy" && (
           <StrategyView frequency={strategyFrequency} cycleStart={strategyCycleStart} />
         )}

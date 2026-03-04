@@ -160,7 +160,7 @@ Interfaces centralisées, alignées 1:1 avec les modèles Rust (grâce à serde 
 | `TodoItem` | id, text, done, urgency?, importance?, source, scheduledDate? | Capture rapide |
 | `ChatMessage` | id, role, content, steps? | Messages du chat |
 | `UserProfile` | firstName?, mainContext?, blockers?, ... | Profil utilisateur |
-| `AISettings` | providers, activeProvider? | Configuration IA |
+| `AISettings` | providers, selectedModel? | Configuration IA |
 | `NotificationSettings` | enabled, reminders | Paramètres de notifications |
 | `NotificationReminder` | id, label, time, enabled, days, frequency? | Un rappel configurable |
 | `StrategyReview` | id, month, year, pillars, reflections, top3 | Revue stratégique |

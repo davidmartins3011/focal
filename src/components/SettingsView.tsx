@@ -13,6 +13,8 @@ import {
   STRATEGY_FREQUENCY_OPTIONS,
 } from "../data/settingsConstants";
 
+const VALID_DAY_ORDER: WeekDayId[] = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"];
+
 const STRATEGY_OCCURRENCE_OPTIONS: { id: FrequencyOccurrence; label: string }[] = [
   { id: "1st", label: "1er" },
   { id: "2nd", label: "2e" },
@@ -39,6 +41,8 @@ interface SettingsViewProps {
   onStrategyOccurrenceChange: (occ: FrequencyOccurrence) => void;
   strategyDay: WeekDayId;
   onStrategyDayChange: (day: WeekDayId) => void;
+  workingDays: WeekDayId[];
+  onWorkingDaysChange: (days: WeekDayId[]) => void;
 }
 
 export default function SettingsView({
@@ -59,6 +63,8 @@ export default function SettingsView({
   onStrategyOccurrenceChange,
   strategyDay,
   onStrategyDayChange,
+  workingDays,
+  onWorkingDaysChange,
 }: SettingsViewProps) {
   const [visibleKeys, setVisibleKeys] = useState<Record<AIProviderId, boolean>>({
     openai: false,
@@ -246,6 +252,35 @@ export default function SettingsView({
             </div>
           </div>
 
+          <div className={styles.settingRow}>
+            <div className={styles.settingInfo}>
+              <div className={styles.settingLabel}>Jours à planifier</div>
+              <div className={styles.settingDesc}>
+                Jours affichés dans la vue semaine et utilisés pour la planification
+              </div>
+            </div>
+            <div className={styles.dayPills}>
+              {DAY_LABELS.map((d) => {
+                const active = workingDays.includes(d.id);
+                return (
+                  <button
+                    key={d.id}
+                    className={`${styles.workingDayPill} ${active ? styles.workingDayActive : ""}`}
+                    onClick={() =>
+                      onWorkingDaysChange(
+                        active
+                          ? workingDays.filter((wd) => wd !== d.id)
+                          : [...VALID_DAY_ORDER.filter((wd) => [...workingDays, d.id].includes(wd))]
+                      )
+                    }
+                  >
+                    {d.short}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className={styles.strategyCard}>
             <div className={styles.settingRow}>
               <div className={styles.settingInfo}>
@@ -292,6 +327,7 @@ export default function SettingsView({
                         key={d.id}
                         className={`${styles.dayPill} ${strategyDay === d.id ? styles.dayActive : ""}`}
                         onClick={() => onStrategyDayChange(d.id)}
+                        disabled={!workingDays.includes(d.id)}
                       >
                         {d.short}
                       </button>
@@ -452,6 +488,7 @@ export default function SettingsView({
                                           r.id === reminder.id ? { ...r, days: [d.id] } : r
                                         ),
                                       })}
+                                      disabled={!workingDays.includes(d.id)}
                                     >
                                       {d.short}
                                     </button>
@@ -541,6 +578,7 @@ export default function SettingsView({
                                         r.id === reminder.id ? { ...r, days: [d.id] } : r
                                       ),
                                     })}
+                                    disabled={!workingDays.includes(d.id)}
                                   >
                                     {d.short}
                                   </button>
@@ -558,6 +596,7 @@ export default function SettingsView({
                                 key={d.id}
                                 className={`${styles.dayPill} ${reminder.days.includes(d.id) ? styles.dayActive : ""}`}
                                 onClick={() => toggleReminderDay(reminder.id, d.id)}
+                                disabled={!workingDays.includes(d.id)}
                               >
                                 {d.short}
                               </button>

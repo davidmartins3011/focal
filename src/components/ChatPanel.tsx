@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { ChatMessage, AISettings, Task, MicroStep } from "../types";
+import type { ChatMessage, AISettings, Task } from "../types";
 import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type DailyPrepResponse } from "../services/chat";
-import { getTasks, createTask, deleteTask, updateTask, setMicroSteps } from "../services/tasks";
+import { getTasks, createTask, deleteTask, updateTask } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { chatHints } from "../data/chatConstants";
 import { providers } from "../data/settingsData";
@@ -46,6 +46,62 @@ function parseAISettings(raw: string | null): { models: AvailableModel[]; select
   }
 }
 
+function formatContent(raw: string): string {
+  const escaped = raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  const lines = escaped.split("\n");
+  const html: string[] = [];
+  let listType: "ol" | "ul" | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    const olMatch = trimmed.match(/^(\d+)\.\s+(.+)/);
+    const ulMatch = olMatch ? null : trimmed.match(/^[-–•]\s+(.+)/);
+
+    if (olMatch) {
+      if (listType === "ul") { html.push("</ul>"); listType = null; }
+      if (!listType) { html.push("<ol>"); listType = "ol"; }
+      html.push(`<li>${inlineMd(olMatch[2])}</li>`);
+      continue;
+    }
+
+    if (ulMatch) {
+      if (listType === "ol") { html.push("</ol>"); listType = null; }
+      if (!listType) { html.push("<ul>"); listType = "ul"; }
+      html.push(`<li>${inlineMd(ulMatch[1])}</li>`);
+      continue;
+    }
+
+    if (listType) {
+      html.push(listType === "ol" ? "</ol>" : "</ul>");
+      listType = null;
+    }
+
+    if (trimmed === "") {
+      html.push("<br/>");
+    } else {
+      html.push(`<p>${inlineMd(trimmed)}</p>`);
+    }
+  }
+
+  if (listType) {
+    html.push(listType === "ol" ? "</ol>" : "</ul>");
+  }
+
+  return html.join("");
+}
+
+function inlineMd(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "<em>$1</em>")
+    .replace(/`(.+?)`/g, "<code>$1</code>");
+}
+
 interface ChatPanelProps {
   onStartOnboarding?: () => void;
   dailyPrepPending?: boolean;
@@ -65,9 +121,9 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
-  const [pickingFor, setPickingFor] = useState<string | null>(null);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [prepMode, setPrepMode] = useState<"daily" | "weekly" | null>(null);
+  const [rawView, setRawView] = useState(false);
   const prepHistory = useRef<{ role: string; content: string }[]>([]);
   const todayTasksRef = useRef(todayTasks);
   todayTasksRef.current = todayTasks;
@@ -351,26 +407,6 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       });
   }, [input, isTyping, prepMode, onStartOnboarding, startDailyPrep, startWeeklyPrep, sendPrepMessage, resetInput]);
 
-  const addStepsToTask = useCallback((msgId: string, taskId: string) => {
-    const msg = messages.find((m) => m.id === msgId);
-    if (!msg?.steps) return;
-
-    const steps: MicroStep[] = msg.steps.map((s, i) => ({
-      id: `${taskId}-chat${i}`,
-      text: s.text,
-      done: false,
-    }));
-
-    setMicroSteps(taskId, steps)
-      .then(() => {
-        setPickingFor(null);
-        setTodayTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? { ...t, microSteps: steps, aiDecomposed: true } : t))
-        );
-      })
-      .catch((err) => console.error("[ChatPanel] addSteps error:", err));
-  }, [messages]);
-
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -397,6 +433,18 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
             </p>
           </div>
         </div>
+        <div className={styles.headerActions}>
+          <button
+            className={`${styles.rawToggle} ${rawView ? styles.rawToggleActive : ""}`}
+            onClick={() => setRawView((v) => !v)}
+            title={rawView ? "Vue formatée" : "Vue brute"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 7 4 4 20 4 20 7" />
+              <line x1="9" y1="20" x2="15" y2="20" />
+              <line x1="12" y1="4" x2="12" y2="20" />
+            </svg>
+          </button>
         {availableModels.length > 0 ? (
           <div className={styles.modelSelectorWrap} ref={dropdownRef}>
             <button
@@ -459,6 +507,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
             Aucune IA configurée
           </div>
         )}
+        </div>
       </div>
 
       <div className={styles.messages}>
@@ -486,7 +535,9 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
               <div
                 className={styles.msgBubble}
                 dangerouslySetInnerHTML={{
-                  __html: msg.content.replace(/\n/g, "<br/>"),
+                  __html: rawView
+                    ? msg.content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")
+                    : formatContent(msg.content),
                 }}
               />
               {msg.steps && (
@@ -508,35 +559,6 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
                       </div>
                     );
                   })}
-                  {pickingFor === msg.id ? (
-                    <div className={`${styles.taskPicker} ${styles.stepVisible}`}>
-                      <div className={styles.taskPickerLabel}>Associer à quelle tâche ?</div>
-                      {todayTasks.filter((t) => !t.done).map((t) => (
-                        <button
-                          key={t.id}
-                          className={styles.taskPickerItem}
-                          onClick={() => addStepsToTask(msg.id, t.id)}
-                        >
-                          {t.name}
-                        </button>
-                      ))}
-                      <button
-                        className={styles.taskPickerCancel}
-                        onClick={() => setPickingFor(null)}
-                      >
-                        Annuler
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      className={`${styles.addToTasks} ${
-                        isRevealing ? styles.stepHidden : styles.stepVisible
-                      }`}
-                      onClick={() => setPickingFor(msg.id)}
-                    >
-                      ＋ Ajouter ces étapes à la tâche
-                    </button>
-                  )}
                 </div>
               )}
             </div>

@@ -7,7 +7,6 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
-  type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
@@ -51,7 +50,17 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
 
   useEffect(() => {
     fetchTasks("today")
-      .then(setTasks)
+      .then((fetched) => {
+        let mainCount = fetched.filter((t) => t.priority === "main").length;
+        const initialized = fetched.map((t) => {
+          if (t.priority === "main" || t.priority === "secondary") return t;
+          const p: "main" | "secondary" = mainCount < dailyPriorityCount ? "main" : "secondary";
+          if (p === "main") mainCount++;
+          updateTaskSvc({ id: t.id, priority: p }).catch(() => {});
+          return { ...t, priority: p };
+        });
+        setTasks(initialized);
+      })
       .catch((err) => console.error("[TodayView] fetchTasks error:", err));
     getOverdueTasks()
       .then(setOverdueTasks)
@@ -62,15 +71,25 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     getSetting(todayKey())
       .then((val) => setPrepDone(val === "done"))
       .catch(() => {});
-  }, [refreshKey]);
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setTasks((prev) => {
+      const main = prev.filter((t) => t.priority === "main");
+      if (main.length <= dailyPriorityCount) return prev;
+      const excessIds = new Set(main.slice(dailyPriorityCount).map((t) => t.id));
+      excessIds.forEach((id) => updateTaskSvc({ id, priority: "secondary" }).catch(() => {}));
+      return prev.map((t) => excessIds.has(t.id) ? { ...t, priority: "secondary" as const } : t);
+    });
+  }, [dailyPriorityCount]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const mainTasks = tasks.slice(0, dailyPriorityCount);
-  const secondaryTasks = tasks.slice(dailyPriorityCount);
+  const mainTasks = tasks.filter((t) => t.priority === "main");
+  const secondaryTasks = tasks.filter((t) => t.priority !== "main");
   const doneCount = tasks.filter((t) => t.done).length;
   const mainDoneCount = mainTasks.filter((t) => t.done).length;
   const secondaryDoneCount = secondaryTasks.filter((t) => t.done).length;
@@ -80,7 +99,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
   const selectedTask = effectiveSelectedId ? tasks.find((t) => t.id === effectiveSelectedId) : null;
   const timerTask = timerTaskId ? tasks.find((t) => t.id === timerTaskId) : null;
   const showTimerPanel = timerTaskId !== null && effectiveSelectedId === timerTaskId;
-
   const isBusy = !!decomposingId || !!decomposingStepKey;
 
   function updateTaskState(updater: (tasks: Task[]) => Task[]) {
@@ -88,10 +106,14 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     setOverdueTasks(updater);
   }
 
+  function commitTasks(newMain: Task[], newSec: Task[]) {
+    const combined = [...newMain, ...newSec];
+    setTasks(combined);
+    reorderTasksSvc(combined.map((t) => t.id));
+  }
+
   function toggleTask(id: string) {
-    updateTaskState((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
-    );
+    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
     toggleTaskSvc(id);
   }
 
@@ -101,12 +123,8 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
   }
 
   function setPriority(id: string, field: "urgency" | "importance", value: number | undefined) {
-    updateTaskState((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, [field]: value } : t))
-    );
-    updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) =>
-      console.error("[TodayView] setPriority error:", err)
-    );
+    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
+    updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) => console.error("[TodayView] setPriority error:", err));
   }
 
   function setScheduledDate(id: string, date: string | undefined) {
@@ -115,10 +133,11 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
       const overdueTask = overdueTasks.find((t) => t.id === id);
       if (overdueTask) {
         setOverdueTasks((prev) => prev.filter((t) => t.id !== id));
-        setTasks((prev) => [...prev, { ...overdueTask, scheduledDate: date }]);
-      } else {
-        setTasks((prev) => prev.map((t) => t.id === id ? { ...t, scheduledDate: date } : t));
+        setTasks((prev) => [...prev, { ...overdueTask, scheduledDate: date, priority: "secondary" as const }]);
+        updateTaskSvc({ id, scheduledDate: date, priority: "secondary" }).catch((err) => console.error("[TodayView] setScheduledDate error:", err));
+        return;
       }
+      setTasks((prev) => prev.map((t) => t.id === id ? { ...t, scheduledDate: date } : t));
     } else {
       updateTaskState((prev) => prev.filter((t) => t.id !== id));
     }
@@ -126,9 +145,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
   }
 
   function renameTask(id: string, name: string) {
-    updateTaskState((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, name } : t))
-    );
+    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, name } : t)));
     updateTaskSvc({ id, name }).catch((err) => console.error("[TodayView] renameTask error:", err));
   }
 
@@ -136,38 +153,20 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     updateTaskState((prev) =>
       prev.map((t) => {
         if (t.id !== taskId || !t.microSteps) return t;
-        return {
-          ...t,
-          microSteps: t.microSteps.map((s) =>
-            s.id === stepId ? { ...s, done: !s.done } : s
-          ),
-        };
+        return { ...t, microSteps: t.microSteps.map((s) => s.id === stepId ? { ...s, done: !s.done } : s) };
       })
     );
   }
 
   function updateEstimate(taskId: string, minutes: number | undefined) {
-    updateTaskState((prev) =>
-      prev.map((t) =>
-        t.id === taskId ? { ...t, estimatedMinutes: minutes } : t
-      )
-    );
+    updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, estimatedMinutes: minutes } : t));
   }
 
-  function updateStepEstimate(
-    taskId: string,
-    stepId: string,
-    minutes: number | undefined
-  ) {
+  function updateStepEstimate(taskId: string, stepId: string, minutes: number | undefined) {
     updateTaskState((prev) =>
       prev.map((t) => {
         if (t.id !== taskId || !t.microSteps) return t;
-        return {
-          ...t,
-          microSteps: t.microSteps.map((s) =>
-            s.id === stepId ? { ...s, estimatedMinutes: minutes } : s
-          ),
-        };
+        return { ...t, microSteps: t.microSteps.map((s) => s.id === stepId ? { ...s, estimatedMinutes: minutes } : s) };
       })
     );
   }
@@ -176,12 +175,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     updateTaskState((prev) =>
       prev.map((t) => {
         if (t.id !== taskId || !t.microSteps) return t;
-        return {
-          ...t,
-          microSteps: t.microSteps.map((s) =>
-            s.id === stepId ? { ...s, text } : s
-          ),
-        };
+        return { ...t, microSteps: t.microSteps.map((s) => s.id === stepId ? { ...s, text } : s) };
       })
     );
   }
@@ -197,11 +191,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
 
     if (redo) {
       updateTaskState((prev) =>
-        prev.map((t) =>
-          t.id === taskId
-            ? { ...t, microSteps: undefined, aiDecomposed: false }
-            : t
-        )
+        prev.map((t) => t.id === taskId ? { ...t, microSteps: undefined, aiDecomposed: false } : t)
       );
     }
 
@@ -216,15 +206,9 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
           done: false,
           estimatedMinutes: s.estimatedMinutes,
         }));
-
         updateTaskState((prev) =>
-          prev.map((t) =>
-            t.id === taskId
-              ? { ...t, microSteps: steps, aiDecomposed: true }
-              : t
-          )
+          prev.map((t) => t.id === taskId ? { ...t, microSteps: steps, aiDecomposed: true } : t)
         );
-
         setMicroSteps(taskId, steps).catch(() => {});
         setTimeout(() => setDecomposingId(null), steps.length * 300 + 500);
       })
@@ -250,7 +234,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
           done: false,
           estimatedMinutes: s.estimatedMinutes,
         }));
-
         let finalSteps: MicroStep[] | undefined;
         updateTaskState((prev) =>
           prev.map((t) => {
@@ -263,11 +246,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
             return { ...t, microSteps: newSteps };
           })
         );
-
-        if (finalSteps) {
-          setMicroSteps(taskId, finalSteps).catch(() => {});
-        }
-
+        if (finalSteps) setMicroSteps(taskId, finalSteps).catch(() => {});
         setDecomposingStepKey(null);
       })
       .catch((err) => {
@@ -276,90 +255,124 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
       });
   }
 
-  function selectTask(id: string) {
-    setSelectedTaskId(id);
-  }
-
-  function startTimer(taskId: string) {
-    setTimerTaskId(taskId);
-  }
-
   function completeTimerTask() {
     if (timerTaskId) {
-      updateTaskState((prev) =>
-        prev.map((t) => (t.id === timerTaskId ? { ...t, done: true } : t))
-      );
+      updateTaskState((prev) => prev.map((t) => (t.id === timerTaskId ? { ...t, done: true } : t)));
       toggleTaskSvc(timerTaskId);
-      if (selectedTaskId === timerTaskId) {
-        setSelectedTaskId(null);
-      }
+      if (selectedTaskId === timerTaskId) setSelectedTaskId(null);
     }
     setTimerTaskId(null);
   }
 
-  function stopTimer() {
-    setTimerTaskId(null);
-  }
-
   function getNextFocusTask(): string | undefined {
-    const remaining = mainTasks.filter(
-      (t) => !t.done && t.id !== timerTaskId && t.estimatedMinutes
-    );
-    return remaining[0]?.name;
+    return mainTasks.find((t) => !t.done && t.id !== timerTaskId && t.estimatedMinutes)?.name;
   }
 
   function getDecomposingStepId(taskId: string): string | null {
     if (!decomposingStepKey) return null;
     const sepIdx = decomposingStepKey.indexOf(":");
-    const tId = decomposingStepKey.substring(0, sepIdx);
-    const sId = decomposingStepKey.substring(sepIdx + 1);
-    return tId === taskId ? sId : null;
+    return decomposingStepKey.substring(0, sepIdx) === taskId
+      ? decomposingStepKey.substring(sepIdx + 1)
+      : null;
   }
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(event.active.id as string);
-  }
+  // --- Drag & Drop ---
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const activeInToday = tasks.findIndex((t) => t.id === active.id);
-    const activeInOverdue = overdueTasks.findIndex((t) => t.id === active.id);
-    const overInToday = tasks.findIndex((t) => t.id === over.id);
+    const activeMainIdx = mainTasks.findIndex((t) => t.id === active.id);
+    const activeSecIdx = secondaryTasks.findIndex((t) => t.id === active.id);
+    const activeOverdueIdx = overdueTasks.findIndex((t) => t.id === active.id);
+    const overMainIdx = mainTasks.findIndex((t) => t.id === over.id);
+    const overSecIdx = secondaryTasks.findIndex((t) => t.id === over.id);
 
-    if (activeInOverdue !== -1 && overInToday !== -1) {
-      const movedTask = overdueTasks[activeInOverdue];
+    // Overdue → Today
+    if (activeOverdueIdx !== -1 && (overMainIdx !== -1 || overSecIdx !== -1)) {
+      const movedTask = overdueTasks[activeOverdueIdx];
       const today = new Date().toISOString().slice(0, 10);
+      const toMain = overMainIdx !== -1 && mainTasks.length < dailyPriorityCount;
+      const priority: "main" | "secondary" = toMain ? "main" : "secondary";
       setOverdueTasks((prev) => prev.filter((t) => t.id !== active.id));
-      setTasks((prev) => {
-        const updated = [...prev];
-        updated.splice(overInToday, 0, { ...movedTask, scheduledDate: today });
-        return updated;
-      });
-      updateTaskSvc({ id: movedTask.id, scheduledDate: today }).catch((err) =>
-        console.error("[TodayView] move overdue to today error:", err)
-      );
-      setTasks((current) => {
-        reorderTasksSvc(current.map((t) => t.id));
-        return current;
-      });
-    } else if (activeInToday !== -1 && overInToday !== -1) {
-      const reordered = arrayMove(tasks, activeInToday, overInToday);
-      setTasks(reordered);
-      reorderTasksSvc(reordered.map((t) => t.id));
+      const task = { ...movedTask, scheduledDate: today, priority };
+      if (toMain) {
+        const newMain = [...mainTasks];
+        newMain.splice(overMainIdx, 0, task);
+        commitTasks(newMain, secondaryTasks);
+      } else {
+        const newSec = [...secondaryTasks];
+        newSec.splice(overSecIdx !== -1 ? overSecIdx : newSec.length, 0, task);
+        commitTasks(mainTasks, newSec);
+      }
+      updateTaskSvc({ id: movedTask.id, scheduledDate: today, priority }).catch(() => {});
+      return;
     }
-  }
 
-  function handleDragCancel() {
-    setActiveId(null);
+    // Reorder within main
+    if (activeMainIdx !== -1 && overMainIdx !== -1) {
+      commitTasks(arrayMove(mainTasks, activeMainIdx, overMainIdx), secondaryTasks);
+      return;
+    }
+
+    // Reorder within secondary
+    if (activeSecIdx !== -1 && overSecIdx !== -1) {
+      commitTasks(mainTasks, arrayMove(secondaryTasks, activeSecIdx, overSecIdx));
+      return;
+    }
+
+    // Main → Secondary (demote)
+    if (activeMainIdx !== -1 && overSecIdx !== -1) {
+      const task = mainTasks[activeMainIdx];
+      const newSec = [...secondaryTasks];
+      newSec.splice(overSecIdx, 0, { ...task, priority: "secondary" as const });
+      commitTasks(mainTasks.filter((t) => t.id !== task.id), newSec);
+      updateTaskSvc({ id: task.id, priority: "secondary" }).catch(() => {});
+      return;
+    }
+
+    // Secondary → Main (promote or swap)
+    if (activeSecIdx !== -1 && overMainIdx !== -1) {
+      const task = secondaryTasks[activeSecIdx];
+      if (mainTasks.length < dailyPriorityCount) {
+        const newMain = [...mainTasks];
+        newMain.splice(overMainIdx, 0, { ...task, priority: "main" as const });
+        commitTasks(newMain, secondaryTasks.filter((t) => t.id !== task.id));
+        updateTaskSvc({ id: task.id, priority: "main" }).catch(() => {});
+      } else {
+        const demoted = mainTasks[overMainIdx];
+        const newMain = mainTasks.map((t) =>
+          t.id === demoted.id ? { ...task, priority: "main" as const } : t
+        );
+        const newSec = secondaryTasks.map((t) =>
+          t.id === task.id ? { ...demoted, priority: "secondary" as const } : t
+        );
+        commitTasks(newMain, newSec);
+        updateTaskSvc({ id: task.id, priority: "main" }).catch(() => {});
+        updateTaskSvc({ id: demoted.id, priority: "secondary" }).catch(() => {});
+      }
+    }
   }
 
   const activeTask = activeId
     ? (tasks.find((t) => t.id === activeId) ?? overdueTasks.find((t) => t.id === activeId))
     : null;
-  const allSortableIds = [...tasks.map((t) => t.id), ...overdueTasks.map((t) => t.id)];
+
+  const taskCallbacks = {
+    onToggle: toggleTask,
+    onToggleStep: toggleStep,
+    onDecompose: decompose,
+    onRedecompose: (id: string) => decompose(id, true),
+    onDecomposeStep: decomposeStep,
+    onEditStep: editStep,
+    onUpdateEstimate: updateEstimate,
+    onUpdateStepEstimate: updateStepEstimate,
+    onDelete: deleteTask,
+    onRename: renameTask,
+    onSetScheduledDate: setScheduledDate,
+    onSetPriority: setPriority,
+  };
 
   const dismissPrep = useCallback(() => {
     setSetting(todayKey(), "done").catch(() => {});
@@ -385,8 +398,8 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
             estimatedMinutes={timerTask.estimatedMinutes}
             nextTaskName={getNextFocusTask()}
             onComplete={completeTimerTask}
-            onSkip={stopTimer}
-            onCancel={stopTimer}
+            onSkip={() => setTimerTaskId(null)}
+            onCancel={() => setTimerTaskId(null)}
           />
         </div>
       )}
@@ -395,7 +408,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
         <FocusNow
           task={selectedTask.name}
           estimatedMinutes={selectedTask.estimatedMinutes}
-          onStart={() => startTimer(effectiveSelectedId!)}
+          onStart={() => setTimerTaskId(effectiveSelectedId!)}
         />
       )}
 
@@ -404,117 +417,89 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
+        onDragStart={(e) => setActiveId(e.active.id as string)}
         onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
+        onDragCancel={() => setActiveId(null)}
       >
-        <SortableContext items={allSortableIds} strategy={verticalListSortingStrategy}>
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionTitle}>
-              <span className={styles.priorityIcon}>⚡</span>
-              Priorités du jour
-            </span>
-            <span className={styles.sectionCount}>
-              {mainDoneCount}/{mainTasks.length}
-            </span>
-          </div>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionTitle}>
+            <span className={styles.priorityIcon}>⚡</span>
+            Priorités du jour
+          </span>
+          <span className={styles.sectionCount}>
+            {mainDoneCount}/{mainTasks.length}
+          </span>
+        </div>
 
+        <SortableContext items={mainTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className={styles.taskList}>
             {mainTasks.map((task, i) => (
               <SortableTaskItem
                 key={task.id}
                 task={task}
-                onToggle={toggleTask}
-                onToggleStep={toggleStep}
-                onDecompose={decompose}
-                onRedecompose={(id) => decompose(id, true)}
-                onDecomposeStep={decomposeStep}
-                onEditStep={editStep}
-                onUpdateEstimate={updateEstimate}
-                onUpdateStepEstimate={updateStepEstimate}
-                onDelete={deleteTask}
-                onRename={renameTask}
-                onSetScheduledDate={setScheduledDate}
-                onSetPriority={setPriority}
+                {...taskCallbacks}
                 isDecomposing={decomposingId === task.id}
                 decomposingStepId={getDecomposingStepId(task.id)}
                 animDelay={0.08 + i * 0.04}
                 isSelected={effectiveSelectedId === task.id}
                 hasRunningTimer={timerTaskId === task.id}
-                onSelect={selectTask}
+                onSelect={setSelectedTaskId}
               />
             ))}
           </div>
+        </SortableContext>
 
-          {secondaryTasks.length > 0 && (
-            <>
-              <div className={`${styles.sectionHeader} ${styles.secondaryHeader}`}>
-                <span className={`${styles.sectionTitle} ${styles.secondaryTitle}`}>
-                  Aussi prévu
-                </span>
-                <span className={styles.sectionCount}>
-                  {secondaryDoneCount}/{secondaryTasks.length}
-                </span>
-              </div>
+        {secondaryTasks.length > 0 && (
+          <>
+            <div className={`${styles.sectionHeader} ${styles.secondaryHeader}`}>
+              <span className={`${styles.sectionTitle} ${styles.secondaryTitle}`}>
+                Aussi prévu
+              </span>
+              <span className={styles.sectionCount}>
+                {secondaryDoneCount}/{secondaryTasks.length}
+              </span>
+            </div>
 
+            <SortableContext items={secondaryTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <div className={styles.taskList}>
                 {secondaryTasks.map((task, i) => (
                   <SortableTaskItem
                     key={task.id}
                     task={task}
-                    onToggle={toggleTask}
-                    onToggleStep={toggleStep}
-                    onDecompose={decompose}
-                    onRedecompose={(id) => decompose(id, true)}
-                    onDecomposeStep={decomposeStep}
-                    onEditStep={editStep}
-                    onUpdateEstimate={updateEstimate}
-                    onUpdateStepEstimate={updateStepEstimate}
-                    onDelete={deleteTask}
-                    onRename={renameTask}
-                    onSetScheduledDate={setScheduledDate}
-                    onSetPriority={setPriority}
+                    {...taskCallbacks}
                     isDecomposing={decomposingId === task.id}
                     decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.12 + i * 0.04}
                     isSecondary
                     isSelected={effectiveSelectedId === task.id}
                     hasRunningTimer={timerTaskId === task.id}
-                    onSelect={selectTask}
+                    onSelect={setSelectedTaskId}
                   />
                 ))}
               </div>
-            </>
-          )}
-          {overdueTasks.length > 0 && (
-            <>
-              <div className={`${styles.sectionHeader} ${styles.overdueHeader}`}>
-                <span className={`${styles.sectionTitle} ${styles.overdueTitle}`}>
-                  <span className={styles.priorityIcon}>📋</span>
-                  Reliquat des jours précédents
-                </span>
-                <span className={styles.sectionCount}>
-                  {overdueTasks.length}
-                </span>
-              </div>
+            </SortableContext>
+          </>
+        )}
 
+        {overdueTasks.length > 0 && (
+          <>
+            <div className={`${styles.sectionHeader} ${styles.overdueHeader}`}>
+              <span className={`${styles.sectionTitle} ${styles.overdueTitle}`}>
+                <span className={styles.priorityIcon}>📋</span>
+                Reliquat des jours précédents
+              </span>
+              <span className={styles.sectionCount}>
+                {overdueTasks.length}
+              </span>
+            </div>
+
+            <SortableContext items={overdueTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <div className={styles.taskList}>
                 {overdueTasks.map((task, i) => (
                   <SortableTaskItem
                     key={task.id}
                     task={task}
-                    onToggle={toggleTask}
-                    onToggleStep={toggleStep}
-                    onDecompose={decompose}
-                    onRedecompose={(id) => decompose(id, true)}
-                    onDecomposeStep={decomposeStep}
-                    onEditStep={editStep}
-                    onUpdateEstimate={updateEstimate}
-                    onUpdateStepEstimate={updateStepEstimate}
-                    onDelete={deleteTask}
-                    onRename={renameTask}
-                    onSetScheduledDate={setScheduledDate}
-                    onSetPriority={setPriority}
+                    {...taskCallbacks}
                     isDecomposing={decomposingId === task.id}
                     decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.16 + i * 0.04}
@@ -522,9 +507,9 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
                   />
                 ))}
               </div>
-            </>
-          )}
-        </SortableContext>
+            </SortableContext>
+          </>
+        )}
 
         <DragOverlay>
           {activeTask && (

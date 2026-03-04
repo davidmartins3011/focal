@@ -45,6 +45,43 @@
   animation: pulse 2s infinite;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rawToggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rawToggle:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.rawToggleActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.rawToggleActive:hover {
+  background: var(--accent);
+  color: #fff;
+  opacity: 0.9;
+}
+
 .modelSelectorWrap {
   position: relative;
 }
@@ -257,8 +294,32 @@
   border-radius: var(--radius) var(--radius) var(--radius) 4px;
 }
 
+.msgBubble p {
+  margin: 0 0 4px;
+}
+
+.msgBubble p:last-child {
+  margin-bottom: 0;
+}
+
 .msgBubble strong {
   color: var(--accent);
+  font-weight: 600;
+}
+
+.msgBubble em {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.msgBubble ol,
+.msgBubble ul {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.msgBubble li {
+  margin-bottom: 3px;
 }
 
 .msgBubble code {

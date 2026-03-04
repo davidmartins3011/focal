@@ -1,7 +1,7 @@
 /* ── Day grid ── */
 .grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(var(--day-count, 5), 1fr);
   gap: 6px;
   margin-bottom: 18px;
 }
@@ -27,6 +27,14 @@
 .daySelected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+.dayDropTarget {
+  border-color: var(--accent) !important;
+  background: rgba(var(--accent-rgb), 0.18) !important;
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.30);
+  transform: scale(1.06);
+  transition: all 0.12s ease;
 }
 
 .dayName {

@@ -7,30 +7,33 @@
 
 ## Providers supportés
 
-| Provider | Modèle utilisé | Endpoint | Header d'auth |
-|----------|---------------|----------|----------------|
-| OpenAI | `gpt-4o` | `https://api.openai.com/v1/chat/completions` | `Authorization: Bearer {key}` |
-| Anthropic | `claude-sonnet-4-20250514` | `https://api.anthropic.com/v1/messages` | `x-api-key: {key}` + `anthropic-version: 2023-06-01` |
-| Mistral | `mistral-large-latest` | `https://api.mistral.ai/v1/chat/completions` | `Authorization: Bearer {key}` |
+| Provider | Modèles disponibles | Modèle par défaut | Endpoint | Header d'auth |
+|----------|--------------------|--------------------|----------|----------------|
+| OpenAI | `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini` | `gpt-4o` | `https://api.openai.com/v1/chat/completions` | `Authorization: Bearer {key}` |
+| Anthropic | `claude-4-opus`, `claude-4-sonnet` | `claude-sonnet-4-20250514` | `https://api.anthropic.com/v1/messages` | `x-api-key: {key}` + `anthropic-version: 2023-06-01` |
+| Mistral | `mistral-large`, `mistral-medium`, `codestral` | `mistral-large-latest` | `https://api.mistral.ai/v1/chat/completions` | `Authorization: Bearer {key}` |
+
+L'utilisateur choisit un modèle spécifique dans le dropdown du ChatPanel. `resolve_api_model()` convertit l'ID frontend en ID d'API (ex : `claude-4-sonnet` → `claude-sonnet-4-20250514`).
 
 OpenAI et Mistral utilisent le même format d'API (OpenAI-compatible), gérés par `call_openai_compatible()`.
 Anthropic a son propre format, géré par `call_anthropic()`.
 
 ---
 
-## Sélection du provider
+## Sélection du provider et du modèle
 
-Un seul provider peut être actif à la fois. La logique est dans `get_active_provider()` :
+La logique est dans `get_active_provider()` qui retourne `(ProviderConfig, String)` (provider + model ID résolu) :
 
 1. Lit le setting `ai-settings` (JSON)
 2. Filtre les providers `enabled` avec une `apiKey` non vide
-3. Si un `activeProvider` est spécifié et disponible, l'utilise
-4. Sinon, prend le premier provider disponible
+3. Si un `selectedModel` est spécifié, déduit le provider correspondant et résout l'ID API via `resolve_api_model()`
+4. Sinon, prend le premier provider disponible avec son modèle par défaut
 5. Si aucun n'est configuré, retourne une erreur explicite
 
-### Configuration côté frontend (SettingsView)
+### Configuration côté frontend
 
-- Un seul toggle activé à la fois : activer un provider désactive automatiquement les autres
+- **SettingsView** : active/désactive les providers et saisit les clés API
+- **ChatPanel** : dropdown de sélection du modèle parmi ceux des providers activés
 - Les clés API sont conservées même quand le provider est désactivé
 - Le setting `ai-settings` est un JSON :
 
@@ -41,7 +44,7 @@ Un seul provider peut être actif à la fois. La logique est dans `get_active_pr
     { "id": "anthropic", "enabled": false, "apiKey": "sk-ant-..." },
     { "id": "mistral", "enabled": false, "apiKey": "" }
   ],
-  "activeProvider": "openai"
+  "selectedModel": "gpt-4o"
 }
 ```
 
@@ -197,7 +200,7 @@ Cette tolérance évite les crashs si le LLM ne respecte pas le format demandé.
 ## Points d'attention pour l'IA qui code
 
 1. **Clés API en backend uniquement** : jamais exposées côté frontend
-2. **Un seul provider actif** : le toggle dans SettingsView est exclusif
+2. **Un seul modèle utilisé par requête** : déterminé par `selectedModel` dans les settings
 3. **Le system prompt est dynamique** : il change selon le profil et les tâches du jour
 4. **Les messages sont persistés** : l'historique est stocké en SQLite
 5. **La décomposition est séparée du chat** : `decompose_task` a son propre prompt optimisé

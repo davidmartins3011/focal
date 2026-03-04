@@ -42,6 +42,7 @@ export function updateTask(params: {
   scheduledDate?: string;
   urgency?: number;
   importance?: number;
+  viewContext?: string;
 }): Promise<Task> {
   return invoke<Task>("update_task", params);
 }
