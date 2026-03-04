@@ -74,6 +74,17 @@ function fmtDate(d: Date): string {
 }
 
 const DAY_DROP_PREFIX = "day:";
+const WEEK_PRI_DROP_ID = "drop:weekPriorities";
+const DAY_MAIN_DROP_ID = "drop:dayMain";
+
+function DroppableEmptyZone({ id, label }: { id: string; label: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} className={`${styles.emptyDropZone} ${isOver ? styles.emptyDropZoneOver : ""}`}>
+      {label}
+    </div>
+  );
+}
 
 function DroppableDayCard({
   dateStr, isToday, isSelected, isDragging, label, dayNum, total, dots, onClick,
@@ -245,6 +256,7 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
 
   const prioritiesDone = isWeekMode ? weekPriorities.filter((t) => t.done).length : dayMainTasks.filter((t) => t.done).length;
   const secondaryDone = isWeekMode ? scheduledTasks.filter((t) => t.done).length : daySecTasks.filter((t) => t.done).length;
+  const dayPriorityOverflow = !isWeekMode && dayMainTasks.length > dailyPriorityCount;
 
   function updateTaskState(updater: (tasks: Task[]) => Task[]) {
     setWeekPriorities(updater);
@@ -436,6 +448,24 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
   }
 
   function handleWeekDragEnd(draggedId: string, overId: string) {
+    // Drop on empty week priorities zone
+    if (overId === WEEK_PRI_DROP_ID) {
+      const schedIdx = scheduledTasks.findIndex((t) => t.id === draggedId);
+      const overdueIdx = overdueTasks.findIndex((t) => t.id === draggedId);
+      if (schedIdx !== -1 && weekPriorities.length < weekPriorityLimit) {
+        const task = scheduledTasks[schedIdx];
+        setScheduledTasks((prev) => prev.filter((t) => t.id !== task.id));
+        setWeekPriorities((prev) => [...prev, task]);
+        updateTaskSvc({ id: task.id, viewContext: "week" }).catch(() => {});
+      } else if (overdueIdx !== -1 && weekPriorities.length < weekPriorityLimit) {
+        const task = overdueTasks[overdueIdx];
+        setOverdueTasks((prev) => prev.filter((t) => t.id !== draggedId));
+        setWeekPriorities((prev) => [...prev, task]);
+        updateTaskSvc({ id: task.id, viewContext: "week", scheduledDate: todayStr }).catch(() => {});
+      }
+      return;
+    }
+
     const activeInPri = weekPriorities.findIndex((t) => t.id === draggedId);
     const activeInSched = scheduledTasks.findIndex((t) => t.id === draggedId);
     const activeInOverdue = overdueTasks.findIndex((t) => t.id === draggedId);
@@ -531,6 +561,29 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
 
   function handleDayDragEnd(activeIdStr: string, overId: string) {
     const dayDate = selectedFilter as string;
+
+    // Drop on empty day main zone
+    if (overId === DAY_MAIN_DROP_ID) {
+      const secIdx = daySecTasks.findIndex((t) => t.id === activeIdStr);
+      const overdueIdx = overdueTasks.findIndex((t) => t.id === activeIdStr);
+      if (secIdx !== -1 && dayMainTasks.length < dailyPriorityCount) {
+        const task = daySecTasks[secIdx];
+        commitDayTasks(dayDate, [...dayMainTasks, { ...task, priority: "main" as const }], daySecTasks.filter((t) => t.id !== task.id));
+        updateTaskSvc({ id: task.id, priority: "main" }).catch(() => {});
+      } else if (overdueIdx !== -1) {
+        const movedTask = overdueTasks[overdueIdx];
+        const priority: "main" | "secondary" = dayMainTasks.length < dailyPriorityCount ? "main" : "secondary";
+        setOverdueTasks((prev) => prev.filter((t) => t.id !== activeIdStr));
+        const task = { ...movedTask, scheduledDate: dayDate, priority };
+        if (priority === "main") {
+          commitDayTasks(dayDate, [...dayMainTasks, task], daySecTasks);
+        } else {
+          commitDayTasks(dayDate, dayMainTasks, [...daySecTasks, task]);
+        }
+        updateTaskSvc({ id: movedTask.id, scheduledDate: dayDate, priority }).catch(() => {});
+      }
+      return;
+    }
 
     const activeMainIdx = dayMainTasks.findIndex((t) => t.id === activeIdStr);
     const activeSecIdx = daySecTasks.findIndex((t) => t.id === activeIdStr);
@@ -676,7 +729,7 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
             <SortableContext items={weekPriorities.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <div className={styles.taskList}>
                 {weekPriorities.length === 0 && (
-                  <div className={styles.emptyHint}>Aucune priorité définie pour cette semaine.</div>
+                  <DroppableEmptyZone id={WEEK_PRI_DROP_ID} label="Glisse une tâche ici pour la prioriser" />
                 )}
                 {weekPriorities.map((task, i) => (
                   <SortableTaskItem key={task.id} task={task} {...taskCallbacks}
@@ -712,13 +765,21 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
                 Priorités — {selectedDayLabel}
               </span>
               <span className={styles.sectionCount}>
-                {prioritiesDone}/{dayMainTasks.length}
+                {prioritiesDone}/
+                <span className={dayPriorityOverflow ? styles.sectionCountOverflow : undefined}>
+                  {dayMainTasks.length}
+                </span>
+                {dayPriorityOverflow && (
+                  <span className={styles.overflowHint}>
+                    (max {dailyPriorityCount})
+                  </span>
+                )}
               </span>
             </div>
             <SortableContext items={dayMainTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <div className={styles.taskList}>
-                {allDayTasks.length === 0 && (
-                  <div className={styles.emptyHint}>Aucune tâche prévue pour ce jour.</div>
+                {dayMainTasks.length === 0 && (
+                  <DroppableEmptyZone id={DAY_MAIN_DROP_ID} label={allDayTasks.length === 0 ? "Aucune tâche prévue pour ce jour" : "Glisse une tâche ici pour la prioriser"} />
                 )}
                 {dayMainTasks.map((task, i) => (
                   <SortableTaskItem key={task.id} task={task} {...taskCallbacks}

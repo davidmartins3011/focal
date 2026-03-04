@@ -27,6 +27,23 @@
   letter-spacing: 0.5px;
 }
 
+/* ── Empty drop zone ── */
+.emptyDropZone {
+  padding: 14px 12px;
+  border: 1.5px dashed var(--border2);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text3);
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.emptyDropZoneOver {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent-muted);
+}
+
 .secondaryHeader {
   margin-top: 20px;
   padding-top: 16px;

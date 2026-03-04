@@ -6,6 +6,7 @@ import {
   KeyboardSensor,
   useSensor,
   useSensors,
+  useDroppable,
   DragOverlay,
   type DragEndEvent,
 } from "@dnd-kit/core";
@@ -26,6 +27,17 @@ import { getTasks as fetchTasks, getOverdueTasks, toggleTask as toggleTaskSvc, d
 import { decomposeTask } from "../services/chat";
 import { getSetting, setSetting } from "../services/settings";
 import styles from "./TodayView.module.css";
+
+const MAIN_DROP_ID = "drop:main";
+
+function DroppableEmptyZone({ id, label }: { id: string; label: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} className={`${styles.emptyDropZone} ${isOver ? styles.emptyDropZoneOver : ""}`}>
+      {label}
+    </div>
+  );
+}
 
 function todayKey(): string {
   return `daily-prep-${new Date().toISOString().slice(0, 10)}`;
@@ -283,6 +295,27 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
+    const overId = over.id as string;
+
+    // Drop on empty main zone
+    if (overId === MAIN_DROP_ID) {
+      const secIdx = secondaryTasks.findIndex((t) => t.id === active.id);
+      const overdueIdx = overdueTasks.findIndex((t) => t.id === active.id);
+      if (secIdx !== -1 && mainTasks.length < dailyPriorityCount) {
+        const task = secondaryTasks[secIdx];
+        commitTasks([{ ...task, priority: "main" as const }], secondaryTasks.filter((t) => t.id !== task.id));
+        updateTaskSvc({ id: task.id, priority: "main" }).catch(() => {});
+      } else if (overdueIdx !== -1) {
+        const movedTask = overdueTasks[overdueIdx];
+        const today = new Date().toISOString().slice(0, 10);
+        const priority: "main" | "secondary" = mainTasks.length < dailyPriorityCount ? "main" : "secondary";
+        setOverdueTasks((prev) => prev.filter((t) => t.id !== active.id));
+        commitTasks([...mainTasks, { ...movedTask, scheduledDate: today, priority }], secondaryTasks);
+        updateTaskSvc({ id: movedTask.id, scheduledDate: today, priority }).catch(() => {});
+      }
+      return;
+    }
+
     const activeMainIdx = mainTasks.findIndex((t) => t.id === active.id);
     const activeSecIdx = secondaryTasks.findIndex((t) => t.id === active.id);
     const activeOverdueIdx = overdueTasks.findIndex((t) => t.id === active.id);
@@ -433,6 +466,9 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
 
         <SortableContext items={mainTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className={styles.taskList}>
+            {mainTasks.length === 0 && (
+              <DroppableEmptyZone id={MAIN_DROP_ID} label="Glisse une tâche ici pour la prioriser" />
+            )}
             {mainTasks.map((task, i) => (
               <SortableTaskItem
                 key={task.id}
