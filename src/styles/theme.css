@@ -7,6 +7,7 @@
 :root,
 [data-theme="default"] {
   --bg: #131316;
+  --bg-rgb: 19, 19, 22;
   --bg2: #1a1a1f;
   --bg3: #232329;
   --bg4: #2e2e36;
@@ -36,6 +37,7 @@
 
 [data-theme="clair"] {
   --bg: #f5f3f7;
+  --bg-rgb: 245, 243, 247;
   --bg2: #eae7ef;
   --bg3: #ddd9e4;
   --bg4: #d0cbda;
@@ -65,6 +67,7 @@
 
 [data-theme="sombre"] {
   --bg: #09090b;
+  --bg-rgb: 9, 9, 11;
   --bg2: #0f0f13;
   --bg3: #18181d;
   --bg4: #222228;
@@ -95,6 +98,7 @@
 /* TDAH-friendly: warm, low-stimulation, earthy tones */
 [data-theme="zen"] {
   --bg: #1c1917;
+  --bg-rgb: 28, 25, 23;
   --bg2: #231f1c;
   --bg3: #2c2724;
   --bg4: #38322e;
@@ -125,6 +129,7 @@
 /* TDAH-friendly: high contrast, clean, calming blue-green focus */
 [data-theme="hyperfocus"] {
   --bg: #0f1419;
+  --bg-rgb: 15, 20, 25;
   --bg2: #151c23;
   --bg3: #1d262f;
   --bg4: #27333f;
@@ -155,6 +160,7 @@
 /* Warm sunrise — coral & peach on cream */
 [data-theme="aurore"] {
   --bg: #fdf6f0;
+  --bg-rgb: 253, 246, 240;
   --bg2: #f5ebe2;
   --bg3: #ebddd0;
   --bg4: #dfd0c0;
@@ -185,6 +191,7 @@
 /* Deep ocean — teal & cyan on dark navy */
 [data-theme="ocean"] {
   --bg: #0a1628;
+  --bg-rgb: 10, 22, 40;
   --bg2: #0f1e34;
   --bg3: #162844;
   --bg4: #1e3452;
@@ -215,6 +222,7 @@
 /* Cherry blossom — soft pink on lavender-white */
 [data-theme="sakura"] {
   --bg: #fdf2f8;
+  --bg-rgb: 253, 242, 248;
   --bg2: #f5e6f0;
   --bg3: #eadae8;
   --bg4: #ddcce0;
@@ -245,6 +253,7 @@
 /* Nordic frost — icy blue-gray, sharp and clean */
 [data-theme="nord"] {
   --bg: #1a2030;
+  --bg-rgb: 26, 32, 48;
   --bg2: #212838;
   --bg3: #2a3244;
   --bg4: #343e52;
@@ -275,6 +284,7 @@
 /* Bright solar — amber & gold on warm white */
 [data-theme="solaire"] {
   --bg: #fffdf5;
+  --bg-rgb: 255, 253, 245;
   --bg2: #faf5e8;
   --bg3: #f0eada;
   --bg4: #e4dcc8;

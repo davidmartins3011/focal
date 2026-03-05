@@ -4,7 +4,7 @@ import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessa
 import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps, clearAllTasks, clearTodayTasks } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { runAnalysisNow } from "../services/memory";
-import { chatHints } from "../data/chatConstants";
+import { chatHints, slashCommands } from "../data/chatConstants";
 import { providers } from "../data/settingsData";
 import styles from "./ChatPanel.module.css";
 
@@ -456,6 +456,20 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const send = useCallback(() => {
     const text = input.trim();
     if (!text || isTyping) return;
+
+    if (text === "/help") {
+      resetInput();
+      const helpContent = slashCommands
+        .map((cmd) => `**${cmd.command}** — ${cmd.description}`)
+        .join("\n");
+      const helpMsg: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        role: "ai",
+        content: `Commandes disponibles :\n\n${helpContent}`,
+      };
+      setMessages((prev) => [...prev, helpMsg]);
+      return;
+    }
 
     if (text === "/start-onboarding" && onStartOnboarding) {
       resetInput();

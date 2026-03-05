@@ -226,7 +226,8 @@ pub fn update_task(
             .map_err(|e| e.to_string())?;
     }
     if let Some(v) = estimated_minutes {
-        db.execute("UPDATE tasks SET estimated_minutes = ?1 WHERE id = ?2", params![v, id])
+        let val: Option<i32> = if v == 0 { None } else { Some(v) };
+        db.execute("UPDATE tasks SET estimated_minutes = ?1 WHERE id = ?2", params![val, id])
             .map_err(|e| e.to_string())?;
     }
     if let Some(v) = ai_decomposed {

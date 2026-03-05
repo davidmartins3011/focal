@@ -174,24 +174,23 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
 
   function updateEstimate(taskId: string, minutes: number | undefined) {
     updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, estimatedMinutes: minutes } : t));
+    updateTaskSvc({ id: taskId, estimatedMinutes: minutes ?? 0 }).catch((err) => console.error("[TodayView] updateEstimate error:", err));
   }
 
   function updateStepEstimate(taskId: string, stepId: string, minutes: number | undefined) {
-    updateTaskState((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId || !t.microSteps) return t;
-        return { ...t, microSteps: t.microSteps.map((s) => s.id === stepId ? { ...s, estimatedMinutes: minutes } : s) };
-      })
-    );
+    const task = findTask(taskId);
+    if (!task?.microSteps) return;
+    const updated = task.microSteps.map((s) => s.id === stepId ? { ...s, estimatedMinutes: minutes } : s);
+    updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, microSteps: updated } : t));
+    setMicroSteps(taskId, updated).catch((err) => console.error("[TodayView] updateStepEstimate error:", err));
   }
 
   function editStep(taskId: string, stepId: string, text: string) {
-    updateTaskState((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId || !t.microSteps) return t;
-        return { ...t, microSteps: t.microSteps.map((s) => s.id === stepId ? { ...s, text } : s) };
-      })
-    );
+    const task = findTask(taskId);
+    if (!task?.microSteps) return;
+    const updated = task.microSteps.map((s) => s.id === stepId ? { ...s, text } : s);
+    updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, microSteps: updated } : t));
+    setMicroSteps(taskId, updated).catch((err) => console.error("[TodayView] editStep error:", err));
   }
 
   function findTask(taskId: string): Task | undefined {
