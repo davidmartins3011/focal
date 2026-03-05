@@ -271,6 +271,28 @@ pub fn delete_task(state: State<'_, AppState>, id: String) -> Result<(), String>
 }
 
 #[tauri::command]
+pub fn clear_all_tasks(state: State<'_, AppState>) -> Result<u64, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let count = db
+        .execute("DELETE FROM tasks", [])
+        .map_err(|e| e.to_string())? as u64;
+    Ok(count)
+}
+
+#[tauri::command]
+pub fn clear_today_tasks(state: State<'_, AppState>) -> Result<u64, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let today = Local::now().format("%Y-%m-%d").to_string();
+    let count = db
+        .execute(
+            "DELETE FROM tasks WHERE (view_context = 'today' AND scheduled_date IS NULL) OR scheduled_date = ?1",
+            params![today],
+        )
+        .map_err(|e| e.to_string())? as u64;
+    Ok(count)
+}
+
+#[tauri::command]
 pub fn reorder_tasks(state: State<'_, AppState>, ids: Vec<String>) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     for (i, id) in ids.iter().enumerate() {

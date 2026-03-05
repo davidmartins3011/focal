@@ -67,7 +67,7 @@ export default function TaskItem({
   hasRunningTimer = false,
   onSelect,
 }: Props) {
-  const [expanded, setExpanded] = useState(!!task.microSteps?.length && !task.done);
+  const [expanded, setExpanded] = useState(false);
   const [visibleSteps, setVisibleSteps] = useState<number>(task.microSteps?.length ?? 0);
   const [justDecomposed, setJustDecomposed] = useState(false);
   const [showStuckMenu, setShowStuckMenu] = useState(false);

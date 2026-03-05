@@ -1104,17 +1104,19 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         "- Ne fais jamais la morale. Pas de jugement.".to_string(),
         String::new(),
         "DÉROULEMENT NATUREL (adapte-toi, pas un script rigide) :".to_string(),
-        "1. Résumé de ce qui est déjà prévu (tâches existantes + reliquat).".to_string(),
-        "2. S'il y a du RELIQUAT, traite-le EN PREMIER : garder, reporter ou supprimer ? Ne passe pas à la suite tant que le reliquat n'est pas traité.".to_string(),
-        "3. Ajustements : ajouter, retirer, modifier.".to_string(),
-        "4. Explorer : \"Il y a autre chose ? Des réunions, des deadlines ?\"".to_string(),
-        format!("5. Priorisation : aide à choisir les {max_priority} tâche(s) prioritaire(s) max (voir PRIORISATION)."),
+        "1. Résumé structuré : présente d'abord les ⚡ Priorités du jour, puis les 📋 Aussi prévu, puis le ⏳ Reliquat.".to_string(),
+        format!("2. Vérifie les priorités du jour : s'il y en a plus de {max_priority}, signale-le et aide à choisir lesquelles garder (voir PRIORISATION)."),
+        "3. S'il y a du RELIQUAT, traite-le ensuite : garder, reporter ou supprimer ?".to_string(),
+        "4. Aide à organiser les tâches \"Aussi prévu\" : les prioriser, les reporter, ou ajuster leur ordre.".to_string(),
+        "5. Ajustements : ajouter, retirer, modifier d'autres tâches.".to_string(),
         "6. Conseils d'organisation si les données le permettent (voir CONSEILS D'ORGANISATION).".to_string(),
         "7. Confirme le plan → prepComplete: true (sans remettre les tâches déjà ajoutées dans tasksToAdd).".to_string(),
         String::new(),
         "PRIORISATION :".to_string(),
-        format!("- Maximum {max_priority} tâche(s) prioritaire(s) (\"main\") par jour. Si dépassé, signale-le avec bienveillance et aide à choisir."),
+        format!("- Maximum {max_priority} tâche(s) dans ⚡ Priorités du jour (priority = \"main\"). C'est la limite configurée par l'utilisateur."),
+        format!("- Si le nombre de priorités dépasse {max_priority}, SIGNALE-LE IMMÉDIATEMENT dans ton premier message (ex: \"Tu as X priorités, le max est {max_priority}. On en enlève ?\")."),
         "- Propose des choix binaires : \"Entre [tâche A] et [tâche B], laquelle est la plus urgente ?\"".to_string(),
+        "- Les tâches du reliquat et de \"Aussi prévu\" qui ont des scores d'urgence/importance élevés peuvent être candidates à devenir des priorités du jour — propose-le.".to_string(),
         String::new(),
         "SCORES D'URGENCE ET D'IMPORTANCE :".to_string(),
         "- Certaines tâches ont des scores sur 5. Utilise-les ACTIVEMENT pour guider tes recommandations.".to_string(),
@@ -1161,10 +1163,16 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
     }
 
     let mut priority_count = 0i32;
+    let mut main_lines: Vec<String> = Vec::new();
+    let mut secondary_lines: Vec<String> = Vec::new();
+
     if let Ok(mut stmt) = db.prepare(
-        "SELECT id, name, done, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE view_context = 'today' ORDER BY position",
+        "SELECT id, name, done, priority, estimated_minutes, scheduled_date, urgency, importance \
+         FROM tasks \
+         WHERE (view_context = 'today' AND scheduled_date IS NULL) OR scheduled_date = ?1 \
+         ORDER BY position",
     ) {
-        if let Ok(tasks) = stmt.query_map([], |row| {
+        if let Ok(tasks) = stmt.query_map(params![today], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -1176,24 +1184,38 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
                 row.get::<_, Option<i32>>(7)?,
             ))
         }) {
-            let task_lines: Vec<String> = tasks
-                .filter_map(|r| r.ok())
-                .map(|(id, name, done, pri, est, sched, urg, imp)| {
-                    if pri.as_deref() == Some("main") && !done {
-                        priority_count += 1;
-                    }
-                    format_task_line(&id, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp)
-                })
-                .collect();
-            if !task_lines.is_empty() {
-                parts.push("TÂCHES DU JOUR (ID entre crochets = pour tasksToRemove/tasksToUpdate) :".to_string());
-                parts.extend(task_lines);
-                parts.push(String::new());
-            } else {
-                parts.push("AUCUNE TÂCHE AUJOURD'HUI — la journée est vierge.".to_string());
-                parts.push(String::new());
+            for row in tasks.filter_map(|r| r.ok()) {
+                let (id, name, done, pri, est, sched, urg, imp) = row;
+                let line = format_task_line(&id, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp);
+                if pri.as_deref() == Some("main") {
+                    if !done { priority_count += 1; }
+                    main_lines.push(line);
+                } else {
+                    secondary_lines.push(line);
+                }
             }
         }
+    }
+
+    if main_lines.is_empty() && secondary_lines.is_empty() {
+        parts.push("AUCUNE TÂCHE AUJOURD'HUI — la journée est vierge.".to_string());
+        parts.push(String::new());
+    } else {
+        parts.push("⚡ PRIORITÉS DU JOUR (tâches \"main\") :".to_string());
+        if main_lines.is_empty() {
+            parts.push("  (aucune priorité définie)".to_string());
+        } else {
+            parts.extend(main_lines);
+        }
+        parts.push(String::new());
+
+        parts.push("📋 AUSSI PRÉVU (tâches \"secondary\" / sans priorité) :".to_string());
+        if secondary_lines.is_empty() {
+            parts.push("  (rien d'autre de prévu)".to_string());
+        } else {
+            parts.extend(secondary_lines);
+        }
+        parts.push(String::new());
     }
 
     if let Ok(mut stmt) = db.prepare(
@@ -1238,11 +1260,21 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
 
     parts.push("FORMAT DE RÉPONSE (JSON valide uniquement, pas de texte autour) :".to_string());
     parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "prepComplete": false}"#.to_string());
-    parts.push("- content : message textuel (pas de markdown, \\n pour les paragraphes)".to_string());
     parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{today}"}}]"#));
     parts.push("- tasksToRemove : [\"id1\", \"id2\"]".to_string());
     parts.push(format!(r#"- tasksToUpdate : [{{"id": "...", "priority": "secondary", "scheduledDate": "{tomorrow}"}}]"#));
     parts.push("- prepComplete : true quand l'utilisateur confirme la fin de la préparation".to_string());
+    parts.push(String::new());
+    parts.push("STYLE DU CONTENU (content) — RESPECTE STRICTEMENT CE FORMAT :".to_string());
+    parts.push("- INTERDIT : titres markdown (#, ##, ###). Jamais de headers.".to_string());
+    parts.push("- Autorisé : **gras** pour les noms de tâches, listes numérotées (1. 2. 3.), \\n pour les sauts de ligne.".to_string());
+    parts.push("- Priorité entre crochets après le nom : [principal] ou [secondaire].".to_string());
+    parts.push("- Temps estimé entre parenthèses : (~20 minutes).".to_string());
+    parts.push("- Sections séparées par des phrases naturelles (ex: \"En reliquat des jours précédents, on a :\"), PAS par des titres markdown.".to_string());
+    parts.push("- Ton conversationnel et chaleureux. Phrases courtes.".to_string());
+    parts.push("- Utilise les labels de section exacts : \"Priorités du jour\", \"Aussi prévu\", \"En reliquat\".".to_string());
+    parts.push("- Exemple de format attendu :".to_string());
+    parts.push(r#"  "Pour aujourd'hui, voici ce qui est déjà planifié :\n\n⚡ **Priorités du jour :**\n\n1. **Nom de la tâche** (~30 minutes)\n2. **Autre tâche**\n\n📋 **Aussi prévu :**\n\n1. **Tâche secondaire** (~20 minutes)\n\n⏳ **En reliquat** des jours précédents :\n\n1. **Tâche en retard** [principal]\n\nTu as 2 priorités sur 3 max. On regarde le reliquat ?""#.to_string());
 
     parts.join("\n")
 }

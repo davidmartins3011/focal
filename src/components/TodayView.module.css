@@ -27,6 +27,18 @@
   letter-spacing: 0.5px;
 }
 
+.sectionCountOverflow {
+  color: var(--danger, #e54e4e);
+}
+
+.overflowHint {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--danger, #e54e4e);
+  opacity: 0.85;
+  margin-left: 6px;
+}
+
 /* ── Empty drop zone ── */
 .emptyDropZone {
   padding: 14px 12px;

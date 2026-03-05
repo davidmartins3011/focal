@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, Task } from "../types";
 import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type AiResponse, type DailyPrepResponse } from "../services/chat";
-import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps } from "../services/tasks";
+import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps, clearAllTasks, clearTodayTasks } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { runAnalysisNow } from "../services/memory";
 import { chatHints } from "../data/chatConstants";
@@ -482,6 +482,56 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       prepHistory.current = [];
       setError(null);
       clearChat().catch((err) => console.error("[ChatPanel] clearChat error:", err));
+      return;
+    }
+
+    if (text === "/clear-db-tasks") {
+      resetInput();
+      const sysMsg: ChatMessage = { id: `sys-${Date.now()}`, role: "ai", content: "Suppression de toutes les tâches en cours..." };
+      setMessages((prev) => [...prev, sysMsg]);
+      setIsTyping(true);
+      clearAllTasks()
+        .then((count) => {
+          setIsTyping(false);
+          setTodayTasks([]);
+          onTasksChanged?.();
+          const resultMsg: ChatMessage = {
+            id: `ai-${Date.now()}`,
+            role: "ai",
+            content: `${count} tâche${count > 1 ? "s" : ""} supprimée${count > 1 ? "s" : ""} de la base de données.`,
+          };
+          setMessages((prev) => [...prev, resultMsg]);
+        })
+        .catch((err) => {
+          setIsTyping(false);
+          setError(typeof err === "string" ? err : String(err));
+          console.error("[ChatPanel] clear-db-tasks error:", err);
+        });
+      return;
+    }
+
+    if (text === "/clear-db-tasks-today") {
+      resetInput();
+      const sysMsg: ChatMessage = { id: `sys-${Date.now()}`, role: "ai", content: "Suppression des tâches d'aujourd'hui en cours..." };
+      setMessages((prev) => [...prev, sysMsg]);
+      setIsTyping(true);
+      clearTodayTasks()
+        .then((count) => {
+          setIsTyping(false);
+          setTodayTasks([]);
+          onTasksChanged?.();
+          const resultMsg: ChatMessage = {
+            id: `ai-${Date.now()}`,
+            role: "ai",
+            content: `${count} tâche${count > 1 ? "s" : ""} d'aujourd'hui supprimée${count > 1 ? "s" : ""} de la base de données.`,
+          };
+          setMessages((prev) => [...prev, resultMsg]);
+        })
+        .catch((err) => {
+          setIsTyping(false);
+          setError(typeof err === "string" ? err : String(err));
+          console.error("[ChatPanel] clear-db-tasks-today error:", err);
+        });
       return;
     }
 

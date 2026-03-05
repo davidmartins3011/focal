@@ -45,6 +45,8 @@ pub fn run() {
             commands::tasks::update_task,
             commands::tasks::toggle_task,
             commands::tasks::delete_task,
+            commands::tasks::clear_all_tasks,
+            commands::tasks::clear_today_tasks,
             commands::tasks::reorder_tasks,
             commands::tasks::set_micro_steps,
             commands::tasks::toggle_micro_step,

@@ -461,7 +461,15 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
             Priorités du jour
           </span>
           <span className={styles.sectionCount}>
-            {mainDoneCount}/{mainTasks.length}
+            {mainDoneCount}/
+            <span className={mainTasks.length > dailyPriorityCount ? styles.sectionCountOverflow : undefined}>
+              {mainTasks.length}
+            </span>
+            {mainTasks.length > dailyPriorityCount && (
+              <span className={styles.overflowHint}>
+                (max {dailyPriorityCount})
+              </span>
+            )}
           </span>
         </div>
 

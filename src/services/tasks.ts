@@ -55,6 +55,14 @@ export function deleteTask(id: string): Promise<void> {
   return invoke<void>("delete_task", { id });
 }
 
+export function clearAllTasks(): Promise<number> {
+  return invoke<number>("clear_all_tasks");
+}
+
+export function clearTodayTasks(): Promise<number> {
+  return invoke<number>("clear_today_tasks");
+}
+
 export function reorderTasks(ids: string[]): Promise<void> {
   return invoke<void>("reorder_tasks", { ids });
 }
