@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, Task } from "../types";
-import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type DailyPrepResponse } from "../services/chat";
-import { getTasks, createTask, deleteTask, updateTask, setMicroSteps } from "../services/tasks";
+import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type AiResponse, type DailyPrepResponse } from "../services/chat";
+import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { runAnalysisNow } from "../services/memory";
 import { chatHints } from "../data/chatConstants";
@@ -209,8 +209,83 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping, visibleStepCount]);
 
+  const applyTaskActions = useCallback(
+    async (actions: {
+      tasksToAdd?: { name: string; estimatedMinutes?: number; priority?: string; scheduledDate?: string }[];
+      tasksToRemove?: string[];
+      tasksToUpdate?: { id: string; name?: string; done?: boolean; priority?: string; scheduledDate?: string; estimatedMinutes?: number }[];
+      tasksToToggle?: string[];
+      tasksToReorder?: string[];
+    }) => {
+      let modified = false;
+
+      for (const t of actions.tasksToAdd ?? []) {
+        if (todayTasksRef.current.some((ex) => ex.name.toLowerCase() === t.name.toLowerCase())) continue;
+        try {
+          const created = await createTask({ name: t.name, context: "today", estimatedMinutes: t.estimatedMinutes, priority: t.priority, scheduledDate: t.scheduledDate });
+          setTodayTasks((prev) => [...prev, created]);
+          modified = true;
+        } catch (err) {
+          console.error("[ChatPanel] createTask error:", err);
+        }
+      }
+
+      for (const taskId of actions.tasksToRemove ?? []) {
+        try {
+          await deleteTask(taskId);
+          setTodayTasks((prev) => prev.filter((t) => t.id !== taskId));
+          modified = true;
+        } catch (err) {
+          console.error("[ChatPanel] deleteTask error:", err);
+        }
+      }
+
+      for (const upd of actions.tasksToUpdate ?? []) {
+        try {
+          const updated = await updateTask({ id: upd.id, name: upd.name, done: upd.done, priority: upd.priority, scheduledDate: upd.scheduledDate, estimatedMinutes: upd.estimatedMinutes });
+          setTodayTasks((prev) =>
+            upd.scheduledDate
+              ? prev.filter((t) => t.id !== upd.id)
+              : prev.map((t) => (t.id === upd.id ? updated : t)),
+          );
+          modified = true;
+        } catch (err) {
+          console.error("[ChatPanel] updateTask error:", err);
+        }
+      }
+
+      for (const taskId of actions.tasksToToggle ?? []) {
+        try {
+          const toggled = await toggleTask(taskId);
+          setTodayTasks((prev) => prev.map((t) => (t.id === taskId ? toggled : t)));
+          modified = true;
+        } catch (err) {
+          console.error("[ChatPanel] toggleTask error:", err);
+        }
+      }
+
+      if (actions.tasksToReorder?.length) {
+        try {
+          await reorderTasks(actions.tasksToReorder);
+          const reordered = todayTasksRef.current.slice().sort((a, b) => {
+            const ia = actions.tasksToReorder!.indexOf(a.id);
+            const ib = actions.tasksToReorder!.indexOf(b.id);
+            return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+          });
+          setTodayTasks(reordered);
+          modified = true;
+        } catch (err) {
+          console.error("[ChatPanel] reorderTasks error:", err);
+        }
+      }
+
+      if (modified) onTasksChanged?.();
+    },
+    [onTasksChanged],
+  );
+
   const handleChatResponse = useCallback(
-    (response: { content: string; steps?: string[] }) => {
+    async (response: AiResponse) => {
       const msgId = `ai-${Date.now()}`;
       const steps = response.steps?.map((s) => ({ text: s }));
       const aiMsg: ChatMessage = { id: msgId, role: "ai", content: response.content, steps };
@@ -224,8 +299,10 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         });
         setTimeout(() => setRevealingMsgId(null), 350 * steps.length + 300);
       }
+
+      await applyTaskActions(response);
     },
-    [],
+    [applyTaskActions],
   );
 
   const handlePrepResponse = useCallback(
@@ -236,68 +313,14 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       const aiMsg: ChatMessage = { id: msgId, role: "ai", content: response.content };
       setMessages((prev) => [...prev, aiMsg]);
 
-      let tasksModified = false;
-
-      for (const t of response.tasksToAdd) {
-        const alreadyExists = todayTasksRef.current.some(
-          (existing) => existing.name.toLowerCase() === t.name.toLowerCase(),
-        );
-        if (alreadyExists) continue;
-
-        try {
-          const created = await createTask({
-            name: t.name,
-            context: "today",
-            estimatedMinutes: t.estimatedMinutes,
-            priority: t.priority,
-            scheduledDate: t.scheduledDate,
-          });
-          setTodayTasks((prev) => [...prev, created]);
-          tasksModified = true;
-        } catch (err) {
-          console.error("[ChatPanel] createTask error:", err);
-        }
-      }
-
-      for (const taskId of response.tasksToRemove) {
-        try {
-          await deleteTask(taskId);
-          setTodayTasks((prev) => prev.filter((t) => t.id !== taskId));
-          tasksModified = true;
-        } catch (err) {
-          console.error("[ChatPanel] deleteTask error:", err);
-        }
-      }
-
-      for (const upd of response.tasksToUpdate) {
-        try {
-          const updated = await updateTask({
-            id: upd.id,
-            priority: upd.priority,
-            scheduledDate: upd.scheduledDate,
-            estimatedMinutes: upd.estimatedMinutes,
-          });
-          setTodayTasks((prev) =>
-            upd.scheduledDate
-              ? prev.filter((t) => t.id !== upd.id)
-              : prev.map((t) => (t.id === upd.id ? updated : t)),
-          );
-          tasksModified = true;
-        } catch (err) {
-          console.error("[ChatPanel] updateTask error:", err);
-        }
-      }
-
-      if (tasksModified) {
-        onTasksChanged?.();
-      }
+      await applyTaskActions(response);
 
       if (response.prepComplete) {
         setPrepMode(null);
         prepHistory.current = [];
       }
     },
-    [onTasksChanged],
+    [applyTaskActions],
   );
 
   const sendPrepMessage = useCallback(
@@ -370,9 +393,9 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     setPrepMode(null);
 
     sendMessage(text)
-      .then((response) => {
+      .then(async (response) => {
         setIsTyping(false);
-        handleChatResponse(response);
+        await handleChatResponse(response);
       })
       .catch((err) => {
         setIsTyping(false);
@@ -505,15 +528,15 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     setIsTyping(true);
 
     sendMessage(text)
-      .then((response) => {
+      .then(async (response) => {
         setIsTyping(false);
-        handleChatResponse(response);
+        await handleChatResponse(response);
       })
       .catch((err) => {
         setIsTyping(false);
         setError(typeof err === "string" ? err : String(err));
       });
-  }, [input, isTyping, prepMode, onStartOnboarding, startDailyPrep, startWeeklyPrep, sendPrepMessage, resetInput]);
+  }, [input, isTyping, prepMode, onStartOnboarding, startDailyPrep, startWeeklyPrep, sendPrepMessage, resetInput, handleChatResponse]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {

@@ -1,9 +1,23 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ChatMessage, Suggestion, UserProfile } from "../types";
 
+export interface ChatTaskUpdate {
+  id: string;
+  name?: string;
+  done?: boolean;
+  priority?: string;
+  scheduledDate?: string;
+  estimatedMinutes?: number;
+}
+
 export interface AiResponse {
   content: string;
   steps?: string[];
+  tasksToAdd?: DailyPrepTask[];
+  tasksToRemove?: string[];
+  tasksToUpdate?: ChatTaskUpdate[];
+  tasksToToggle?: string[];
+  tasksToReorder?: string[];
 }
 
 export function getChatMessages(): Promise<ChatMessage[]> {
@@ -41,18 +55,11 @@ export interface DailyPrepTask {
   scheduledDate?: string;
 }
 
-export interface DailyPrepTaskUpdate {
-  id: string;
-  priority?: string;
-  scheduledDate?: string;
-  estimatedMinutes?: number;
-}
-
 export interface DailyPrepResponse {
   content: string;
   tasksToAdd: DailyPrepTask[];
   tasksToRemove: string[];
-  tasksToUpdate: DailyPrepTaskUpdate[];
+  tasksToUpdate: ChatTaskUpdate[];
   prepComplete: boolean;
 }
 

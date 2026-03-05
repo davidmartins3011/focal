@@ -31,7 +31,7 @@ const ANALYSIS_PROMPT: &str = r#"Tu es un analyste comportemental spécialisé d
 
 On te donne l'historique des conversations d'une journée entre un utilisateur et son assistant de productivité.
 
-Ton objectif : extraire des observations concrètes sur le FONCTIONNEMENT ORGANISATIONNEL de l'utilisateur.
+Ton objectif : CONSTRUIRE ET AFFINER un profil organisationnel cumulatif de l'utilisateur, en enrichissant les observations existantes avec les nouvelles données du jour.
 
 CATÉGORIES À OBSERVER :
 - "prioritization" : Comment il priorise (grosses tâches d'abord ? petites tâches d'abord ? par urgence ? par plaisir ?)
@@ -41,12 +41,19 @@ CATÉGORIES À OBSERVER :
 - "psychology" : Sa psychologie d'organisation (besoin de structure vs flexibilité, besoin de validation, rapport au temps)
 - "habits" : Ses habitudes et routines détectées (rituels du matin, revue du soir, etc.)
 
-RÈGLES :
-- Ne génère un insight QUE s'il est clairement visible dans les conversations. N'invente rien.
-- Chaque insight doit être formulé comme une observation factuelle, en 1-2 phrases max.
-- Si tu n'observes rien de significatif pour une catégorie, ne la mets pas.
+RÈGLES D'ENRICHISSEMENT (TRÈS IMPORTANT) :
+- Des insights existants peuvent te être fournis. Ils représentent le profil actuel, construit sur l'ensemble des conversations passées.
+- Ton rôle est de produire la MEILLEURE VERSION POSSIBLE de chaque insight en FUSIONNANT l'existant avec les nouvelles observations du jour.
+- PRÉSERVE les informations existantes qui restent pertinentes. Ne les efface jamais juste parce que la conversation du jour ne les mentionne pas.
+- ENRICHIS en ajoutant des détails ou nuances nouvellement observés (ex: "L'utilisateur priorise par urgence" → "L'utilisateur priorise par urgence, mais tend à intercaler de petites tâches rapides pour maintenir un sentiment de progression").
+- CORRIGE si la conversation du jour CONTREDIT clairement une observation existante. Dans ce cas, nuance plutôt qu'écrase (ex: "L'utilisateur évite les grosses tâches" → "L'utilisateur repoussait les grosses tâches, mais commence à les attaquer en début de journée quand il est frais").
+- CONFIRME : si les conversations du jour renforcent un pattern existant, renforce la formulation pour refléter la récurrence.
+- Si rien de nouveau n'est observable pour une catégorie existante, RENVOIE L'INSIGHT EXISTANT TEL QUEL. Ne le supprime pas.
+
+RÈGLES GÉNÉRALES :
+- Pour les NOUVELLES catégories (sans insight existant), ne génère un insight QUE s'il est clairement visible dans les conversations. N'invente rien.
+- Chaque insight doit être une synthèse factuelle, en 1 à 3 phrases max. Sois concis mais précis.
 - Formule les insights en français, à la troisième personne ("L'utilisateur...").
-- Si des insights existants te sont fournis, mets-les à jour ou complète-les (ne duplique pas).
 
 Réponds UNIQUEMENT en JSON valide :
 {"insights": [{"category": "prioritization", "insight": "..."}, ...]}
@@ -82,17 +89,23 @@ fn build_analysis_messages(
     conversations: &[(String, String)],
     existing_insights: &[MemoryInsight],
 ) -> Vec<(String, String)> {
-    let mut context = String::from("CONVERSATIONS DU JOUR :\n\n");
+    let mut context = String::new();
+
+    if !existing_insights.is_empty() {
+        context.push_str("PROFIL ORGANISATIONNEL ACTUEL (construit sur les conversations passées — à enrichir, compléter ou corriger) :\n");
+        for ins in existing_insights {
+            context.push_str(&format!(
+                "- [{}] (dernière mise à jour: {}) {}\n",
+                ins.category, ins.source_date, ins.insight
+            ));
+        }
+        context.push_str("\n---\n\n");
+    }
+
+    context.push_str("NOUVELLES CONVERSATIONS À ANALYSER :\n\n");
     for (role, content) in conversations {
         let label = if role == "user" { "Utilisateur" } else { "Assistant" };
         context.push_str(&format!("{label} : {content}\n\n"));
-    }
-
-    if !existing_insights.is_empty() {
-        context.push_str("\nINSIGHTS EXISTANTS (à compléter ou mettre à jour) :\n");
-        for ins in existing_insights {
-            context.push_str(&format!("- [{}] {}\n", ins.category, ins.insight));
-        }
     }
 
     vec![("user".to_string(), context)]

@@ -121,77 +121,71 @@ export default function ProfileView() {
           onSave={saveEditing}
           onCancel={cancelEditing}
         />
-      ) : !hasAnyData ? (
-        <div className={styles.emptyState}>
-          <p>Ton profil est vide pour l'instant.</p>
-          <p className={styles.emptyHint}>
-            Clique sur « Modifier » pour compléter ton profil. Tu pourras le modifier à tout moment.
-          </p>
-          <button className={styles.editBtn} onClick={startEditing} type="button">
-            Compléter mon profil
-          </button>
-        </div>
       ) : (
         <div className={styles.content}>
-          <ProfileSection title="Te connaître" icon="👋">
-            <ProfileField label="Prénom" value={profile.firstName} />
-            <ProfileField
-              label="Contexte principal"
-              value={
-                profile.mainContext
-                  ? profile.mainContext === "autre"
-                    ? profile.mainContextOther || LABELS.mainContext.autre
-                    : LABELS.mainContext[profile.mainContext]
-                  : undefined
-              }
-            />
-            <ProfileField label="Métier / activité" value={profile.jobActivity} />
-            {profile.profileResearch !== undefined && (
-              <ProfileField label="Recherche de profil public" value={profile.profileResearch ? "Oui" : "Non"} />
-            )}
-            {profile.profileResearchSources && profile.profileResearchSources.length > 0 && (
-              <div className={styles.field}>
-                <span className={styles.fieldLabel}>Sources à consulter</span>
-                <ul className={styles.sourcesViewList}>
-                  {profile.profileResearchSources.map((src, i) => (
-                    <li key={i} className={styles.sourceViewItem}>
-                      <span className={styles.sourceType}>{SOURCE_LABELS[src.source] || src.source}</span>
-                      {src.sourceUrl ? (
-                        <a href={src.sourceUrl} target="_blank" rel="noopener noreferrer" className={styles.sourceLink}>
-                          {src.sourceUrl}
-                        </a>
-                      ) : (
-                        <span className={styles.sourceUrlPlaceholder}>—</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {profile.publicProfileSummary && (
-              <ProfileField label="Résumé du profil public" value={profile.publicProfileSummary} />
-            )}
-          </ProfileSection>
+          {!hasAnyData ? (
+            <div className={styles.emptyState}>
+              <p>Ton profil est vide pour l'instant.</p>
+              <p className={styles.emptyHint}>
+                Clique sur « Modifier » pour compléter ton profil. Tu pourras le modifier à tout moment.
+              </p>
+              <button className={styles.editBtn} onClick={startEditing} type="button">
+                Compléter mon profil
+              </button>
+            </div>
+          ) : (
+            <>
+              <ProfileSection title="Te connaître" icon="👋">
+                <ProfileField label="Prénom" value={profile.firstName} />
+                <ProfileField
+                  label="Contexte principal"
+                  value={
+                    profile.mainContext
+                      ? profile.mainContext === "autre"
+                        ? profile.mainContextOther || LABELS.mainContext.autre
+                        : LABELS.mainContext[profile.mainContext]
+                      : undefined
+                  }
+                />
+                <ProfileField label="Métier / activité" value={profile.jobActivity} />
+                {profile.profileResearch !== undefined && (
+                  <ProfileField label="Recherche de profil public" value={profile.profileResearch ? "Oui" : "Non"} />
+                )}
+                {profile.profileResearchSources && profile.profileResearchSources.length > 0 && (
+                  <div className={styles.field}>
+                    <span className={styles.fieldLabel}>Sources à consulter</span>
+                    <ul className={styles.sourcesViewList}>
+                      {profile.profileResearchSources.map((src, i) => (
+                        <li key={i} className={styles.sourceViewItem}>
+                          <span className={styles.sourceType}>{SOURCE_LABELS[src.source] || src.source}</span>
+                          {src.sourceUrl ? (
+                            <a href={src.sourceUrl} target="_blank" rel="noopener noreferrer" className={styles.sourceLink}>
+                              {src.sourceUrl}
+                            </a>
+                          ) : (
+                            <span className={styles.sourceUrlPlaceholder}>—</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {profile.publicProfileSummary && (
+                  <ProfileField label="Résumé du profil public" value={profile.publicProfileSummary} />
+                )}
+              </ProfileSection>
 
-          <ProfileSection title="Ton fonctionnement" icon="🧠">
-            <ProfileField label="TDAH" value={profile.adhdRecognition ? LABELS.adhdRecognition[profile.adhdRecognition] : undefined} />
-            <ProfileList label="Ce qui te bloque le plus" items={profile.blockers?.map((b) => LABELS.blockers[b]) ?? []} />
-            <ProfileField label="Préférence rappels" value={profile.remindersPreference ? LABELS.remindersPreference[profile.remindersPreference] : undefined} />
-            <ProfileField label="Horizon d'organisation" value={profile.organizationHorizon ? LABELS.organizationHorizon[profile.organizationHorizon] : undefined} />
-            <ProfileField label="Attente principale" value={profile.mainExpectation ? LABELS.mainExpectation[profile.mainExpectation] : undefined} />
-            <ProfileField label="Info importante" value={profile.extraInfo} />
-          </ProfileSection>
+              <ProfileSection title="Ton fonctionnement" icon="🧠">
+                <ProfileField label="TDAH" value={profile.adhdRecognition ? LABELS.adhdRecognition[profile.adhdRecognition] : undefined} />
+                <ProfileList label="Ce qui te bloque le plus" items={profile.blockers?.map((b) => LABELS.blockers[b]) ?? []} />
+                <ProfileField label="Préférence rappels" value={profile.remindersPreference ? LABELS.remindersPreference[profile.remindersPreference] : undefined} />
+                <ProfileField label="Horizon d'organisation" value={profile.organizationHorizon ? LABELS.organizationHorizon[profile.organizationHorizon] : undefined} />
+                <ProfileField label="Attente principale" value={profile.mainExpectation ? LABELS.mainExpectation[profile.mainExpectation] : undefined} />
+                <ProfileField label="Info importante" value={profile.extraInfo} />
+              </ProfileSection>
+            </>
+          )}
 
-          <MemorySection insights={insights} onDelete={(id) => {
-            deleteMemoryInsight(id).then(() => {
-              setInsights((prev) => prev.filter((i) => i.id !== id));
-            });
-          }} />
-        </div>
-      )}
-
-      {!isEditing && !hasAnyData && insights.length > 0 && (
-        <div className={styles.content}>
           <MemorySection insights={insights} onDelete={(id) => {
             deleteMemoryInsight(id).then(() => {
               setInsights((prev) => prev.filter((i) => i.id !== id));
