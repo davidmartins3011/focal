@@ -17,6 +17,7 @@ interface Props {
   strategyCycleStart: number;
   onLaunchDailyPrep?: () => void;
   onLaunchWeeklyPrep?: () => void;
+  onStuck?: (taskId: string, taskName: string) => void;
   taskRefreshKey?: number;
   workingDays?: WeekDayId[];
 }
@@ -27,7 +28,7 @@ const tabs: { id: ViewTab; label: string }[] = [
   { id: "strategy", label: "Prise de recul" },
 ];
 
-export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchWeeklyPrep, taskRefreshKey, workingDays }: Props) {
+export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchWeeklyPrep, onStuck, taskRefreshKey, workingDays }: Props) {
   const { dayName, dayNum, monthShort, weekNum } = useMemo(() => {
     const now = new Date();
     return {
@@ -60,8 +61,8 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
       </div>
 
       <div className={styles.content}>
-        {activeTab === "today" && <TodayView dailyPriorityCount={dailyPriorityCount} onLaunchDailyPrep={onLaunchDailyPrep} refreshKey={taskRefreshKey} />}
-        {activeTab === "week" && <WeekView onLaunchWeeklyPrep={onLaunchWeeklyPrep} refreshKey={taskRefreshKey} workingDays={workingDays} dailyPriorityCount={dailyPriorityCount} />}
+        {activeTab === "today" && <TodayView dailyPriorityCount={dailyPriorityCount} onLaunchDailyPrep={onLaunchDailyPrep} onStuck={onStuck} refreshKey={taskRefreshKey} />}
+        {activeTab === "week" && <WeekView onLaunchWeeklyPrep={onLaunchWeeklyPrep} onStuck={onStuck} refreshKey={taskRefreshKey} workingDays={workingDays} dailyPriorityCount={dailyPriorityCount} />}
         {activeTab === "strategy" && (
           <StrategyView frequency={strategyFrequency} cycleStart={strategyCycleStart} />
         )}

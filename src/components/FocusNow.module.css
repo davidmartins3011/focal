@@ -1,65 +1,81 @@
-.focusNow {
-  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.12), rgba(var(--accent-rgb), 0.03));
-  border: 1px solid rgba(var(--accent-rgb), 0.20);
-  border-radius: var(--radius);
-  padding: 14px 16px;
-  margin-bottom: 18px;
-  position: relative;
-  overflow: hidden;
-  animation: fadeUp 0.28s ease 0.05s both;
+.focusBar {
+  position: fixed;
+  bottom: 16px;
+  left: calc(52px + (58vw - 52px) / 2);
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(var(--bg-rgb, 20, 18, 30), 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  border-radius: 100px;
+  padding: 8px 10px 8px 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  animation: slideUp 0.3s ease both;
+  max-width: min(580px, calc(58vw - 52px - 32px));
 }
 
-.focusNow::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px;
-  height: 100%;
+.indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   background: var(--accent);
-  border-radius: 3px 0 0 3px;
-}
-
-.label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  color: var(--accent-muted);
-  margin-bottom: 6px;
+  flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .task {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 10px;
-}
-
-.meta {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .time {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text2);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn {
   background: var(--accent);
   color: var(--bg);
   border: none;
-  border-radius: var(--radius-sm);
-  padding: 5px 14px;
+  border-radius: 100px;
+  padding: 6px 16px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   font-family: 'Outfit', sans-serif;
   transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn:hover {
   background: var(--accent-light);
+  transform: scale(1.04);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }

@@ -117,12 +117,13 @@ const collisionDetection: CollisionDetection = (args) => {
 
 interface WeekViewProps {
   onLaunchWeeklyPrep?: () => void;
+  onStuck?: (taskId: string, taskName: string) => void;
   refreshKey?: number;
   workingDays?: WeekDayId[];
   dailyPriorityCount?: number;
 }
 
-export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays = DEFAULT_WORKING_DAYS, dailyPriorityCount = 3 }: WeekViewProps) {
+export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, workingDays = DEFAULT_WORKING_DAYS, dailyPriorityCount = 3 }: WeekViewProps) {
   const [selectedFilter, setSelectedFilter] = useState<"week" | string>("week");
   const [scheduledTasks, setScheduledTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
@@ -675,6 +676,12 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
     return info ? `${info.label}. ${info.dayNum}` : null;
   }, [isWeekMode, selectedFilter, dayInfos]);
 
+  const handleStuck = useCallback((taskId: string) => {
+    const allTasks = [...scheduledTasks, ...overdueTasks];
+    const task = allTasks.find((t) => t.id === taskId);
+    if (task && onStuck) onStuck(taskId, task.name);
+  }, [scheduledTasks, overdueTasks, onStuck]);
+
   const taskCallbacks = {
     onToggle: toggleTask,
     onToggleStep: toggleStep,
@@ -682,6 +689,7 @@ export default function WeekView({ onLaunchWeeklyPrep, refreshKey, workingDays =
     onRedecompose: (id: string) => decompose(id, true),
     onDecomposeStep: decomposeStep,
     onEditStep: editStep,
+    onStuck: handleStuck,
     onUpdateEstimate: updateEstimate,
     onUpdateStepEstimate: updateStepEstimate,
     onDelete: deleteTask,

@@ -101,15 +101,6 @@ export const defaultReminders: NotificationReminder[] = [
     icon: "🌅",
   },
   {
-    id: "focus-checkin",
-    label: "Check-in focus",
-    description: "Où en es-tu ? Recentre-toi si besoin",
-    time: "11:00",
-    enabled: true,
-    days: [...weekdays],
-    icon: "🎯",
-  },
-  {
     id: "lunch-break",
     label: "Pause déjeuner",
     description: "Fais une vraie pause, tu l'as mérité",
@@ -117,15 +108,6 @@ export const defaultReminders: NotificationReminder[] = [
     enabled: false,
     days: [...allDays],
     icon: "🍽",
-  },
-  {
-    id: "afternoon-boost",
-    label: "Boost après-midi",
-    description: "Relance ton énergie, choisis une tâche courte",
-    time: "15:00",
-    enabled: true,
-    days: [...weekdays],
-    icon: "⚡",
   },
   {
     id: "daily-review",

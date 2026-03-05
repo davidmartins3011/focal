@@ -69,6 +69,15 @@ export interface UserProfile {
   publicProfileSummary?: string;
 }
 
+export interface MemoryInsight {
+  id: string;
+  category: string;
+  insight: string;
+  sourceDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ThemeId = "default" | "clair" | "sombre" | "zen" | "hyperfocus" | "aurore" | "ocean" | "sakura" | "nord" | "solaire";
 
 export type AIProviderId = "openai" | "anthropic" | "mistral";

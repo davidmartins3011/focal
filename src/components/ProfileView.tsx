@@ -1,20 +1,25 @@
 import { useState, useEffect } from "react";
 import styles from "./ProfileView.module.css";
-import type { UserProfile } from "../types";
+import type { UserProfile, MemoryInsight } from "../types";
 import { SOURCE_LABELS, LABELS } from "../data/profileLabels";
 import { ProfileSection, ProfileField, ProfileList } from "./ProfileField";
 import ProfileEditForm from "./ProfileEditForm";
 import { getProfile, updateProfile } from "../services/profile";
+import { getMemoryInsights, deleteMemoryInsight } from "../services/memory";
 
 export default function ProfileView() {
   const [profile, setProfile] = useState<UserProfile>({});
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<UserProfile>({});
+  const [insights, setInsights] = useState<MemoryInsight[]>([]);
 
   useEffect(() => {
     getProfile()
       .then(setProfile)
       .catch((err) => console.error("[ProfileView] getProfile error:", err));
+    getMemoryInsights()
+      .then(setInsights)
+      .catch((err) => console.error("[ProfileView] getMemoryInsights error:", err));
   }, []);
 
   const startEditing = () => {
@@ -178,6 +183,76 @@ export default function ProfileView() {
           </ProfileSection>
         </div>
       )}
+
+      {!isEditing && (
+        <div className={styles.content}>
+          <MemorySection insights={insights} onDelete={(id) => {
+            deleteMemoryInsight(id).then(() => {
+              setInsights((prev) => prev.filter((i) => i.id !== id));
+            });
+          }} />
+        </div>
+      )}
     </div>
+  );
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  prioritization: "Priorisation",
+  work_patterns: "Rythme de travail",
+  organization: "Organisation",
+  blockers: "Blocages",
+  psychology: "Psychologie",
+  habits: "Habitudes",
+};
+
+function formatDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
+function MemorySection({ insights, onDelete }: { insights: MemoryInsight[]; onDelete: (id: string) => void }) {
+  return (
+    <ProfileSection title="Ce que l'IA a appris de toi" icon="🤖">
+      {insights.length === 0 ? (
+        <p className={styles.memoryEmpty}>
+          L'IA n'a pas encore analysé tes conversations. Les observations apparaîtront ici au fil du temps.
+        </p>
+      ) : (
+        <div className={styles.memoryList}>
+          {insights.map((ins) => (
+            <div key={ins.id} className={styles.memoryItem}>
+              <div className={styles.memoryContent}>
+                <div className={styles.memoryCategoryRow}>
+                  <span className={styles.memoryCategory}>
+                    {CATEGORY_LABELS[ins.category] || ins.category}
+                  </span>
+                  <span className={styles.memoryDate}>
+                    {formatDate(ins.sourceDate)}
+                  </span>
+                </div>
+                <span className={styles.memoryInsight}>{ins.insight}</span>
+              </div>
+              <button
+                className={styles.memoryDeleteBtn}
+                onClick={() => onDelete(ins.id)}
+                type="button"
+                title="Supprimer cette observation"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </ProfileSection>
   );
 }

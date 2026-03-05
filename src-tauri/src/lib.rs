@@ -80,6 +80,10 @@ pub fn run() {
             commands::ai::send_weekly_prep_message,
             commands::ai::send_onboarding_message,
             commands::ai::analyze_profile_url,
+            commands::memory::get_memory_insights,
+            commands::memory::delete_memory_insight,
+            commands::memory::check_and_run_analysis,
+            commands::memory::run_analysis_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

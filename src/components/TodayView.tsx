@@ -46,10 +46,11 @@ function todayKey(): string {
 interface TodayViewProps {
   dailyPriorityCount: number;
   onLaunchDailyPrep?: () => void;
+  onStuck?: (taskId: string, taskName: string) => void;
   refreshKey?: number;
 }
 
-export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refreshKey }: TodayViewProps) {
+export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStuck, refreshKey }: TodayViewProps) {
   const [prepDone, setPrepDone] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
@@ -393,6 +394,12 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     ? (tasks.find((t) => t.id === activeId) ?? overdueTasks.find((t) => t.id === activeId))
     : null;
 
+  const handleStuck = useCallback((taskId: string) => {
+    const allTasks = [...tasks, ...overdueTasks];
+    const task = allTasks.find((t) => t.id === taskId);
+    if (task && onStuck) onStuck(taskId, task.name);
+  }, [tasks, overdueTasks, onStuck]);
+
   const taskCallbacks = {
     onToggle: toggleTask,
     onToggleStep: toggleStep,
@@ -400,6 +407,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
     onRedecompose: (id: string) => decompose(id, true),
     onDecomposeStep: decomposeStep,
     onEditStep: editStep,
+    onStuck: handleStuck,
     onUpdateEstimate: updateEstimate,
     onUpdateStepEstimate: updateStepEstimate,
     onDelete: deleteTask,
@@ -436,14 +444,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
             onCancel={() => setTimerTaskId(null)}
           />
         </div>
-      )}
-
-      {!showTimerPanel && selectedTask && selectedTask.estimatedMinutes && !selectedTask.done && (
-        <FocusNow
-          task={selectedTask.name}
-          estimatedMinutes={selectedTask.estimatedMinutes}
-          onStart={() => setTimerTaskId(effectiveSelectedId!)}
-        />
       )}
 
       <ProgressBar done={doneCount} total={tasks.length} streak={streak} />
@@ -571,6 +571,14 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, refre
         </div>
         <button className={styles.reviewBtn}>Lancer la revue</button>
       </div>
+
+      {!showTimerPanel && selectedTask && selectedTask.estimatedMinutes && !selectedTask.done && (
+        <FocusNow
+          task={selectedTask.name}
+          estimatedMinutes={selectedTask.estimatedMinutes}
+          onStart={() => setTimerTaskId(effectiveSelectedId!)}
+        />
+      )}
     </div>
   );
 }

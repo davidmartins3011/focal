@@ -20,11 +20,11 @@ pub struct AiResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct ProviderConfig {
-    id: String,
-    enabled: bool,
+pub struct ProviderConfig {
+    pub id: String,
+    pub enabled: bool,
     #[serde(rename = "apiKey")]
-    api_key: String,
+    pub api_key: String,
     #[serde(default, rename = "keyStatus")]
     _key_status: Option<String>,
 }
@@ -58,7 +58,7 @@ fn resolve_api_model(provider_id: &str, selected_model: Option<&str>) -> String 
 }
 
 /// Returns (provider_config, resolved_api_model_id)
-fn get_active_provider(db: &rusqlite::Connection) -> Result<(ProviderConfig, String), String> {
+pub fn get_active_provider(db: &rusqlite::Connection) -> Result<(ProviderConfig, String), String> {
     let raw: String = db
         .query_row(
             "SELECT value FROM settings WHERE key = 'ai-settings'",
@@ -128,6 +128,13 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
         "- Encourager et soutenir face aux difficultés liées au TDAH et à la productivité".to_string(),
         "- Proposer des stratégies de focus, de motivation et d'organisation".to_string(),
         String::new(),
+        "QUAND L'UTILISATEUR DIT QU'IL BLOQUE SUR UNE TÂCHE :".to_string(),
+        "- Commence par poser UNE question ouverte pour comprendre ce qui bloque exactement (est-ce le démarrage ? la peur du résultat ? le flou sur ce qu'il faut faire ? le manque de motivation ? la surcharge mentale ?)".to_string(),
+        "- Ne propose PAS de solution immédiate. D'abord, écoute et pose des questions.".to_string(),
+        "- Ensuite, selon la réponse, propose une stratégie concrète et adaptée (décomposer autrement, commencer par le plus petit bout, timer de 5 min, reformuler la tâche, etc.)".to_string(),
+        "- Reste conversationnel : une question à la fois, des réponses courtes, pas de longs pavés.".to_string(),
+        "- N'inclus PAS de \"steps\" dans ta réponse quand tu poses des questions de déblocage — garde ça pour quand tu proposes un plan d'action concret.".to_string(),
+        String::new(),
         "PÉRIMÈTRE STRICT — CE QUE TU NE FAIS PAS :".to_string(),
         "- Tu n'es PAS un assistant général. Tu ne réponds PAS aux questions de culture générale, de code, de cuisine, de maths, de sciences, de traduction, ou tout autre sujet hors productivité/organisation personnelle.".to_string(),
         "- Si l'utilisateur te pose une question hors sujet, refuse POLIMENT et redirige-le vers ton périmètre. Exemple : \"Je suis focal., ton assistant de productivité ! Je ne peux pas t'aider là-dessus, mais si tu as une tâche à organiser ou un blocage, je suis là.\"".to_string(),
@@ -163,6 +170,36 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
         if ctx.len() > 1 {
             parts.push(ctx.join("\n"));
             parts.push(String::new());
+        }
+    }
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            let memory_lines: Vec<String> = rows
+                .filter_map(|r| r.ok())
+                .map(|(cat, insight)| {
+                    let label = match cat.as_str() {
+                        "prioritization" => "Priorisation",
+                        "work_patterns" => "Rythme de travail",
+                        "organization" => "Organisation",
+                        "blockers" => "Blocages",
+                        "psychology" => "Psychologie",
+                        "habits" => "Habitudes",
+                        other => other,
+                    };
+                    format!("- {label} : {insight}")
+                })
+                .collect();
+            if !memory_lines.is_empty() {
+                parts.push("MÉMOIRE — CE QUE TU SAIS DE L'UTILISATEUR :".to_string());
+                parts.push("(Observations apprises au fil des conversations passées. Utilise ces infos pour mieux t'adapter.)".to_string());
+                parts.extend(memory_lines);
+                parts.push(String::new());
+            }
         }
     }
 
@@ -358,7 +395,7 @@ pub struct DecompStep {
     pub estimated_minutes: Option<i32>,
 }
 
-async fn call_llm(
+pub async fn call_llm(
     provider_id: &str,
     api_key: &str,
     model: &str,
@@ -822,58 +859,109 @@ pub struct DailyPrepResponse {
     pub prep_complete: bool,
 }
 
+fn get_daily_priority_limit(db: &rusqlite::Connection) -> i32 {
+    db.query_row(
+        "SELECT value FROM settings WHERE key = 'daily-priority-count'",
+        [],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|v| v.parse::<i32>().ok())
+    .unwrap_or(3)
+}
+
+fn format_task_line(
+    id: &str,
+    name: &str,
+    done: bool,
+    pri: Option<&str>,
+    est: Option<i32>,
+    sched: Option<&str>,
+    urg: Option<i32>,
+    imp: Option<i32>,
+) -> String {
+    let check = if done { "✓" } else { "○" };
+    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
+    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
+    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
+    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
+    let sched_str = sched.map_or(String::new(), |s| format!(" (planifié: {s})"));
+    format!("  {check} [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
+}
+
 fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let tomorrow = (chrono::Local::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+    let max_priority = get_daily_priority_limit(db);
 
     let mut parts = vec![
         "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
         "Tu es en mode PRÉPARATION DU JOUR : tu aides l'utilisateur à construire sa journée en discutant avec lui.".to_string(),
         format!("Date d'aujourd'hui : {today}"),
         format!("Date de demain : {tomorrow}"),
+        format!("Maximum de tâches prioritaires par jour : {max_priority} (configuré par l'utilisateur)"),
+        String::new(),
+        "CONTEXTE TDAH — PRINCIPES FONDAMENTAUX :".to_string(),
+        "- Le cerveau TDAH a du mal à hiérarchiser : TOUT semble urgent. Ton rôle est d'aider à trier, pas d'ajouter du bruit.".to_string(),
+        "- Trop de priorités = aucune priorité. Protège l'utilisateur quand il veut tout mettre en prioritaire.".to_string(),
+        "- Les tâches en reliquat sont souvent source de culpabilité. Aborde-les sans jugement, normalise le report.".to_string(),
+        "- Propose des choix concrets (\"cette tâche ou celle-là ?\") plutôt que des questions ouvertes.".to_string(),
+        "- Valorise chaque décision prise pour maintenir la motivation.".to_string(),
         String::new(),
         "RÈGLES DE CONVERSATION :".to_string(),
         "- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string(),
-        "- Tu ne dictes PAS quoi faire. Tu DEMANDES à l'utilisateur ce qu'il a prévu, ce qui est important, etc.".to_string(),
-        "- Tu es un facilitateur : tu aides à formuler, clarifier, prioriser — mais c'est l'utilisateur qui décide.".to_string(),
-        "- Tutoie l'utilisateur. Sois chaleureux, bienveillant et encourageant.".to_string(),
+        "- Tu ne dictes PAS quoi faire. Tu DEMANDES à l'utilisateur ce qu'il a prévu.".to_string(),
+        "- Tu es un facilitateur : tu aides à formuler, clarifier, prioriser — c'est l'utilisateur qui décide.".to_string(),
+        "- Tutoie l'utilisateur. Sois chaleureux, bienveillant, encourageant et concis.".to_string(),
         "- Ne fais jamais la morale. Pas de jugement.".to_string(),
-        "- Sois concis : des messages courts et naturels, pas des pavés.".to_string(),
         String::new(),
-        "DÉROULEMENT NATUREL (pas un script rigide, adapte-toi) :".to_string(),
-        "1. COMMENCE PAR UN RÉSUMÉ de ce qui est déjà prévu : liste les tâches existantes (prioritaires, secondaires) et le reliquat des jours précédents s'il y en a. Présente ça de manière synthétique et claire.".to_string(),
-        "2. Après le résumé, demande à l'utilisateur s'il veut ajuster, ajouter ou retirer quelque chose.".to_string(),
-        "3. Quand il décrit des choses à faire, propose de les ajouter comme tâches (via tasksToAdd).".to_string(),
-        "4. Continue à explorer : \"Il y a autre chose ?\" / \"Des réunions, des deadlines ?\"".to_string(),
-        "5. Aide à prioriser : vise 2-3 tâches prioritaires max. Si il y en a trop, propose de déprioriser ou reporter certaines tâches.".to_string(),
-        "6. Propose d'estimer les durées si pertinent.".to_string(),
-        "7. Confirme le plan et propose de lancer la journée (prepComplete: true). IMPORTANT : quand tu mets prepComplete à true, ne remets PAS les tâches déjà ajoutées dans tasksToAdd — elles ont déjà été créées au fil de la conversation.".to_string(),
+        "DÉROULEMENT NATUREL (adapte-toi, pas un script rigide) :".to_string(),
+        "1. Résumé de ce qui est déjà prévu (tâches existantes + reliquat).".to_string(),
+        "2. S'il y a du RELIQUAT, traite-le EN PREMIER : garder, reporter ou supprimer ? Ne passe pas à la suite tant que le reliquat n'est pas traité.".to_string(),
+        "3. Ajustements : ajouter, retirer, modifier.".to_string(),
+        "4. Explorer : \"Il y a autre chose ? Des réunions, des deadlines ?\"".to_string(),
+        format!("5. Priorisation : aide à choisir les {max_priority} tâche(s) prioritaire(s) max (voir PRIORISATION)."),
+        "6. Conseils d'organisation si les données le permettent (voir CONSEILS D'ORGANISATION).".to_string(),
+        "7. Confirme le plan → prepComplete: true (sans remettre les tâches déjà ajoutées dans tasksToAdd).".to_string(),
         String::new(),
         "PRIORISATION :".to_string(),
-        "- L'objectif est de garder un nombre de tâches cohérent et réaliste pour la journée (idéalement 5-8 tâches, dont 2-3 prioritaires).".to_string(),
-        "- Si la charge semble trop lourde, propose de reporter des tâches moins urgentes à demain ou plus tard (via tasksToUpdate avec scheduledDate).".to_string(),
-        "- Pour les tâches en reliquat des jours précédents, demande si l'utilisateur veut les garder pour aujourd'hui, les reporter, ou les annuler.".to_string(),
-        "- Certaines tâches ont des scores d'urgence et d'importance sur 5. Utilise ces scores pour guider la priorisation : les tâches avec une urgence élevée (4-5) doivent être traitées aujourd'hui, et celles avec une importance élevée (4-5) méritent d'être en priorité du jour.".to_string(),
-        "- Quand tu résumes les tâches, mentionne les scores d'urgence/importance s'ils existent pour aider l'utilisateur à décider.".to_string(),
+        format!("- Maximum {max_priority} tâche(s) prioritaire(s) (\"main\") par jour. Si dépassé, signale-le avec bienveillance et aide à choisir."),
+        "- Propose des choix binaires : \"Entre [tâche A] et [tâche B], laquelle est la plus urgente ?\"".to_string(),
         String::new(),
-        "AJOUT DE TÂCHES :".to_string(),
-        "- Quand l'utilisateur mentionne quelque chose à faire, mets-le dans tasksToAdd.".to_string(),
-        "- Ne les ajoute que quand l'utilisateur les mentionne ou confirme. Ne les invente pas.".to_string(),
-        "- Si tu n'es pas sûr, demande confirmation avant d'ajouter.".to_string(),
-        "- Le champ estimatedMinutes est optionnel — ne l'ajoute que si l'utilisateur donne une estimation ou si tu proposes et qu'il confirme.".to_string(),
-        "- Le champ priority est optionnel : \"main\" pour prioritaire, \"secondary\" pour secondaire. Ne le mets que si l'utilisateur indique la priorité.".to_string(),
-        "- Le champ scheduledDate est optionnel (format YYYY-MM-DD). Par défaut les tâches sont ajoutées pour aujourd'hui. Si l'utilisateur dit \"demain\", \"lundi prochain\", ou une autre date, mets la date correcte.".to_string(),
-        "- IMPORTANT : chaque tâche n'est ajoutée qu'UNE SEULE FOIS dans toute la conversation. Ne remets JAMAIS dans tasksToAdd une tâche que tu as déjà ajoutée dans un message précédent.".to_string(),
+        "SCORES D'URGENCE ET D'IMPORTANCE :".to_string(),
+        "- Certaines tâches ont des scores sur 5. Utilise-les ACTIVEMENT pour guider tes recommandations.".to_string(),
+        "- Matrice de priorisation :".to_string(),
+        "  • Urgence 4-5 + Importance 4-5 → Priorité du jour (\"main\").".to_string(),
+        "  • Urgence 4-5 + Importance 1-3 → À traiter aujourd'hui, pas forcément en \"main\".".to_string(),
+        "  • Urgence 1-3 + Importance 4-5 → Planifier cette semaine, pas empiler aujourd'hui.".to_string(),
+        "  • Urgence 1-3 + Importance 1-3 → Reporter ou laisser en secondaire.".to_string(),
+        "- Mentionne les scores pour justifier tes suggestions (ex: \"urgence 5/5, importance 4/5 — c'est clairement une priorité\").".to_string(),
+        "- Signale les incohérences : tâche \"main\" avec scores faibles, ou tâche non-prioritaire avec scores élevés.".to_string(),
+        "- Si aucune tâche n'a de scores, guide la priorisation via la discussion classique.".to_string(),
         String::new(),
-        "RETRAIT DE TÂCHES :".to_string(),
-        "- Si l'utilisateur demande de retirer/supprimer une tâche, mets son ID dans tasksToRemove.".to_string(),
-        "- Confirme le retrait dans ton message.".to_string(),
+        "CONSEILS D'ORGANISATION (distille naturellement, un conseil par message max) :".to_string(),
+        "- CHARGE : si les tâches ont des estimations de temps, calcule le total. Si > 5-6h, propose de reporter la moins urgente.".to_string(),
+        "- ORDRE SUGGÉRÉ au moment de confirmer le plan :".to_string(),
+        "  • Quick win d'abord (tâche courte ≤ 15 min + urgente) pour créer du momentum.".to_string(),
+        "  • Tâche importante/difficile ensuite tant que l'énergie est haute.".to_string(),
+        "  • Tâches secondaires/mécaniques en fin de journée.".to_string(),
+        "  • Tâche > 60 min → suggérer de décomposer ou prévoir une pause.".to_string(),
+        "- ESTIMATIONS MANQUANTES : proposer d'en ajouter (\"Ça te prendrait combien de temps ?\").".to_string(),
+        "- REGROUPEMENT : plusieurs tâches courtes similaires → suggérer un bloc (\"batch\").".to_string(),
+        "- PAUSES : si > 4h de tâches, rappeler l'importance des pauses.".to_string(),
         String::new(),
-        "MODIFICATION DE TÂCHES EXISTANTES :".to_string(),
-        "- Si l'utilisateur veut changer la priorité d'une tâche, ou la déplacer à un autre jour, utilise tasksToUpdate.".to_string(),
-        "- Chaque entrée dans tasksToUpdate contient l'ID de la tâche et les champs à modifier : priority, scheduledDate, estimatedMinutes.".to_string(),
-        "- Pour déprioriser une tâche : mets priority à \"secondary\" ou null.".to_string(),
-        "- Pour déplacer une tâche à un autre jour : mets scheduledDate à la date (YYYY-MM-DD). Exemples : \"demain\" → la date de demain, \"lundi\" → la date du prochain lundi, etc.".to_string(),
+        "RELIQUAT :".to_string(),
+        "- Ne culpabilise JAMAIS. Normalise le report.".to_string(),
+        "- 3 options par tâche : garder aujourd'hui, reporter (tasksToUpdate + scheduledDate), supprimer (tasksToRemove).".to_string(),
+        "- Utilise les scores d'urgence/importance pour aider à trier le reliquat.".to_string(),
+        "- Si 3+ tâches en reliquat, regroupe et propose un tri rapide plutôt qu'un par un.".to_string(),
+        String::new(),
+        "ACTIONS SUR LES TÂCHES :".to_string(),
+        "- tasksToAdd : ajouter quand l'utilisateur mentionne ou confirme. Jamais inventer. Une seule fois par tâche dans toute la conversation.".to_string(),
+        format!("  Ne mets JAMAIS priority \"main\" si ça dépasse le max de {max_priority}. Propose de déprioriser d'abord."),
+        "  Champs : name (requis), estimatedMinutes, priority (\"main\"/\"secondary\"), scheduledDate (YYYY-MM-DD, défaut: aujourd'hui).".to_string(),
+        "- tasksToRemove : tableau d'IDs à supprimer. Confirme dans ton message.".to_string(),
+        "- tasksToUpdate : modifier priority, scheduledDate, estimatedMinutes par ID.".to_string(),
         String::new(),
     ];
 
@@ -906,22 +994,15 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
                     if pri.as_deref() == Some("main") && !done {
                         priority_count += 1;
                     }
-                    let check = if done { "✓" } else { "○" };
-                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
-                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
-                    let sched_str = sched.map_or(String::new(), |s| format!(" (planifié: {s})"));
-                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
-                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
-                    format!("  {check} [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
+                    format_task_line(&id, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp)
                 })
                 .collect();
             if !task_lines.is_empty() {
-                parts.push("TÂCHES DÉJÀ PRÉSENTES AUJOURD'HUI (pour référence, ne pas re-proposer) :".to_string());
-                parts.push("(L'ID entre crochets est à utiliser pour tasksToRemove et tasksToUpdate)".to_string());
+                parts.push("TÂCHES DU JOUR (ID entre crochets = pour tasksToRemove/tasksToUpdate) :".to_string());
                 parts.extend(task_lines);
                 parts.push(String::new());
             } else {
-                parts.push("AUCUNE TÂCHE AUJOURD'HUI — la journée est vierge, c'est le moment de la construire.".to_string());
+                parts.push("AUCUNE TÂCHE AUJOURD'HUI — la journée est vierge.".to_string());
                 parts.push(String::new());
             }
         }
@@ -944,38 +1025,36 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
             let overdue_lines: Vec<String> = overdue
                 .filter_map(|r| r.ok())
                 .map(|(id, name, pri, est, sched, urg, imp)| {
-                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
-                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
-                    let sched_str = sched.map_or(String::new(), |s| format!(" (prévu le: {s})"));
-                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
-                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
-                    format!("  ○ [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
+                    format_task_line(&id, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp)
                 })
                 .collect();
             if !overdue_lines.is_empty() {
-                parts.push(format!("RELIQUAT DES JOURS PRÉCÉDENTS ({} tâches non terminées) :", overdue_lines.len()));
-                parts.push("(Ces tâches étaient prévues avant aujourd'hui et n'ont pas été faites. Propose à l'utilisateur de les intégrer à aujourd'hui, les reporter, ou les annuler.)".to_string());
+                let n = overdue_lines.len();
+                parts.push(format!("⏳ RELIQUAT ({n} tâche(s) non terminée(s) des jours précédents) :"));
+                if n > 3 {
+                    parts.push(format!("Beaucoup de reliquat — regroupe et propose un tri rapide."));
+                }
                 parts.extend(overdue_lines);
                 parts.push(String::new());
             }
         }
     }
 
-    if priority_count >= 3 {
-        parts.push(format!("ATTENTION : il y a déjà {priority_count} tâches prioritaires (\"main\") aujourd'hui."));
-        parts.push("Si l'utilisateur veut ajouter une nouvelle tâche prioritaire, propose-lui de déprioriser une des tâches existantes. Liste-les dans ton message pour qu'il choisisse.".to_string());
+    if priority_count > max_priority {
+        parts.push(format!("⚠️ ALERTE : {priority_count} tâches prioritaires, max configuré = {max_priority}. Signale le dépassement dès ton premier message et aide à choisir lesquelles garder."));
+        parts.push(String::new());
+    } else if priority_count == max_priority {
+        parts.push(format!("INFO : max de {max_priority} tâches prioritaires atteint. Si l'utilisateur veut en ajouter, propose de déprioriser d'abord."));
         parts.push(String::new());
     }
 
-    parts.push("FORMAT DE RÉPONSE :".to_string());
-    parts.push("Réponds UNIQUEMENT en JSON valide :".to_string());
-    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "prepComplete": false}"#.to_string());
-    parts.push("- content : ton message textuel (pas de markdown, utilise \\n pour les paragraphes)".to_string());
-    parts.push(format!(r#"- tasksToAdd : tableau de tâches à ajouter [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{today}"}}] — vide si rien à ajouter"#));
-    parts.push("- tasksToRemove : tableau d'IDs de tâches à supprimer [\"id1\", \"id2\"] — vide si rien à supprimer".to_string());
-    parts.push(format!(r#"- tasksToUpdate : tableau de modifications [{{"id": "...", "priority": "secondary", "scheduledDate": "{tomorrow}"}}] — vide si rien à modifier"#));
-    parts.push("- prepComplete : true UNIQUEMENT quand l'utilisateur confirme que la préparation est terminée".to_string());
-    parts.push("- Pas de texte avant ou après le JSON".to_string());
+    parts.push("FORMAT DE RÉPONSE (JSON valide uniquement, pas de texte autour) :".to_string());
+    parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "prepComplete": false}"#.to_string());
+    parts.push("- content : message textuel (pas de markdown, \\n pour les paragraphes)".to_string());
+    parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{today}"}}]"#));
+    parts.push("- tasksToRemove : [\"id1\", \"id2\"]".to_string());
+    parts.push(format!(r#"- tasksToUpdate : [{{"id": "...", "priority": "secondary", "scheduledDate": "{tomorrow}"}}]"#));
+    parts.push("- prepComplete : true quand l'utilisateur confirme la fin de la préparation".to_string());
 
     parts.join("\n")
 }
@@ -1162,17 +1241,11 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
             let task_lines: Vec<String> = tasks
                 .filter_map(|r| r.ok())
                 .map(|(id, name, done, pri, est, urg, imp)| {
-                    let check = if done { "✓" } else { "○" };
-                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
-                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
-                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
-                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
-                    format!("  {check} [{id}] {name}{tag}{urg_str}{imp_str}{est_str}")
+                    format_task_line(&id, &name, done, pri.as_deref(), est, None, urg, imp)
                 })
                 .collect();
             if !task_lines.is_empty() {
-                parts.push("PRIORITÉS DE LA SEMAINE (tâches existantes) :".to_string());
-                parts.push("(L'ID entre crochets est à utiliser pour tasksToRemove et tasksToUpdate)".to_string());
+                parts.push("PRIORITÉS DE LA SEMAINE (ID entre crochets = pour tasksToRemove/tasksToUpdate) :".to_string());
                 parts.extend(task_lines);
                 parts.push(String::new());
             }
@@ -1197,22 +1270,15 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
             let task_lines: Vec<String> = tasks
                 .filter_map(|r| r.ok())
                 .map(|(id, name, done, pri, est, sched, urg, imp)| {
-                    let check = if done { "✓" } else { "○" };
-                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
-                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
-                    let sched_str = sched.map_or(String::new(), |s| format!(" (planifié: {s})"));
-                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
-                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
-                    format!("  {check} [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
+                    format_task_line(&id, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp)
                 })
                 .collect();
             if !task_lines.is_empty() {
-                parts.push("TÂCHES PLANIFIÉES CETTE SEMAINE :".to_string());
-                parts.push("(L'ID entre crochets est à utiliser pour tasksToRemove et tasksToUpdate)".to_string());
+                parts.push("TÂCHES PLANIFIÉES CETTE SEMAINE (ID entre crochets = pour tasksToRemove/tasksToUpdate) :".to_string());
                 parts.extend(task_lines);
                 parts.push(String::new());
             } else {
-                parts.push("AUCUNE TÂCHE PLANIFIÉE CETTE SEMAINE — la semaine est vierge, c'est le moment de l'organiser.".to_string());
+                parts.push("AUCUNE TÂCHE PLANIFIÉE CETTE SEMAINE — la semaine est vierge.".to_string());
                 parts.push(String::new());
             }
         }
@@ -1235,17 +1301,12 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
             let overdue_lines: Vec<String> = overdue
                 .filter_map(|r| r.ok())
                 .map(|(id, name, pri, est, sched, urg, imp)| {
-                    let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
-                    let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
-                    let sched_str = sched.map_or(String::new(), |s| format!(" (prévu le: {s})"));
-                    let urg_str = urg.map_or(String::new(), |u| format!(" [urgence: {u}/5]"));
-                    let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
-                    format!("  ○ [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
+                    format_task_line(&id, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp)
                 })
                 .collect();
             if !overdue_lines.is_empty() {
-                parts.push(format!("RELIQUAT DE LA SEMAINE PASSÉE ({} tâches non terminées) :", overdue_lines.len()));
-                parts.push("(Ces tâches étaient prévues avant cette semaine et n'ont pas été faites. Propose à l'utilisateur de les intégrer à cette semaine, les reporter, ou les annuler.)".to_string());
+                let n = overdue_lines.len();
+                parts.push(format!("⏳ RELIQUAT DE LA SEMAINE PASSÉE ({n} tâche(s) non terminée(s)) :"));
                 parts.extend(overdue_lines);
                 parts.push(String::new());
             }

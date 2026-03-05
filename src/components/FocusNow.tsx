@@ -8,15 +8,13 @@ interface Props {
 
 export default function FocusNow({ task, estimatedMinutes, onStart }: Props) {
   return (
-    <div className={styles.focusNow}>
-      <div className={styles.label}>🎯 Focus maintenant</div>
-      <div className={styles.task}>{task}</div>
-      <div className={styles.meta}>
-        <span className={styles.time}>⏱ ~{estimatedMinutes} min estimées</span>
-        <button className={styles.btn} onClick={onStart}>
-          Commencer
-        </button>
-      </div>
+    <div className={styles.focusBar}>
+      <span className={styles.indicator} />
+      <span className={styles.task}>{task}</span>
+      <span className={styles.time}>~{estimatedMinutes} min</span>
+      <button className={styles.btn} onClick={onStart}>
+        Commencer
+      </button>
     </div>
   );
 }

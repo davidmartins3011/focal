@@ -418,3 +418,83 @@
   gap: 8px;
   padding-top: 8px;
 }
+
+/* Memory insights */
+.memoryEmpty {
+  font-size: 13px;
+  color: var(--text3);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.memoryList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.memoryItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.memoryContent {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.memoryCategoryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.memoryCategory {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+
+.memoryDate {
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+.memoryInsight {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.memoryDeleteBtn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 2px;
+}
+
+.memoryDeleteBtn:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}

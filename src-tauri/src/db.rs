@@ -146,6 +146,21 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ai_memory_insights (
+    id TEXT PRIMARY KEY,
+    category TEXT NOT NULL,
+    insight TEXT NOT NULL,
+    source_date TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ai_memory_analysis_log (
+    analysis_date TEXT PRIMARY KEY,
+    analyzed_at TEXT NOT NULL,
+    message_count INTEGER NOT NULL DEFAULT 0
+);
 ";
 
 pub fn create_schema(conn: &Connection) -> Result<(), rusqlite::Error> {

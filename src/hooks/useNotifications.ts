@@ -175,6 +175,8 @@ export function useNotifications(workingDays: WeekDayId[]) {
           try {
             const parsed = JSON.parse(rawSettings) as NotificationSettings;
             if (parsed.reminders?.length) {
+              const defaultIds = new Set(defaultReminders.map((r) => r.id));
+              parsed.reminders = parsed.reminders.filter((r) => defaultIds.has(r.id));
               const storedIds = new Set(parsed.reminders.map((r) => r.id));
               const missing = defaultReminders.filter((r) => !storedIds.has(r.id));
               if (missing.length > 0) parsed.reminders = [...parsed.reminders, ...missing];

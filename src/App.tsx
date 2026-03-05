@@ -13,6 +13,7 @@ import NotificationCenter from "./components/NotificationCenter";
 import type { ViewTab, SidebarPage, ThemeId, AISettings, StrategyFrequency, FrequencyOccurrence, WeekDayId } from "./types";
 import { useNotifications } from "./hooks/useNotifications";
 import { getAllSettings, setSetting } from "./services/settings";
+import { checkAndRunAnalysis } from "./services/memory";
 import styles from "./App.module.css";
 
 const VALID_THEMES: ThemeId[] = ["default", "clair", "sombre", "zen", "hyperfocus", "aurore", "ocean", "sakura", "nord", "solaire"];
@@ -43,6 +44,7 @@ export default function App() {
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const [dailyPrepPending, setDailyPrepPending] = useState(false);
   const [weeklyPrepPending, setWeeklyPrepPending] = useState(false);
+  const [stuckTask, setStuckTask] = useState<{ taskId: string; taskName: string } | null>(null);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
   const loaded = useRef(false);
 
@@ -105,6 +107,28 @@ export default function App() {
         setOnboardingDone(true);
         loaded.current = true;
       });
+  }, []);
+
+  useEffect(() => {
+    checkAndRunAnalysis().catch(() => {});
+
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    const msUntilMidnight = midnight.getTime() - now.getTime();
+
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const timeout = setTimeout(() => {
+      checkAndRunAnalysis().catch(() => {});
+      interval = setInterval(() => {
+        checkAndRunAnalysis().catch(() => {});
+      }, 24 * 60 * 60 * 1000);
+    }, msUntilMidnight);
+
+    return () => {
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   const handlePageChange = (page: SidebarPage) => {
@@ -244,6 +268,10 @@ export default function App() {
     setWeeklyPrepPending(true);
   }, []);
 
+  const handleStuck = useCallback((taskId: string, taskName: string) => {
+    setStuckTask({ taskId, taskName });
+  }, []);
+
   const handleTasksChanged = useCallback(() => {
     setTaskRefreshKey((k) => k + 1);
   }, []);
@@ -294,6 +322,7 @@ export default function App() {
             strategyCycleStart={strategyCycleStart}
             onLaunchDailyPrep={handleLaunchDailyPrep}
             onLaunchWeeklyPrep={handleLaunchWeeklyPrep}
+            onStuck={handleStuck}
             taskRefreshKey={taskRefreshKey}
             workingDays={workingDays}
           />
@@ -338,6 +367,8 @@ export default function App() {
           onDailyPrepConsumed={() => setDailyPrepPending(false)}
           weeklyPrepPending={weeklyPrepPending}
           onWeeklyPrepConsumed={() => setWeeklyPrepPending(false)}
+          stuckTask={stuckTask}
+          onStuckConsumed={() => setStuckTask(null)}
           onTasksChanged={handleTasksChanged}
         />
       </div>

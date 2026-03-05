@@ -3,6 +3,7 @@ import type { ChatMessage, AISettings, Task } from "../types";
 import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type DailyPrepResponse } from "../services/chat";
 import { getTasks, createTask, deleteTask, updateTask } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
+import { runAnalysisNow } from "../services/memory";
 import { chatHints } from "../data/chatConstants";
 import { providers } from "../data/settingsData";
 import styles from "./ChatPanel.module.css";
@@ -102,16 +103,23 @@ function inlineMd(text: string): string {
     .replace(/`(.+?)`/g, "<code>$1</code>");
 }
 
+interface StuckTaskInfo {
+  taskId: string;
+  taskName: string;
+}
+
 interface ChatPanelProps {
   onStartOnboarding?: () => void;
   dailyPrepPending?: boolean;
   onDailyPrepConsumed?: () => void;
   weeklyPrepPending?: boolean;
   onWeeklyPrepConsumed?: () => void;
+  stuckTask?: StuckTaskInfo | null;
+  onStuckConsumed?: () => void;
   onTasksChanged?: () => void;
 }
 
-export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, onTasksChanged }: ChatPanelProps) {
+export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, stuckTask, onStuckConsumed, onTasksChanged }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -194,6 +202,25 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping, visibleStepCount]);
+
+  const handleChatResponse = useCallback(
+    (response: { content: string; steps?: string[] }) => {
+      const msgId = `ai-${Date.now()}`;
+      const steps = response.steps?.map((s) => ({ text: s }));
+      const aiMsg: ChatMessage = { id: msgId, role: "ai", content: response.content, steps };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      if (steps && steps.length > 0) {
+        setRevealingMsgId(msgId);
+        setVisibleStepCount(0);
+        steps.forEach((_, i) => {
+          setTimeout(() => setVisibleStepCount(i + 1), 350 * (i + 1));
+        });
+        setTimeout(() => setRevealingMsgId(null), 350 * steps.length + 300);
+      }
+    },
+    [],
+  );
 
   const handlePrepResponse = useCallback(
     async (response: DailyPrepResponse) => {
@@ -323,6 +350,30 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     startWeeklyPrep();
   }, [weeklyPrepPending, startWeeklyPrep, onWeeklyPrepConsumed]);
 
+  useEffect(() => {
+    if (!stuckTask) return;
+    onStuckConsumed?.();
+
+    if (isTyping) return;
+
+    const text = `Je bloque sur la tâche "${stuckTask.taskName}". Aide-moi à comprendre ce qui me bloque et à trouver comment avancer.`;
+    const userMsg: ChatMessage = { id: `tmp-${Date.now()}`, role: "user", content: text };
+    setMessages((prev) => [...prev, userMsg]);
+    setError(null);
+    setIsTyping(true);
+    setPrepMode(null);
+
+    sendMessage(text)
+      .then((response) => {
+        setIsTyping(false);
+        handleChatResponse(response);
+      })
+      .catch((err) => {
+        setIsTyping(false);
+        setError(typeof err === "string" ? err : String(err));
+      });
+  }, [stuckTask, onStuckConsumed]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const resetInput = useCallback(() => {
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -360,6 +411,32 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       return;
     }
 
+    if (text === "/analyse-conversations") {
+      resetInput();
+      const sysMsg: ChatMessage = { id: `sys-${Date.now()}`, role: "ai", content: "Analyse des conversations en cours..." };
+      setMessages((prev) => [...prev, sysMsg]);
+      setIsTyping(true);
+      runAnalysisNow()
+        .then((didRun) => {
+          setIsTyping(false);
+          const resultMsg: ChatMessage = {
+            id: `ai-${Date.now()}`,
+            role: "ai",
+            content: didRun
+              ? "L'analyse de tes conversations est terminée. Tes observations comportementales ont été mises à jour — tu peux les consulter dans Mon profil."
+              : "Aucune nouvelle conversation à analyser (pas de messages aujourd'hui, ou analyse déjà effectuée).",
+          };
+          setMessages((prev) => [...prev, resultMsg]);
+        })
+        .catch((err) => {
+          setIsTyping(false);
+          const errMsg = typeof err === "string" ? err : String(err);
+          setError(errMsg);
+          console.error("[ChatPanel] analyse-conversations error:", err);
+        });
+      return;
+    }
+
     resetInput();
 
     if (prepMode) {
@@ -379,31 +456,11 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     sendMessage(text)
       .then((response) => {
         setIsTyping(false);
-
-        const msgId = `ai-${Date.now()}`;
-        const steps = response.steps?.map((s) => ({ text: s }));
-        const aiMsg: ChatMessage = {
-          id: msgId,
-          role: "ai",
-          content: response.content,
-          steps,
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-
-        if (steps && steps.length > 0) {
-          setRevealingMsgId(msgId);
-          setVisibleStepCount(0);
-          steps.forEach((_, i) => {
-            setTimeout(() => setVisibleStepCount(i + 1), 350 * (i + 1));
-          });
-          setTimeout(() => setRevealingMsgId(null), 350 * steps.length + 300);
-        }
+        handleChatResponse(response);
       })
       .catch((err) => {
         setIsTyping(false);
-        const errMsg = typeof err === "string" ? err : String(err);
-        setError(errMsg);
-        console.error("[ChatPanel] sendMessage error:", err);
+        setError(typeof err === "string" ? err : String(err));
       });
   }, [input, isTyping, prepMode, onStartOnboarding, startDailyPrep, startWeeklyPrep, sendPrepMessage, resetInput]);
 
@@ -524,7 +581,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
           </div>
         )}
 
-        {messages.map((msg) => {
+        {messages.filter((m) => m.content.trim()).map((msg) => {
           const isRevealing = msg.id === revealingMsgId;
 
           return (
