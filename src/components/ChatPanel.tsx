@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, Task } from "../types";
 import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type DailyPrepResponse } from "../services/chat";
-import { getTasks, createTask, deleteTask, updateTask } from "../services/tasks";
+import { getTasks, createTask, deleteTask, updateTask, setMicroSteps } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { runAnalysisNow } from "../services/memory";
 import { chatHints } from "../data/chatConstants";
@@ -132,6 +132,9 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [prepMode, setPrepMode] = useState<"daily" | "weekly" | null>(null);
   const [rawView, setRawView] = useState(false);
+  const [addedStepsMsgIds, setAddedStepsMsgIds] = useState<Set<string>>(new Set());
+  const [stepsMsgTargetTask, setStepsMsgTargetTask] = useState<Record<string, string>>({});
+  const [stepsDropdownMsgId, setStepsDropdownMsgId] = useState<string | null>(null);
   const prepHistory = useRef<{ role: string; content: string }[]>([]);
   const todayTasksRef = useRef(todayTasks);
   todayTasksRef.current = todayTasks;
@@ -174,15 +177,18 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   }, []);
 
   useEffect(() => {
-    if (!modelDropdownOpen) return;
+    if (!modelDropdownOpen && !stepsDropdownMsgId) return;
     function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (modelDropdownOpen && dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setModelDropdownOpen(false);
+      }
+      if (stepsDropdownMsgId && !(e.target as Element)?.closest(`.${styles.stepsActions}`)) {
+        setStepsDropdownMsgId(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [modelDropdownOpen]);
+  }, [modelDropdownOpen, stepsDropdownMsgId]);
 
   const handleSelectModel = useCallback((modelId: string) => {
     setSelectedModelId(modelId);
@@ -373,6 +379,51 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         setError(typeof err === "string" ? err : String(err));
       });
   }, [stuckTask, onStuckConsumed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const guessTaskForMessage = useCallback(
+    (msgId: string): string | undefined => {
+      const tasks = todayTasks.filter((t) => !t.done);
+      if (tasks.length === 0) return undefined;
+
+      const msgIdx = messages.findIndex((m) => m.id === msgId);
+      if (msgIdx < 0) return tasks[0]?.id;
+
+      const context = messages
+        .slice(Math.max(0, msgIdx - 4), msgIdx + 1)
+        .map((m) => m.content)
+        .join(" ")
+        .toLowerCase();
+
+      let bestId = tasks[0]?.id;
+      let bestLen = 0;
+      for (const t of tasks) {
+        const name = t.name.toLowerCase();
+        if (context.includes(name) && name.length > bestLen) {
+          bestId = t.id;
+          bestLen = name.length;
+        }
+      }
+      return bestId;
+    },
+    [messages, todayTasks],
+  );
+
+  const handleAddStepsToTask = useCallback(
+    (msgId: string, steps: { text: string }[], taskId: string) => {
+      const microSteps = steps.map((s, i) => ({
+        id: `chat-${msgId}-${i}`,
+        text: s.text,
+        done: false,
+      }));
+      setMicroSteps(taskId, microSteps)
+        .then(() => {
+          setAddedStepsMsgIds((prev) => new Set(prev).add(msgId));
+          onTasksChanged?.();
+        })
+        .catch((err) => console.error("[ChatPanel] setMicroSteps error:", err));
+    },
+    [onTasksChanged],
+  );
 
   const resetInput = useCallback(() => {
     setInput("");
@@ -616,6 +667,60 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
                       </div>
                     );
                   })}
+                  {!isRevealing && !addedStepsMsgIds.has(msg.id) && todayTasks.some((t) => !t.done) && (() => {
+                    const activeTasks = todayTasks.filter((t) => !t.done);
+                    const selectedId = stepsMsgTargetTask[msg.id] ?? guessTaskForMessage(msg.id) ?? activeTasks[0]?.id;
+                    const selectedTask = activeTasks.find((t) => t.id === selectedId);
+                    const isOpen = stepsDropdownMsgId === msg.id;
+                    return (
+                      <div className={styles.stepsActions}>
+                        <div className={styles.taskSelectWrap}>
+                          <button
+                            className={styles.taskSelectBtn}
+                            onClick={() => setStepsDropdownMsgId(isOpen ? null : msg.id)}
+                          >
+                            <span className={styles.taskSelectLabel}>{selectedTask?.name ?? "Choisir..."}</span>
+                            <svg className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ""}`} width="10" height="10" viewBox="0 0 10 10" fill="none">
+                              <path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                          {isOpen && (
+                            <div className={styles.taskDropdown}>
+                              {activeTasks.map((task) => (
+                                <button
+                                  key={task.id}
+                                  className={`${styles.taskDropdownItem} ${task.id === selectedId ? styles.taskDropdownItemActive : ""}`}
+                                  onClick={() => {
+                                    setStepsMsgTargetTask((prev) => ({ ...prev, [msg.id]: task.id }));
+                                    setStepsDropdownMsgId(null);
+                                  }}
+                                >
+                                  {task.name}
+                                  {task.id === selectedId && <span className={styles.taskDropdownCheck}>✓</span>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          className={styles.addStepsBtn}
+                          onClick={() => {
+                            if (selectedId) handleAddStepsToTask(msg.id, msg.steps!, selectedId);
+                          }}
+                        >
+                          Ajouter
+                        </button>
+                      </div>
+                    );
+                  })()}
+                  {addedStepsMsgIds.has(msg.id) && (
+                    <div className={styles.stepsAdded}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      Étapes ajoutées
+                    </div>
+                  )}
                 </div>
               )}
             </div>

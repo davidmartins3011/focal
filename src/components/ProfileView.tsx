@@ -181,10 +181,16 @@ export default function ProfileView() {
             <ProfileField label="Attente principale" value={profile.mainExpectation ? LABELS.mainExpectation[profile.mainExpectation] : undefined} />
             <ProfileField label="Info importante" value={profile.extraInfo} />
           </ProfileSection>
+
+          <MemorySection insights={insights} onDelete={(id) => {
+            deleteMemoryInsight(id).then(() => {
+              setInsights((prev) => prev.filter((i) => i.id !== id));
+            });
+          }} />
         </div>
       )}
 
-      {!isEditing && (
+      {!isEditing && !hasAnyData && insights.length > 0 && (
         <div className={styles.content}>
           <MemorySection insights={insights} onDelete={(id) => {
             deleteMemoryInsight(id).then(() => {

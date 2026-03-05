@@ -510,13 +510,6 @@ export default function TaskItem({
                 <div className={styles.stuckMenu}>
                   <button
                     className={styles.stuckOption}
-                    onClick={() => setShowStuckMenu(false)}
-                  >
-                    <span>↻</span>
-                    <span>Passer à une autre tâche</span>
-                  </button>
-                  <button
-                    className={styles.stuckOption}
                     onClick={() => {
                       onStuck?.(task.id);
                       setShowStuckMenu(false);
