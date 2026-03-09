@@ -1,6 +1,7 @@
 import { useRef, useEffect } from "react";
 import type { Task } from "../types";
 import { formatScheduledDate, formatQuickDateHint, getQuickDates } from "../utils/dateFormat";
+import PriorityBadge from "./PriorityBadge";
 import styles from "./TodoView.module.css";
 
 type PopoverType = "priority" | "schedule";
@@ -142,20 +143,18 @@ export default function TodoItemRow({
         )}
         <div className={styles.todoMeta}>
           {task.urgency != null && (
-            <button
-              className={`${styles.badge} ${styles.urgencyBadge} ${styles.badgeClickable}`}
-              onClick={() => onOpenPopover(task.id, "priority")}
-            >
-              🔥 U{task.urgency}
-            </button>
+            <PriorityBadge
+              type="urgency"
+              score={task.urgency}
+              onChange={(v) => onSetPriority(task.id, "urgency", v)}
+            />
           )}
           {task.importance != null && (
-            <button
-              className={`${styles.badge} ${styles.importanceBadge} ${styles.badgeClickable}`}
-              onClick={() => onOpenPopover(task.id, "priority")}
-            >
-              ⭐ I{task.importance}
-            </button>
+            <PriorityBadge
+              type="importance"
+              score={task.importance}
+              onChange={(v) => onSetPriority(task.id, "importance", v)}
+            />
           )}
           {task.tags && task.tags.length > 0 && task.tags.map((tag) => (
             <span key={tag.label} className={`${styles.badge} ${styles.aiBadge}`}>
@@ -191,61 +190,6 @@ export default function TodoItemRow({
       </div>
 
       <div className={styles.todoActions}>
-        <div style={{ position: "relative" }}>
-          <button
-            className={`${styles.actionBtn} ${activePopover === "priority" ? styles.actionBtnActive : ""}`}
-            onClick={() => onOpenPopover(task.id, "priority")}
-            title="Urgence & importance"
-          >
-            ◆
-          </button>
-          {activePopover === "priority" && (
-            <div className={styles.popover} ref={popoverRef}>
-              <div className={styles.popoverLabel}>Urgence</div>
-              <div className={styles.popoverRow}>
-                {([1, 2, 3, 4, 5] as PriorityScore[]).map((v) => (
-                  <button
-                    key={`u${v}`}
-                    className={`${styles.popoverDot} ${task.urgency === v ? styles.selected : ""}`}
-                    onClick={() =>
-                      onSetPriority(task.id, "urgency", task.urgency === v ? undefined : v)
-                    }
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-              <div className={styles.popoverLabel}>Importance</div>
-              <div className={styles.popoverRow}>
-                {([1, 2, 3, 4, 5] as PriorityScore[]).map((v) => (
-                  <button
-                    key={`i${v}`}
-                    className={`${styles.popoverDot} ${task.importance === v ? styles.selected : ""}`}
-                    onClick={() =>
-                      onSetPriority(task.id, "importance", task.importance === v ? undefined : v)
-                    }
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-              {(task.urgency != null || task.importance != null) && (
-                <>
-                  <div className={styles.popoverDivider} />
-                  <button
-                    className={styles.popoverClear}
-                    onClick={() => {
-                      onSetPriority(task.id, "urgency", undefined);
-                      onSetPriority(task.id, "importance", undefined);
-                    }}
-                  >
-                    Retirer les priorités
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
         <div style={{ position: "relative" }}>
           <button
             className={`${styles.actionBtn} ${activePopover === "schedule" ? styles.actionBtnActive : ""} ${!task.scheduledDate && !task.done ? styles.actionBtnWarn : ""}`}

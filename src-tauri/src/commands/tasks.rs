@@ -182,7 +182,7 @@ pub fn create_task(
         )
         .map_err(|e| e.to_string())?;
     db.execute(
-        "INSERT INTO tasks (id, name, done, estimated_minutes, priority, ai_decomposed, view_context, scheduled_date, position) VALUES (?1,?2,0,?3,?4,0,?5,?6,?7)",
+        "INSERT INTO tasks (id, name, done, estimated_minutes, priority, ai_decomposed, view_context, scheduled_date, position, urgency, importance) VALUES (?1,?2,0,?3,?4,0,?5,?6,?7,3,3)",
         params![id, name, estimated_minutes, priority, ctx, scheduled_date, max_pos + 1],
     )
     .map_err(|e| e.to_string())?;

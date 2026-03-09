@@ -179,6 +179,11 @@ export default function CalendarView() {
     updateTaskSvc({ id, name }).catch((err) => console.error("[CalendarView] renameTask error:", err));
   }
 
+  function setPriority(id: string, field: "urgency" | "importance", value: number | undefined) {
+    updateTaskInMap((tasks) => tasks.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
+    updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) => console.error("[CalendarView] setPriority error:", err));
+  }
+
   function setScheduledDate(id: string, date: string | undefined) {
     if (!date) return;
     rescheduleTask(id, date);
@@ -440,6 +445,7 @@ export default function CalendarView() {
                     onToggleStep={toggleStep}
                     onDelete={deleteTask}
                     onRename={renameTask}
+                    onSetPriority={setPriority}
                     onSetScheduledDate={setScheduledDate}
                     animDelay={0.05 + i * 0.03}
                   />
