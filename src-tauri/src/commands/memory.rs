@@ -162,7 +162,7 @@ async fn run_analysis_for_date(
         if log_in_history {
             let already_done: bool = db
                 .query_row(
-                    "SELECT COUNT(*) FROM ai_memory_analysis_log WHERE analysis_date = ?1",
+                    "SELECT COUNT(*) FROM ai_memory_analysis_log WHERE analysis_date = ?1 AND message_count > 0",
                     params![date_str],
                     |row| row.get::<_, i64>(0),
                 )
@@ -176,7 +176,7 @@ async fn run_analysis_for_date(
         let mut msg_stmt = db
             .prepare(
                 "SELECT role, content FROM chat_messages \
-                 WHERE date(created_at) = ?1 ORDER BY created_at",
+                 WHERE date(created_at, 'localtime') = ?1 ORDER BY created_at",
             )
             .map_err(|e| e.to_string())?;
 
@@ -211,7 +211,7 @@ async fn run_analysis_for_date(
     let messages = build_analysis_messages(&conversations, &existing_insights);
     let msg_count = conversations.len() as i64;
 
-    let raw = call_llm(&provider_id, &api_key, &model, ANALYSIS_PROMPT, messages).await?;
+    let raw = call_llm(&provider_id, &api_key, &model, ANALYSIS_PROMPT, messages, false).await?;
     let parsed = parse_analysis_response(&raw)?;
 
     {

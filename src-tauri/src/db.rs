@@ -165,6 +165,8 @@ CREATE TABLE IF NOT EXISTS ai_memory_analysis_log (
 
 pub fn create_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(SCHEMA)?;
+    // Migration: add description to tasks for pre-existing DBs
+    conn.execute("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''", []).ok();
     // Migration: add urgency/importance to tasks for pre-existing DBs
     conn.execute("ALTER TABLE tasks ADD COLUMN urgency INTEGER DEFAULT 3", []).ok();
     conn.execute("ALTER TABLE tasks ADD COLUMN importance INTEGER DEFAULT 3", []).ok();

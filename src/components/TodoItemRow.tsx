@@ -30,6 +30,7 @@ export interface TodoItemRowProps {
   onDragOver: (e: React.DragEvent, id: string) => void;
   onDrop: (e: React.DragEvent) => void;
   onDragEnd: () => void;
+  onOpenDetail?: (id: string) => void;
 }
 
 export default function TodoItemRow({
@@ -54,6 +55,7 @@ export default function TodoItemRow({
   onDragOver,
   onDrop,
   onDragEnd,
+  onOpenDetail,
 }: TodoItemRowProps) {
   const editRef = useRef<HTMLTextAreaElement>(null);
   const quickDates = getQuickDates();
@@ -190,6 +192,17 @@ export default function TodoItemRow({
       </div>
 
       <div className={styles.todoActions}>
+        {onOpenDetail && (
+          <button
+            className={styles.actionBtn}
+            onClick={() => onOpenDetail(task.id)}
+            title="Voir le détail"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+            </svg>
+          </button>
+        )}
         <div style={{ position: "relative" }}>
           <button
             className={`${styles.actionBtn} ${activePopover === "schedule" ? styles.actionBtnActive : ""} ${!task.scheduledDate && !task.done ? styles.actionBtnWarn : ""}`}

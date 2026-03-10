@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import type { Task } from "../types";
-import { getTasksByDateRange, toggleTask as toggleTaskSvc, toggleMicroStep as toggleStepSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc } from "../services/tasks";
+import type { Task, Tag } from "../types";
+import { getTasksByDateRange, toggleTask as toggleTaskSvc, toggleMicroStep as toggleStepSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, setTaskTags } from "../services/tasks";
 import TaskItem from "./TaskItem";
 import styles from "./CalendarView.module.css";
 
@@ -184,10 +184,19 @@ export default function CalendarView() {
     updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) => console.error("[CalendarView] setPriority error:", err));
   }
 
+  function setTagsOnTask(id: string, tags: Tag[]) {
+    updateTaskInMap((tasks) => tasks.map((t) => (t.id === id ? { ...t, tags } : t)));
+    setTaskTags(id, tags).catch((err) => console.error("[CalendarView] setTaskTags error:", err));
+  }
+
   function setScheduledDate(id: string, date: string | undefined) {
     if (!date) return;
     rescheduleTask(id, date);
   }
+
+  const handleTaskUpdated = useCallback((updated: Task) => {
+    updateTaskInMap((tasks) => tasks.map((t) => t.id === updated.id ? { ...t, ...updated } : t));
+  }, []);
 
   function rescheduleTask(taskId: string, newDateKey: string) {
     setTaskMap((prev) => {
@@ -446,7 +455,9 @@ export default function CalendarView() {
                     onDelete={deleteTask}
                     onRename={renameTask}
                     onSetPriority={setPriority}
+                    onSetTags={setTagsOnTask}
                     onSetScheduledDate={setScheduledDate}
+                    onTaskUpdated={handleTaskUpdated}
                     animDelay={0.05 + i * 0.03}
                   />
                 </div>

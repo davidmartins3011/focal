@@ -42,6 +42,10 @@ pub struct Task {
     pub urgency: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub importance: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

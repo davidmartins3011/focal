@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { ChatMessage, AISettings, Task } from "../types";
-import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type AiResponse, type DailyPrepResponse } from "../services/chat";
-import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps, clearAllTasks, clearTodayTasks } from "../services/tasks";
+import type { ChatMessage, AISettings, Task, Tag } from "../types";
+import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type AiResponse, type DailyPrepResponse, type TagAction, type StepsAction } from "../services/chat";
+import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps, setTaskTags, clearAllTasks, clearTodayTasks } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { runAnalysisNow } from "../services/memory";
 import { chatHints, slashCommands } from "../data/chatConstants";
@@ -103,6 +103,46 @@ function inlineMd(text: string): string {
     .replace(/`(.+?)`/g, "<code>$1</code>");
 }
 
+const endPrepVariations: Record<string, string[]> = {
+  daily: [
+    "Le planning du jour est bouclé. Bonne journée ! 💪",
+    "C'est tout bon pour aujourd'hui. À toi de jouer ! 🎯",
+    "Planning du jour terminé ! Passe une super journée. ✨",
+    "Journée bien organisée ! On se retrouve si besoin. 👋",
+    "Top, la journée est planifiée. Bonne productivité ! 🚀",
+  ],
+  weekly: [
+    "Le planning de la semaine est bouclé. Bonne semaine ! 🚀",
+    "Semaine bien organisée ! Tu vas tout déchirer. 💪",
+    "C'est calé pour la semaine. On avance ! 🎯",
+    "Planning hebdo terminé ! Bonne semaine à toi. ✨",
+    "La semaine est en place. Tu sais où tu vas ! 👋",
+  ],
+  daily_review: [
+    "La revue du jour est terminée. Bravo pour cette journée ! ✅",
+    "Beau bilan de journée ! Repose-toi bien. 🌙",
+    "Revue bouclée. Belle journée derrière toi ! 👏",
+    "Journée passée en revue. Bien joué ! ✨",
+    "C'est tout pour aujourd'hui. Bravo ! 🎯",
+  ],
+  weekly_review: [
+    "La revue de la semaine est terminée. Bon bilan ! 📊",
+    "Belle semaine en rétrospective ! On continue comme ça. 💪",
+    "Revue hebdo bouclée. Beau travail cette semaine ! ✅",
+    "Semaine bien analysée. En route pour la suivante ! 🚀",
+    "Bilan de la semaine fait. Bravo ! 👏",
+  ],
+};
+
+function pickEndPrepMessage(mode: string): ChatMessage {
+  const pool = endPrepVariations[mode] ?? ["Planification terminée."];
+  return {
+    id: `ai-${Date.now()}`,
+    role: "ai",
+    content: pool[Math.floor(Math.random() * pool.length)],
+  };
+}
+
 interface StuckTaskInfo {
   taskId: string;
   taskName: string;
@@ -130,11 +170,13 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
-  const [prepMode, setPrepMode] = useState<"daily" | "weekly" | null>(null);
+  const [prepMode, setPrepMode] = useState<"daily" | "weekly" | "daily_review" | "weekly_review" | null>(null);
   const [rawView, setRawView] = useState(false);
   const [addedStepsMsgIds, setAddedStepsMsgIds] = useState<Set<string>>(new Set());
   const [stepsMsgTargetTask, setStepsMsgTargetTask] = useState<Record<string, string>>({});
   const [stepsDropdownMsgId, setStepsDropdownMsgId] = useState<string | null>(null);
+  const [prepHasAiReply, setPrepHasAiReply] = useState(false);
+  const pendingPrepExit = useRef<string | null>(null);
   const prepHistory = useRef<{ role: string; content: string }[]>([]);
   const todayTasksRef = useRef(todayTasks);
   todayTasksRef.current = todayTasks;
@@ -211,20 +253,38 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
 
   const applyTaskActions = useCallback(
     async (actions: {
-      tasksToAdd?: { name: string; estimatedMinutes?: number; priority?: string; scheduledDate?: string }[];
+      tasksToAdd?: { name: string; estimatedMinutes?: number; priority?: string; scheduledDate?: string; urgency?: number; importance?: number; tags?: Tag[] }[];
       tasksToRemove?: string[];
-      tasksToUpdate?: { id: string; name?: string; done?: boolean; priority?: string; scheduledDate?: string; estimatedMinutes?: number }[];
+      tasksToUpdate?: { id: string; name?: string; done?: boolean; priority?: string; scheduledDate?: string; estimatedMinutes?: number; urgency?: number; importance?: number; description?: string }[];
       tasksToToggle?: string[];
       tasksToReorder?: string[];
+      tagsToSet?: TagAction[];
+      stepsToSet?: StepsAction[];
     }) => {
+      const hasActions = (actions.tasksToAdd?.length ?? 0) + (actions.tasksToRemove?.length ?? 0) + (actions.tasksToUpdate?.length ?? 0) + (actions.tasksToToggle?.length ?? 0) + (actions.tasksToReorder?.length ?? 0) + (actions.tagsToSet?.length ?? 0) + (actions.stepsToSet?.length ?? 0);
+      if (hasActions > 0) {
+        console.log("[ChatPanel] applyTaskActions:", {
+          add: actions.tasksToAdd,
+          remove: actions.tasksToRemove,
+          update: actions.tasksToUpdate,
+          toggle: actions.tasksToToggle,
+          reorder: actions.tasksToReorder,
+          tags: actions.tagsToSet,
+          steps: actions.stepsToSet,
+        });
+      }
+
       let modified = false;
+      const localTasks = [...todayTasksRef.current];
 
       for (const t of actions.tasksToAdd ?? []) {
-        if (todayTasksRef.current.some((ex) => ex.name.toLowerCase() === t.name.toLowerCase())) continue;
+        if (localTasks.some((ex) => ex.name.toLowerCase() === t.name.toLowerCase())) continue;
         try {
-          const created = await createTask({ name: t.name, context: "today", estimatedMinutes: t.estimatedMinutes, priority: t.priority, scheduledDate: t.scheduledDate });
+          const created = await createTask({ name: t.name, context: "today", estimatedMinutes: t.estimatedMinutes, priority: t.priority, scheduledDate: t.scheduledDate, urgency: t.urgency, importance: t.importance, tags: t.tags });
+          localTasks.push(created);
           setTodayTasks((prev) => [...prev, created]);
           modified = true;
+          console.log("[ChatPanel] task created:", created.id, created.name);
         } catch (err) {
           console.error("[ChatPanel] createTask error:", err);
         }
@@ -233,22 +293,54 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       for (const taskId of actions.tasksToRemove ?? []) {
         try {
           await deleteTask(taskId);
+          const idx = localTasks.findIndex((t) => t.id === taskId);
+          if (idx !== -1) localTasks.splice(idx, 1);
           setTodayTasks((prev) => prev.filter((t) => t.id !== taskId));
           modified = true;
+          console.log("[ChatPanel] task deleted:", taskId);
         } catch (err) {
           console.error("[ChatPanel] deleteTask error:", err);
         }
       }
 
       for (const upd of actions.tasksToUpdate ?? []) {
+        let resolvedId = upd.id;
+        const isInTodayList = localTasks.some((t) => t.id === resolvedId);
+        if (!isInTodayList) {
+          const byName = upd.name
+            ? localTasks.find((t) => t.name.toLowerCase() === upd.name!.toLowerCase())
+            : localTasks.find((t) => t.name.toLowerCase().includes(resolvedId.toLowerCase()));
+          if (byName) {
+            console.log("[ChatPanel] resolved update ID by name:", resolvedId, "→", byName.id);
+            resolvedId = byName.id;
+          } else {
+            console.warn("[ChatPanel] could not resolve update ID:", upd.id, "— no task found in today list");
+          }
+        }
+        const effectiveScheduledDate = upd.scheduledDate
+          ?? (!isInTodayList && upd.priority ? new Date().toISOString().slice(0, 10) : undefined);
+        if (effectiveScheduledDate && !upd.scheduledDate) {
+          console.log("[ChatPanel] auto-set scheduledDate to today for overdue task:", resolvedId);
+        }
         try {
-          const updated = await updateTask({ id: upd.id, name: upd.name, done: upd.done, priority: upd.priority, scheduledDate: upd.scheduledDate, estimatedMinutes: upd.estimatedMinutes });
-          setTodayTasks((prev) =>
-            upd.scheduledDate
-              ? prev.filter((t) => t.id !== upd.id)
-              : prev.map((t) => (t.id === upd.id ? updated : t)),
-          );
+          const updated = await updateTask({ id: resolvedId, name: upd.name, done: upd.done, priority: upd.priority, scheduledDate: effectiveScheduledDate, estimatedMinutes: upd.estimatedMinutes, urgency: upd.urgency, importance: upd.importance, description: upd.description });
+          const localIdx = localTasks.findIndex((t) => t.id === resolvedId);
+          if (localIdx !== -1) {
+            localTasks[localIdx] = updated;
+          } else {
+            localTasks.push(updated);
+          }
+          setTodayTasks((prev) => {
+            const exists = prev.some((t) => t.id === resolvedId);
+            if (exists) {
+              return effectiveScheduledDate && effectiveScheduledDate !== new Date().toISOString().slice(0, 10)
+                ? prev.filter((t) => t.id !== resolvedId)
+                : prev.map((t) => (t.id === resolvedId ? updated : t));
+            }
+            return [...prev, updated];
+          });
           modified = true;
+          console.log("[ChatPanel] task updated:", resolvedId, upd);
         } catch (err) {
           console.error("[ChatPanel] updateTask error:", err);
         }
@@ -264,10 +356,55 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         }
       }
 
+      for (const tagAction of actions.tagsToSet ?? []) {
+        let resolvedId = tagAction.taskId;
+        if (!localTasks.some((t) => t.id === resolvedId)) {
+          const byName = localTasks.find((t) => t.name.toLowerCase().includes(resolvedId.toLowerCase()));
+          if (byName) {
+            resolvedId = byName.id;
+          }
+        }
+        try {
+          const updated = await setTaskTags(resolvedId, tagAction.tags);
+          const localIdx = localTasks.findIndex((t) => t.id === resolvedId);
+          if (localIdx !== -1) localTasks[localIdx] = updated;
+          setTodayTasks((prev) => prev.map((t) => (t.id === resolvedId ? updated : t)));
+          modified = true;
+          console.log("[ChatPanel] tags set:", resolvedId, tagAction.tags);
+        } catch (err) {
+          console.error("[ChatPanel] setTaskTags error:", err);
+        }
+      }
+
+      for (const stepsAction of actions.stepsToSet ?? []) {
+        let resolvedId = stepsAction.taskId;
+        if (!localTasks.some((t) => t.id === resolvedId)) {
+          const byName = localTasks.find((t) => t.name.toLowerCase().includes(resolvedId.toLowerCase()));
+          if (byName) {
+            resolvedId = byName.id;
+          }
+        }
+        try {
+          const microSteps = stepsAction.steps.map((text, i) => ({
+            id: `ai-step-${resolvedId}-${i}`,
+            text,
+            done: false,
+          }));
+          const updated = await setMicroSteps(resolvedId, microSteps);
+          const localIdx = localTasks.findIndex((t) => t.id === resolvedId);
+          if (localIdx !== -1) localTasks[localIdx] = updated;
+          setTodayTasks((prev) => prev.map((t) => (t.id === resolvedId ? updated : t)));
+          modified = true;
+          console.log("[ChatPanel] steps set:", resolvedId, stepsAction.steps);
+        } catch (err) {
+          console.error("[ChatPanel] setMicroSteps error:", err);
+        }
+      }
+
       if (actions.tasksToReorder?.length) {
         try {
           await reorderTasks(actions.tasksToReorder);
-          const reordered = todayTasksRef.current.slice().sort((a, b) => {
+          const reordered = localTasks.slice().sort((a, b) => {
             const ia = actions.tasksToReorder!.indexOf(a.id);
             const ib = actions.tasksToReorder!.indexOf(b.id);
             return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
@@ -312,10 +449,16 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       const msgId = `ai-${Date.now()}`;
       const aiMsg: ChatMessage = { id: msgId, role: "ai", content: response.content };
       setMessages((prev) => [...prev, aiMsg]);
+      setPrepHasAiReply(true);
 
       await applyTaskActions(response);
 
-      if (response.prepComplete) {
+      if (response.prepComplete || pendingPrepExit.current) {
+        if (pendingPrepExit.current && !response.prepComplete) {
+          const endMsg = pickEndPrepMessage(pendingPrepExit.current);
+          setMessages((prev) => [...prev, endMsg]);
+        }
+        pendingPrepExit.current = null;
         setPrepMode(null);
         prepHistory.current = [];
       }
@@ -324,7 +467,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   );
 
   const sendPrepMessage = useCallback(
-    (text: string, mode: "daily" | "weekly" = "daily") => {
+    (text: string, mode: "daily" | "weekly" | "daily_review" | "weekly_review" = "daily") => {
       if (isTyping) return;
 
       prepHistory.current.push({ role: "user", content: text });
@@ -334,7 +477,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       setError(null);
       setIsTyping(true);
 
-      const sendFn = mode === "weekly" ? sendWeeklyPrepMessage : sendDailyPrepMessage;
+      const sendFn = (mode === "weekly" || mode === "weekly_review") ? sendWeeklyPrepMessage : sendDailyPrepMessage;
       sendFn(text, prepHistory.current.slice(0, -1))
         .then((response) => {
           setIsTyping(false);
@@ -343,6 +486,13 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         })
         .catch((err) => {
           setIsTyping(false);
+          if (pendingPrepExit.current) {
+            const endMsg = pickEndPrepMessage(pendingPrepExit.current);
+            setMessages((prev) => [...prev, endMsg]);
+            pendingPrepExit.current = null;
+            setPrepMode(null);
+            prepHistory.current = [];
+          }
           const errMsg = typeof err === "string" ? err : String(err);
           setError(errMsg);
           console.error(`[ChatPanel] ${mode} prep error:`, err);
@@ -354,14 +504,31 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const startDailyPrep = useCallback(() => {
     if (isTyping) return;
     setPrepMode("daily");
+    setPrepHasAiReply(false);
+    pendingPrepExit.current = null;
     prepHistory.current = [];
     textareaRef.current?.focus();
-    sendPrepMessage("C'est parti ! Fais-moi un résumé de ce qui est déjà prévu pour aujourd'hui, et on ajuste ensemble.", "daily");
+    const greetings = [
+      "C'est parti ! Préparons la journée ensemble.",
+      "Salut ! On organise ta journée ?",
+      "Hello ! Voyons ce qui t'attend aujourd'hui.",
+      "Allez, on prépare la journée !",
+      "Prêt à planifier ? C'est parti !",
+      "On s'y met ! Qu'est-ce qu'on a aujourd'hui ?",
+      "C'est le moment de poser la journée. On y va ?",
+      "Hop, on regarde ce qu'il y a au programme !",
+      "Let's go ! On structure ta journée.",
+      "Allez, on fait le point sur aujourd'hui !",
+    ];
+    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+    sendPrepMessage(greeting, "daily");
   }, [isTyping, sendPrepMessage]);
 
   const startWeeklyPrep = useCallback(() => {
     if (isTyping) return;
     setPrepMode("weekly");
+    setPrepHasAiReply(false);
+    pendingPrepExit.current = null;
     prepHistory.current = [];
     textareaRef.current?.focus();
     sendPrepMessage("C'est parti ! Fais-moi un résumé de ce qui est prévu pour cette semaine, et on organise ensemble.", "weekly");
@@ -836,6 +1003,26 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       </div>
 
       <div className={styles.inputArea}>
+        {prepMode && prepHasAiReply && (
+          <button
+            className={styles.endPrepBtn}
+            onClick={() => {
+              if (isTyping) {
+                pendingPrepExit.current = prepMode;
+                return;
+              }
+              const endMsg = pickEndPrepMessage(prepMode);
+              setMessages((prev) => [...prev, endMsg]);
+              setPrepMode(null);
+              prepHistory.current = [];
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            {{ daily: "Finir le planning du jour", weekly: "Finir le planning de la semaine", daily_review: "Finir la revue du jour", weekly_review: "Finir la revue de la semaine" }[prepMode]}
+          </button>
+        )}
         <div className={styles.inputBox}>
           <textarea
             ref={textareaRef}

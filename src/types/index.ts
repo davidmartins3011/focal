@@ -17,6 +17,8 @@ export interface Task {
   scheduledDate?: string;
   urgency?: number;
   importance?: number;
+  description?: string;
+  createdAt?: string;
 }
 
 export interface Tag {

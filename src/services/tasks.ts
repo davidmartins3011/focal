@@ -28,6 +28,8 @@ export function createTask(params: {
   tags?: Tag[];
   estimatedMinutes?: number;
   scheduledDate?: string;
+  urgency?: number;
+  importance?: number;
 }): Promise<Task> {
   return invoke<Task>("create_task", params);
 }
@@ -43,6 +45,7 @@ export function updateTask(params: {
   urgency?: number;
   importance?: number;
   viewContext?: string;
+  description?: string;
 }): Promise<Task> {
   return invoke<Task>("update_task", params);
 }
@@ -65,6 +68,14 @@ export function clearTodayTasks(): Promise<number> {
 
 export function reorderTasks(ids: string[]): Promise<void> {
   return invoke<void>("reorder_tasks", { ids });
+}
+
+export function getAllTags(): Promise<Tag[]> {
+  return invoke<Tag[]>("get_all_tags");
+}
+
+export function setTaskTags(taskId: string, tags: Tag[]): Promise<Task> {
+  return invoke<Task>("set_task_tags", { taskId, tags });
 }
 
 export function setMicroSteps(taskId: string, steps: MicroStep[]): Promise<Task> {

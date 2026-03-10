@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ChatMessage, Suggestion, UserProfile } from "../types";
+import type { ChatMessage, Suggestion, UserProfile, Tag } from "../types";
 
 export interface ChatTaskUpdate {
   id: string;
@@ -8,6 +8,19 @@ export interface ChatTaskUpdate {
   priority?: string;
   scheduledDate?: string;
   estimatedMinutes?: number;
+  urgency?: number;
+  importance?: number;
+  description?: string;
+}
+
+export interface TagAction {
+  taskId: string;
+  tags: Tag[];
+}
+
+export interface StepsAction {
+  taskId: string;
+  steps: string[];
 }
 
 export interface AiResponse {
@@ -18,6 +31,8 @@ export interface AiResponse {
   tasksToUpdate?: ChatTaskUpdate[];
   tasksToToggle?: string[];
   tasksToReorder?: string[];
+  tagsToSet?: TagAction[];
+  stepsToSet?: StepsAction[];
 }
 
 export function getChatMessages(): Promise<ChatMessage[]> {
@@ -53,6 +68,9 @@ export interface DailyPrepTask {
   estimatedMinutes?: number;
   priority?: string;
   scheduledDate?: string;
+  urgency?: number;
+  importance?: number;
+  tags?: Tag[];
 }
 
 export interface DailyPrepResponse {
@@ -60,6 +78,8 @@ export interface DailyPrepResponse {
   tasksToAdd: DailyPrepTask[];
   tasksToRemove: string[];
   tasksToUpdate: ChatTaskUpdate[];
+  tagsToSet?: TagAction[];
+  stepsToSet?: StepsAction[];
   prepComplete: boolean;
 }
 

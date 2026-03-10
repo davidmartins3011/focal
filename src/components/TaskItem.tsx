@@ -1,10 +1,20 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
-import type { Task } from "../types";
+import type { Task, Tag } from "../types";
+import { getAllTags } from "../services/tasks";
 import EditableEstimate from "./EditableEstimate";
 import PriorityBadge from "./PriorityBadge";
+import TaskDetailModal from "./TaskDetailModal";
 import { getQuickDates, formatQuickDateHint } from "../utils/dateFormat";
 import styles from "./TaskItem.module.css";
+
+const TAG_COLORS = [
+  { id: "crm" as const, label: "Vert", css: "var(--green)" },
+  { id: "data" as const, label: "Bleu", css: "var(--blue)" },
+  { id: "roadmap" as const, label: "Accent", css: "var(--accent)" },
+  { id: "saas" as const, label: "Violet", css: "var(--purple)" },
+  { id: "urgent" as const, label: "Rouge", css: "var(--red)" },
+];
 
 const CELEBRATIONS = [
   "Bien joué ! 🎯",
@@ -34,14 +44,17 @@ interface Props {
   onRename?: (id: string, name: string) => void;
   onSetScheduledDate?: (id: string, date: string | undefined) => void;
   onSetPriority?: (id: string, field: "urgency" | "importance", value: PriorityScore | undefined) => void;
+  onSetTags?: (id: string, tags: Tag[]) => void;
   isDecomposing?: boolean;
   decomposingStepId?: string | null;
   animDelay?: number;
   isSecondary?: boolean;
+  isOverdue?: boolean;
   dragHandleProps?: Record<string, unknown>;
   isSelected?: boolean;
   hasRunningTimer?: boolean;
   onSelect?: (id: string) => void;
+  onTaskUpdated?: (task: Task) => void;
 }
 
 export default function TaskItem({
@@ -59,14 +72,17 @@ export default function TaskItem({
   onRename,
   onSetScheduledDate,
   onSetPriority,
+  onSetTags,
   isDecomposing = false,
   decomposingStepId = null,
   animDelay = 0,
   isSecondary = false,
+  isOverdue = false,
   dragHandleProps,
   isSelected = false,
   hasRunningTimer = false,
   onSelect,
+  onTaskUpdated,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [visibleSteps, setVisibleSteps] = useState<number>(task.microSteps?.length ?? 0);
@@ -79,12 +95,21 @@ export default function TaskItem({
   const [nameText, setNameText] = useState(task.name);
   const [showSchedule, setShowSchedule] = useState(false);
   const [schedulePos, setSchedulePos] = useState<{ top: number; right: number } | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [showTagEditor, setShowTagEditor] = useState(false);
+  const [tagEditorPos, setTagEditorPos] = useState<{ top: number; left: number } | null>(null);
+  const [newTagLabel, setNewTagLabel] = useState("");
+  const [newTagColor, setNewTagColor] = useState<Tag["color"]>("data");
+  const [knownTags, setKnownTags] = useState<Tag[]>([]);
   const prevDoneRef = useRef(task.done);
   const stuckMenuRef = useRef<HTMLDivElement>(null);
   const scheduleRef = useRef<HTMLDivElement>(null);
   const schedulePopoverRef = useRef<HTMLDivElement>(null);
   const scheduleBtnRef = useRef<HTMLButtonElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const tagEditorRef = useRef<HTMLDivElement>(null);
+  const tagEditorPopoverRef = useRef<HTMLDivElement>(null);
+  const tagBtnRef = useRef<HTMLButtonElement>(null);
   const quickDates = useMemo(() => getQuickDates(), []);
 
   const hasSteps = task.microSteps && task.microSteps.length > 0;
@@ -102,7 +127,7 @@ export default function TaskItem({
   }, [task.done]);
 
   useEffect(() => {
-    if (!showStuckMenu && !showSchedule) return;
+    if (!showStuckMenu && !showSchedule && !showTagEditor) return;
     const handler = (e: MouseEvent) => {
       if (showStuckMenu && stuckMenuRef.current && !stuckMenuRef.current.contains(e.target as Node)) {
         setShowStuckMenu(false);
@@ -112,10 +137,15 @@ export default function TaskItem({
         const inPopover = schedulePopoverRef.current?.contains(e.target as Node);
         if (!inBtn && !inPopover) setShowSchedule(false);
       }
+      if (showTagEditor) {
+        const inBtn = tagEditorRef.current?.contains(e.target as Node);
+        const inPopover = tagEditorPopoverRef.current?.contains(e.target as Node);
+        if (!inBtn && !inPopover) setShowTagEditor(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showStuckMenu, showSchedule]);
+  }, [showStuckMenu, showSchedule, showTagEditor]);
 
   useEffect(() => {
     if (!task.microSteps?.length) {
@@ -188,6 +218,47 @@ export default function TaskItem({
     }
     setEditingStepId(null);
   }
+
+  const addTag = useCallback((tag: Tag) => {
+    if (!onSetTags) return;
+    if (task.tags.some((t) => t.label.toLowerCase() === tag.label.toLowerCase())) return;
+    onSetTags(task.id, [...task.tags, tag]);
+    setNewTagLabel("");
+  }, [task.tags, task.id, onSetTags]);
+
+  const addNewTag = useCallback(() => {
+    const label = newTagLabel.trim();
+    if (!label) return;
+    addTag({ label, color: newTagColor });
+  }, [newTagLabel, newTagColor, addTag]);
+
+  const removeTag = useCallback((index: number) => {
+    if (!onSetTags) return;
+    onSetTags(task.id, task.tags.filter((_, i) => i !== index));
+  }, [task.tags, task.id, onSetTags]);
+
+  const taskTagKeys = useMemo(
+    () => new Set(task.tags.map((t) => `${t.label.toLowerCase()}:${t.color}`)),
+    [task.tags],
+  );
+
+  const filteredSuggestions = useMemo(() => {
+    return knownTags
+      .filter((t) => !taskTagKeys.has(`${t.label.toLowerCase()}:${t.color}`))
+      .filter((t) => !newTagLabel || t.label.toLowerCase().includes(newTagLabel.toLowerCase()));
+  }, [knownTags, taskTagKeys, newTagLabel]);
+
+  const openTagEditor = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!showTagEditor) {
+      if (tagBtnRef.current) {
+        const rect = tagBtnRef.current.getBoundingClientRect();
+        setTagEditorPos({ top: rect.bottom + 4, left: rect.left });
+      }
+      getAllTags().then(setKnownTags).catch(() => {});
+    }
+    setShowTagEditor(!showTagEditor);
+  }, [showTagEditor]);
 
   return (
     <div
@@ -347,6 +418,15 @@ export default function TaskItem({
               )}
             </div>
           )}
+          <button
+            className={styles.detailBtn}
+            onClick={(e) => { e.stopPropagation(); setShowDetail(true); }}
+            title="Voir le détail"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+            </svg>
+          </button>
           {onDelete && (
             <button
               className={styles.deleteBtn}
@@ -358,8 +438,13 @@ export default function TaskItem({
           )}
         </div>
 
-        {(task.tags.length > 0 || task.urgency != null || task.importance != null) && (
+        {(task.tags.length > 0 || task.urgency != null || task.importance != null || (isOverdue && task.priority === "main") || (onSetTags && !task.done)) && (
           <div className={styles.tags}>
+            {isOverdue && task.priority === "main" && (
+              <span className={`${styles.tag} ${styles.wasPriority}`}>
+                ⚡ était prioritaire
+              </span>
+            )}
             {task.urgency != null && (
               <PriorityBadge
                 type="urgency"
@@ -377,8 +462,97 @@ export default function TaskItem({
             {task.tags.map((tag, i) => (
               <span key={i} className={`${styles.tag} ${styles[tag.color]}`}>
                 {tag.label}
+                {onSetTags && !task.done && (
+                  <button
+                    className={styles.tagRemove}
+                    onClick={(e) => { e.stopPropagation(); removeTag(i); }}
+                  >
+                    ×
+                  </button>
+                )}
               </span>
             ))}
+            {onSetTags && !task.done && (
+              <div ref={tagEditorRef}>
+                <button
+                  ref={tagBtnRef}
+                  className={styles.tagAddBtn}
+                  onClick={openTagEditor}
+                >
+                  +
+                </button>
+                {showTagEditor && tagEditorPos && createPortal(
+                  <div
+                    ref={tagEditorPopoverRef}
+                    className={styles.tagEditorPopover}
+                    style={{ position: "fixed", top: tagEditorPos.top, left: tagEditorPos.left }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className={styles.tagEditorInputRow}>
+                      <input
+                        className={styles.tagEditorInput}
+                        value={newTagLabel}
+                        placeholder="Chercher ou créer un tag…"
+                        autoFocus
+                        onChange={(e) => setNewTagLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            if (filteredSuggestions.length > 0) {
+                              addTag(filteredSuggestions[0]);
+                            } else {
+                              addNewTag();
+                            }
+                          }
+                          if (e.key === "Escape") setShowTagEditor(false);
+                        }}
+                      />
+                    </div>
+                    {filteredSuggestions.length > 0 && (
+                      <>
+                        <div className={styles.tagEditorTitle}>Tags existants</div>
+                        <div className={styles.tagEditorSuggestions}>
+                          {filteredSuggestions.map((tag) => (
+                            <button
+                              key={`${tag.label}:${tag.color}`}
+                              className={`${styles.tag} ${styles[tag.color]} ${styles.tagSuggestion}`}
+                              onClick={() => addTag(tag)}
+                            >
+                              {tag.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {newTagLabel.trim() && !filteredSuggestions.some(
+                      (t) => t.label.toLowerCase() === newTagLabel.trim().toLowerCase()
+                    ) && (
+                      <>
+                        <div className={styles.tagEditorDivider} />
+                        <div className={styles.tagEditorTitle}>Nouveau tag</div>
+                        <div className={styles.tagEditorColors}>
+                          {TAG_COLORS.map((c) => (
+                            <button
+                              key={c.id}
+                              className={`${styles.tagColorDot} ${newTagColor === c.id ? styles.tagColorDotActive : ""}`}
+                              style={{ background: c.css }}
+                              onClick={() => setNewTagColor(c.id)}
+                              title={c.label}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          className={styles.tagEditorCreateBtn}
+                          onClick={addNewTag}
+                        >
+                          Créer <span className={`${styles.tag} ${styles[newTagColor]}`}>{newTagLabel.trim()}</span>
+                        </button>
+                      </>
+                    )}
+                  </div>,
+                  document.body
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -564,6 +738,21 @@ export default function TaskItem({
           </div>
         )}
       </div>
+
+      {showDetail && (
+        <TaskDetailModal
+          task={task}
+          onClose={() => setShowDetail(false)}
+          onToggle={onToggle}
+          onRename={onRename}
+          onSetPriority={onSetPriority}
+          onSetScheduledDate={onSetScheduledDate}
+          onUpdateEstimate={onUpdateEstimate}
+          onDelete={onDelete}
+          onSetTags={onSetTags}
+          onTaskUpdated={onTaskUpdated}
+        />
+      )}
     </div>
   );
 }

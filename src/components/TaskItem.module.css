@@ -184,6 +184,34 @@
   box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.15);
 }
 
+.detailBtn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text3);
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+  opacity: 0;
+  line-height: 1;
+}
+
+.item:hover .detailBtn {
+  opacity: 0.5;
+}
+
+.detailBtn:hover {
+  opacity: 1 !important;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .deleteBtn {
   width: 22px;
   height: 22px;
@@ -561,6 +589,149 @@
 .roadmap { background: rgba(var(--accent-rgb), 0.12);  color: var(--accent); }
 .saas    { background: rgba(var(--purple-rgb), 0.12);  color: var(--purple); }
 .urgent  { background: rgba(var(--red-rgb), 0.12);     color: var(--red); }
+.wasPriority { background: rgba(var(--warning-rgb), 0.12); color: var(--warning); }
+
+.tagRemove {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.5;
+  padding: 0 0 0 3px;
+  line-height: 1;
+  transition: opacity 0.15s;
+}
+.tagRemove:hover { opacity: 1; }
+
+.tagAddBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text3);
+  background: rgba(var(--text-rgb), 0.06);
+  border: 1px dashed rgba(var(--text-rgb), 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+.tagAddBtn:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: rgba(var(--accent-rgb), 0.3);
+}
+
+.tagEditorPopover {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  z-index: 9999;
+  min-width: 220px;
+  animation: fadeUp 0.15s ease;
+}
+
+.tagEditorTitle {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.tagEditorColors {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.tagColorDot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+}
+.tagColorDot:hover { transform: scale(1.15); }
+.tagColorDotActive {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--bg2);
+}
+
+.tagEditorInputRow {
+  display: flex;
+  gap: 6px;
+}
+
+.tagEditorInput {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.tagEditorInput:focus {
+  border-color: var(--accent);
+}
+
+.tagEditorDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+.tagEditorSuggestions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.tagSuggestion {
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.12s;
+}
+.tagSuggestion:hover {
+  filter: brightness(1.3);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.tagEditorCreateBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: rgba(var(--text-rgb), 0.04);
+  border: 1px dashed rgba(var(--text-rgb), 0.15);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text3);
+  font-family: 'Outfit', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tagEditorCreateBtn:hover {
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  color: var(--text2);
+}
 
 /* ── Action buttons row ── */
 .actions {

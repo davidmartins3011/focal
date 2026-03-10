@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use chrono::Datelike;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::models::AppState;
+use crate::models::{AppState, Tag};
 
 #[derive(Deserialize)]
 struct HistoryMsg {
@@ -25,6 +26,26 @@ pub struct ChatTaskUpdate {
     pub scheduled_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub estimated_minutes: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub urgency: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub importance: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagAction {
+    pub task_id: String,
+    pub tags: Vec<Tag>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StepsAction {
+    pub task_id: String,
+    pub steps: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +64,10 @@ pub struct AiResponse {
     pub tasks_to_toggle: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tasks_to_reorder: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags_to_set: Vec<TagAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps_to_set: Vec<StepsAction>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -138,7 +163,7 @@ fn get_user_profile(db: &rusqlite::Connection) -> Option<serde_json::Value> {
     .and_then(|json| serde_json::from_str(&json).ok())
 }
 
-fn build_system_prompt(db: &rusqlite::Connection) -> String {
+fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, String>) {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
     let mut parts = vec![
@@ -174,20 +199,30 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
         "ACTIONS SUR LES TÂCHES :".to_string(),
         "Tu peux agir directement sur les tâches de l'utilisateur via les champs suivants dans ta réponse JSON :".to_string(),
         String::new(),
-        "- tasksToAdd : créer de nouvelles tâches. Champs : name (requis), estimatedMinutes, priority (\"main\"/\"secondary\"), scheduledDate (YYYY-MM-DD).".to_string(),
-        format!("  Exemple : [{{\"name\": \"Répondre aux emails\", \"estimatedMinutes\": 15, \"priority\": \"secondary\", \"scheduledDate\": \"{today}\"}}]"),
+        "- tasksToAdd : créer de nouvelles tâches. Champs : name (requis), estimatedMinutes, priority (\"main\"/\"secondary\"), scheduledDate (YYYY-MM-DD), urgency (1-5), importance (1-5), tags (tableau de {label, color}).".to_string(),
+        format!("  Exemple : [{{\"name\": \"Répondre aux emails\", \"estimatedMinutes\": 15, \"priority\": \"secondary\", \"scheduledDate\": \"{today}\", \"urgency\": 4, \"importance\": 3, \"tags\": [{{\"label\": \"CRM\", \"color\": \"crm\"}}]}}]"),
         String::new(),
         "- tasksToRemove : supprimer des tâches par ID. Confirme toujours avant de supprimer.".to_string(),
         "  Exemple : [\"id-de-la-tache\"]".to_string(),
         String::new(),
-        "- tasksToUpdate : modifier des tâches existantes par ID. Champs modifiables : name, done (true/false), priority, scheduledDate, estimatedMinutes.".to_string(),
-        "  Exemple : [{\"id\": \"id-tache\", \"priority\": \"main\", \"scheduledDate\": \"2026-03-06\"}]".to_string(),
+        "- tasksToUpdate : modifier des tâches existantes par ID. Champs modifiables : name, done (true/false), priority, scheduledDate, estimatedMinutes, urgency (1-5), importance (1-5), description (texte libre pour notes/détails).".to_string(),
+        "  Exemple : [{\"id\": \"id-tache\", \"priority\": \"main\", \"scheduledDate\": \"2026-03-06\", \"description\": \"Notes importantes sur cette tâche\"}]".to_string(),
         String::new(),
         "- tasksToToggle : cocher/décocher des tâches par ID (inverse l'état fait/non-fait).".to_string(),
         "  Exemple : [\"id-de-la-tache\"]".to_string(),
         String::new(),
         "- tasksToReorder : réorganiser les tâches du jour en fournissant la liste complète des IDs dans le nouvel ordre souhaité.".to_string(),
         "  Exemple : [\"id-3\", \"id-1\", \"id-2\"] — place la tâche 3 en premier, puis 1, puis 2.".to_string(),
+        String::new(),
+        "- tagsToSet : ajouter, modifier ou supprimer les tags d'une tâche. Remplace TOUS les tags de la tâche.".to_string(),
+        r#"  Exemple : [{"taskId": "t1", "tags": [{"label": "Snowflake", "color": "data"}, {"label": "Urgent", "color": "urgent"}]}]"#.to_string(),
+        "  Couleurs disponibles : \"crm\" (vert), \"data\" (bleu), \"roadmap\" (accent/violet clair), \"saas\" (violet), \"urgent\" (rouge).".to_string(),
+        "  Pour AJOUTER un tag : inclus les tags existants + le nouveau. JAMAIS de doublon — si le tag existe déjà, ne le remets pas. Pour SUPPRIMER un tag : inclus uniquement ceux à garder.".to_string(),
+        "  Les tags existants de chaque tâche sont affichés avec #[...] dans la liste des tâches. Si le tag demandé est déjà présent, ne fais rien et dis-le.".to_string(),
+        String::new(),
+        "- stepsToSet : attacher des micro-étapes à une tâche spécifique. Remplace TOUTES les étapes existantes de la tâche.".to_string(),
+        r#"  Exemple : [{"taskId": "t1", "steps": ["Étape 1", "Étape 2", "Étape 3"]}]"#.to_string(),
+        "  Utilise ce champ quand l'utilisateur demande de décomposer une tâche ou quand tu proposes une décomposition que l'utilisateur accepte.".to_string(),
         String::new(),
         "RÈGLES D'UTILISATION DES ACTIONS :".to_string(),
         "- N'ajoute des actions que quand l'utilisateur le demande explicitement ou confirme ta proposition.".to_string(),
@@ -198,7 +233,7 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
         String::new(),
         "INSTRUCTIONS DE FORMAT :".to_string(),
         "- Réponds en JSON valide avec cette structure :".to_string(),
-        r#"  {"content": "ton message texte", "steps": [...], "tasksToAdd": [...], "tasksToRemove": [...], "tasksToUpdate": [...], "tasksToToggle": [...], "tasksToReorder": [...]}"#.to_string(),
+        r#"  {"content": "ton message texte", "steps": [...], "tasksToAdd": [...], "tasksToRemove": [...], "tasksToUpdate": [...], "tasksToToggle": [...], "tasksToReorder": [...], "tagsToSet": [...], "stepsToSet": [...]}"#.to_string(),
         "- Le champ \"content\" est toujours présent et contient ton message textuel.".to_string(),
         "- Le champ \"steps\" est optionnel. Inclus-le UNIQUEMENT quand tu décomposes une tâche en micro-étapes.".to_string(),
         "- Les champs d'action (tasksTo*) sont tous optionnels. N'inclus que ceux nécessaires.".to_string(),
@@ -259,6 +294,11 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
         }
     }
 
+    let mut id_map: HashMap<String, String> = HashMap::new();
+    let mut id_counter = 1i32;
+    let tags_map = load_all_tags_map(db);
+    let empty_tags: Vec<Tag> = vec![];
+
     if let Ok(mut stmt) = db.prepare(
         "SELECT id, name, done, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE view_context = 'today' ORDER BY position",
     ) {
@@ -274,14 +314,17 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
                 row.get::<_, Option<i32>>(7)?,
             ))
         }) {
-            let task_lines: Vec<String> = tasks
-                .filter_map(|r| r.ok())
+            let task_data: Vec<_> = tasks.filter_map(|r| r.ok()).collect();
+            let task_lines: Vec<String> = task_data
+                .into_iter()
                 .map(|(id, name, done, pri, est, sched, urg, imp)| {
-                    format_task_line(&id, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp)
+                    let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                    let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                    format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
                 })
                 .collect();
             if !task_lines.is_empty() {
-                parts.push("TÂCHES DU JOUR (utilise les IDs entre crochets pour les actions tasksToRemove/tasksToUpdate/tasksToToggle) :".to_string());
+                parts.push("TÂCHES DU JOUR (utilise les IDs courts entre crochets pour les actions tasksToRemove/tasksToUpdate/tasksToToggle) :".to_string());
                 parts.extend(task_lines);
                 parts.push(String::new());
             }
@@ -302,10 +345,13 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
                 row.get::<_, Option<i32>>(6)?,
             ))
         }) {
-            let task_lines: Vec<String> = tasks
-                .filter_map(|r| r.ok())
+            let task_data: Vec<_> = tasks.filter_map(|r| r.ok()).collect();
+            let task_lines: Vec<String> = task_data
+                .into_iter()
                 .map(|(id, name, done, pri, est, urg, imp)| {
-                    format_task_line(&id, &name, done, pri.as_deref(), est, None, urg, imp)
+                    let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                    let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                    format_task_line(&short, &name, done, pri.as_deref(), est, None, urg, imp, task_tags)
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -331,10 +377,13 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
                 row.get::<_, Option<i32>>(7)?,
             ))
         }) {
-            let task_lines: Vec<String> = tasks
-                .filter_map(|r| r.ok())
+            let task_data: Vec<_> = tasks.filter_map(|r| r.ok()).collect();
+            let task_lines: Vec<String> = task_data
+                .into_iter()
                 .map(|(id, name, done, pri, est, sched, urg, imp)| {
-                    format_task_line(&id, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp)
+                    let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                    let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                    format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -345,7 +394,7 @@ fn build_system_prompt(db: &rusqlite::Connection) -> String {
         }
     }
 
-    parts.join("\n")
+    (parts.join("\n"), id_map)
 }
 
 #[derive(Serialize)]
@@ -380,10 +429,17 @@ struct OpenAIMessage {
 }
 
 #[derive(Serialize)]
+struct OpenAIResponseFormat {
+    r#type: String,
+}
+
+#[derive(Serialize)]
 struct OpenAIRequest {
     model: String,
     messages: Vec<OpenAIMessage>,
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<OpenAIResponseFormat>,
 }
 
 #[derive(Deserialize)]
@@ -458,6 +514,7 @@ async fn call_openai_compatible(
     model: &str,
     system: &str,
     messages: Vec<(String, String)>,
+    json_mode: bool,
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
     let mut msgs: Vec<OpenAIMessage> = vec![OpenAIMessage {
@@ -473,10 +530,17 @@ async fn call_openai_compatible(
         content,
     }));
 
+    let response_format = if json_mode {
+        Some(OpenAIResponseFormat { r#type: "json_object".to_string() })
+    } else {
+        None
+    };
+
     let body = OpenAIRequest {
         model: model.to_string(),
         messages: msgs,
         max_tokens: Some(1024),
+        response_format,
     };
 
     let resp = client
@@ -517,14 +581,15 @@ pub async fn call_llm(
     model: &str,
     system: &str,
     messages: Vec<(String, String)>,
+    json_mode: bool,
 ) -> Result<String, String> {
     match provider_id {
         "anthropic" => call_anthropic(api_key, model, system, messages).await,
         "openai" => {
-            call_openai_compatible(api_key, "https://api.openai.com/v1", model, system, messages).await
+            call_openai_compatible(api_key, "https://api.openai.com/v1", model, system, messages, json_mode).await
         }
         "mistral" => {
-            call_openai_compatible(api_key, "https://api.mistral.ai/v1", model, system, messages).await
+            call_openai_compatible(api_key, "https://api.mistral.ai/v1", model, system, messages, json_mode).await
         }
         _ => Err(format!("Provider inconnu : {provider_id}")),
     }
@@ -555,17 +620,46 @@ fn parse_opt_scheduled(v: &serde_json::Value) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+fn parse_opt_int(v: &serde_json::Value, camel: &str, snake: &str) -> Option<i32> {
+    json_field(v, camel, snake)
+        .and_then(|v| v.as_i64())
+        .map(|n| n as i32)
+}
+
 fn parse_tasks_to_add(v: &serde_json::Value) -> Vec<DailyPrepTask> {
     json_field(v, "tasksToAdd", "tasks_to_add")
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
                 .filter_map(|t| {
+                    if let Some(name) = t.as_str() {
+                        return Some(DailyPrepTask {
+                            name: name.to_string(),
+                            estimated_minutes: None,
+                            priority: None,
+                            scheduled_date: None,
+                            urgency: None,
+                            importance: None,
+                            tags: vec![],
+                        });
+                    }
+                    let tags = t.get("tags")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter().filter_map(|tag| {
+                            Some(Tag {
+                                label: tag.get("label").and_then(|v| v.as_str())?.to_string(),
+                                color: tag.get("color").and_then(|v| v.as_str()).unwrap_or("data").to_string(),
+                            })
+                        }).collect())
+                        .unwrap_or_default();
                     Some(DailyPrepTask {
                         name: t.get("name").and_then(|v| v.as_str())?.to_string(),
                         estimated_minutes: parse_opt_minutes(t),
                         priority: t.get("priority").and_then(|v| v.as_str()).map(|s| s.to_string()),
                         scheduled_date: parse_opt_scheduled(t),
+                        urgency: parse_opt_int(t, "urgency", "urgency"),
+                        importance: parse_opt_int(t, "importance", "importance"),
+                        tags,
                     })
                 })
                 .collect()
@@ -586,6 +680,9 @@ fn parse_tasks_to_update(v: &serde_json::Value) -> Vec<ChatTaskUpdate> {
                         priority: t.get("priority").and_then(|v| v.as_str()).map(|s| s.to_string()),
                         scheduled_date: parse_opt_scheduled(t),
                         estimated_minutes: parse_opt_minutes(t),
+                        urgency: parse_opt_int(t, "urgency", "urgency"),
+                        importance: parse_opt_int(t, "importance", "importance"),
+                        description: t.get("description").and_then(|v| v.as_str()).map(|s| s.to_string()),
                     })
                 })
                 .collect()
@@ -593,7 +690,60 @@ fn parse_tasks_to_update(v: &serde_json::Value) -> Vec<ChatTaskUpdate> {
         .unwrap_or_default()
 }
 
-fn parse_ai_text(raw: &str) -> AiResponse {
+fn parse_tags_to_set(v: &serde_json::Value, id_map: &HashMap<String, String>) -> Vec<TagAction> {
+    json_field(v, "tagsToSet", "tags_to_set")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| {
+                    let raw_id = item.get("taskId")
+                        .or_else(|| item.get("task_id"))
+                        .and_then(|v| v.as_str())?
+                        .to_string();
+                    let task_id = id_map.get(&raw_id).cloned().unwrap_or(raw_id);
+                    let tags = item.get("tags")
+                        .and_then(|v| v.as_array())
+                        .map(|tags_arr| {
+                            tags_arr.iter().filter_map(|t| {
+                                Some(Tag {
+                                    label: t.get("label").and_then(|v| v.as_str())?.to_string(),
+                                    color: t.get("color").and_then(|v| v.as_str())
+                                        .unwrap_or("data").to_string(),
+                                })
+                            }).collect()
+                        })
+                        .unwrap_or_default();
+                    Some(TagAction { task_id, tags })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_steps_to_set(v: &serde_json::Value, id_map: &HashMap<String, String>) -> Vec<StepsAction> {
+    json_field(v, "stepsToSet", "steps_to_set")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| {
+                    let raw_id = item.get("taskId")
+                        .or_else(|| item.get("task_id"))
+                        .and_then(|v| v.as_str())?
+                        .to_string();
+                    let task_id = id_map.get(&raw_id).cloned().unwrap_or(raw_id);
+                    let steps: Vec<String> = item.get("steps")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter().filter_map(|s| s.as_str().map(|s| s.to_string())).collect())
+                        .unwrap_or_default();
+                    if steps.is_empty() { return None; }
+                    Some(StepsAction { task_id, steps })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_ai_text(raw: &str, id_map: &HashMap<String, String>) -> AiResponse {
     let Some(parsed) = clean_and_find_json(raw) else {
         return AiResponse {
             content: raw.to_string(),
@@ -603,6 +753,8 @@ fn parse_ai_text(raw: &str) -> AiResponse {
             tasks_to_update: vec![],
             tasks_to_toggle: vec![],
             tasks_to_reorder: None,
+            tags_to_set: vec![],
+            steps_to_set: vec![],
         };
     };
 
@@ -611,6 +763,7 @@ fn parse_ai_text(raw: &str) -> AiResponse {
         .and_then(|v| v.as_str())
         .unwrap_or(raw)
         .to_string();
+    let content = strip_json_from_content(&content);
 
     let steps = parsed.get("steps").and_then(|v| v.as_array()).map(|arr| {
         arr.iter()
@@ -618,18 +771,44 @@ fn parse_ai_text(raw: &str) -> AiResponse {
             .collect()
     });
 
+    let resolve = |short: String| -> String {
+        id_map.get(&short).cloned().unwrap_or(short)
+    };
+
     let tasks_to_reorder: Option<Vec<String>> = json_field(&parsed, "tasksToReorder", "tasks_to_reorder")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect());
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| resolve(s.to_string()))).collect());
+
+    let tasks_to_remove = parse_string_list(&parsed, "tasksToRemove", "tasks_to_remove")
+        .into_iter()
+        .map(resolve)
+        .collect();
+
+    let tasks_to_toggle = parse_string_list(&parsed, "tasksToToggle", "tasks_to_toggle")
+        .into_iter()
+        .map(|short| id_map.get(&short).cloned().unwrap_or(short))
+        .collect();
+
+    let tasks_to_update = parse_tasks_to_update(&parsed)
+        .into_iter()
+        .map(|mut upd| {
+            if let Some(real) = id_map.get(&upd.id) {
+                upd.id = real.clone();
+            }
+            upd
+        })
+        .collect();
 
     AiResponse {
         content,
         steps,
         tasks_to_add: parse_tasks_to_add(&parsed),
-        tasks_to_remove: parse_string_list(&parsed, "tasksToRemove", "tasks_to_remove"),
-        tasks_to_update: parse_tasks_to_update(&parsed),
-        tasks_to_toggle: parse_string_list(&parsed, "tasksToToggle", "tasks_to_toggle"),
+        tasks_to_remove,
+        tasks_to_update,
+        tasks_to_toggle,
         tasks_to_reorder,
+        tags_to_set: parse_tags_to_set(&parsed, id_map),
+        steps_to_set: parse_steps_to_set(&parsed, id_map),
     }
 }
 
@@ -685,10 +864,10 @@ pub async fn send_message(
     state: State<'_, AppState>,
     user_message: String,
 ) -> Result<AiResponse, String> {
-    let (provider_id, api_key, model, system_prompt, history) = {
+    let (provider_id, api_key, model, system_prompt, history, id_map) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let (provider, model) = get_active_provider(&db)?;
-        let system = build_system_prompt(&db);
+        let (system, id_map) = build_system_prompt(&db);
 
         let mut stmt = db
             .prepare("SELECT role, content FROM chat_messages ORDER BY created_at")
@@ -699,7 +878,7 @@ pub async fn send_message(
             .filter_map(|r| r.ok())
             .collect();
 
-        (provider.id, provider.api_key, model, system, history)
+        (provider.id, provider.api_key, model, system, history, id_map)
     };
 
     // Save user message
@@ -716,9 +895,9 @@ pub async fn send_message(
     let mut msgs = history;
     msgs.push(("user".to_string(), user_message));
 
-    let raw_response = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs).await?;
+    let raw_response = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs, true).await?;
 
-    let response = parse_ai_text(&raw_response);
+    let response = parse_ai_text(&raw_response, &id_map);
 
     // Save AI response
     {
@@ -773,7 +952,7 @@ pub async fn decompose_task(
     };
 
     let msgs = vec![("user".to_string(), prompt)];
-    let raw = call_llm(&provider_id, &api_key, &model, system, msgs).await?;
+    let raw = call_llm(&provider_id, &api_key, &model, system, msgs, false).await?;
 
     let trimmed = raw.trim();
     if let Ok(steps) = serde_json::from_str::<Vec<DecompStep>>(trimmed) {
@@ -939,7 +1118,7 @@ pub async fn generate_suggestions(
         "Analyse mes données et génère des suggestions personnalisées pour améliorer ma productivité.".to_string(),
     )];
 
-    let raw = call_llm(&provider_id, &api_key, &model, &system, msgs).await?;
+    let raw = call_llm(&provider_id, &api_key, &model, &system, msgs, false).await?;
 
     let trimmed = raw.trim();
     if let Ok(suggestions) = serde_json::from_str::<Vec<Suggestion>>(trimmed) {
@@ -1030,6 +1209,12 @@ pub struct DailyPrepTask {
     pub priority: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduled_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub urgency: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub importance: Option<i32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<Tag>,
 }
 
 
@@ -1045,6 +1230,10 @@ pub struct DailyPrepResponse {
     pub tasks_to_update: Vec<ChatTaskUpdate>,
     #[serde(default)]
     pub prep_complete: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags_to_set: Vec<TagAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps_to_set: Vec<StepsAction>,
 }
 
 fn get_daily_priority_limit(db: &rusqlite::Connection) -> i32 {
@@ -1059,7 +1248,7 @@ fn get_daily_priority_limit(db: &rusqlite::Connection) -> i32 {
 }
 
 fn format_task_line(
-    id: &str,
+    display_id: &str,
     name: &str,
     done: bool,
     pri: Option<&str>,
@@ -1067,6 +1256,7 @@ fn format_task_line(
     sched: Option<&str>,
     urg: Option<i32>,
     imp: Option<i32>,
+    tags: &[Tag],
 ) -> String {
     let check = if done { "✓" } else { "○" };
     let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
@@ -1074,10 +1264,41 @@ fn format_task_line(
     let imp_str = imp.map_or(String::new(), |i| format!(" [importance: {i}/5]"));
     let est_str = est.map_or(String::new(), |m| format!(" (~{m} min)"));
     let sched_str = sched.map_or(String::new(), |s| format!(" (planifié: {s})"));
-    format!("  {check} [{id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}")
+    let tags_str = if tags.is_empty() {
+        String::new()
+    } else {
+        let labels: Vec<&str> = tags.iter().map(|t| t.label.as_str()).collect();
+        format!(" #[{}]", labels.join(", "))
+    };
+    format!("  {check} [{display_id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}{tags_str}")
 }
 
-fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
+fn load_all_tags_map(db: &rusqlite::Connection) -> HashMap<String, Vec<Tag>> {
+    let mut map: HashMap<String, Vec<Tag>> = HashMap::new();
+    if let Ok(mut stmt) = db.prepare("SELECT task_id, label, color FROM task_tags ORDER BY task_id, position") {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        }) {
+            for row in rows.flatten() {
+                map.entry(row.0).or_default().push(Tag { label: row.1, color: row.2 });
+            }
+        }
+    }
+    map
+}
+
+fn assign_short_id(counter: &mut i32, real_id: &str, id_map: &mut HashMap<String, String>) -> String {
+    let short = format!("t{}", counter);
+    id_map.insert(short.clone(), real_id.to_string());
+    *counter += 1;
+    short
+}
+
+fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, String>) {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let tomorrow = (chrono::Local::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
     let max_priority = get_daily_priority_limit(db);
@@ -1098,25 +1319,33 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         String::new(),
         "RÈGLES DE CONVERSATION :".to_string(),
         "- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string(),
-        "- Tu ne dictes PAS quoi faire. Tu DEMANDES à l'utilisateur ce qu'il a prévu.".to_string(),
-        "- Tu es un facilitateur : tu aides à formuler, clarifier, prioriser — c'est l'utilisateur qui décide.".to_string(),
+        "- Tu es un CONSEILLER : tu fais des suggestions, tu proposes des ajustements, tu donnes ton avis — mais c'est l'utilisateur qui a le dernier mot.".to_string(),
+        "- Sois proactif : si tu vois un problème (trop de priorités, charge trop lourde, tâche en retard), signale-le et propose une solution concrète.".to_string(),
         "- Tutoie l'utilisateur. Sois chaleureux, bienveillant, encourageant et concis.".to_string(),
         "- Ne fais jamais la morale. Pas de jugement.".to_string(),
         String::new(),
+        "RÉACTIVITÉ EN TEMPS RÉEL — RÈGLE CRITIQUE :".to_string(),
+        "- JAMAIS dire qu'une action est faite dans le content SANS l'inclure dans les champs JSON. Si tu dis \"c'est supprimé\" dans content, tasksToRemove DOIT contenir l'ID. Si tu dis \"c'est ajouté\", tasksToAdd DOIT contenir la tâche. Sinon l'action n'est PAS exécutée.".to_string(),
+        "- Chaque instruction de l'utilisateur sur les tâches doit être EXÉCUTÉE via les champs JSON (tasksToAdd, tasksToRemove, tasksToUpdate).".to_string(),
+        "- Les tâches existantes ont des IDs courts (t1, t2, t3...) entre crochets dans la liste. Utilise TOUJOURS ces IDs exacts. Ne jamais inventer un ID.".to_string(),
+        "- Exemples : \"Renomme X en Y\" → tasksToUpdate avec id (ex: \"t3\") + name. \"Déplace X à demain\" → tasksToUpdate avec id + scheduledDate. \"Supprime X\" → tasksToRemove avec l'ID (ex: [\"t5\"]). \"Ajoute X\" → tasksToAdd avec name.".to_string(),
+        "- Les modifications sont appliquées en temps réel côté interface. Confirme brièvement dans ton message que c'est fait.".to_string(),
+        String::new(),
         "DÉROULEMENT NATUREL (adapte-toi, pas un script rigide) :".to_string(),
         "1. Résumé structuré : présente d'abord les ⚡ Priorités du jour, puis les 📋 Aussi prévu, puis le ⏳ Reliquat.".to_string(),
-        format!("2. Vérifie les priorités du jour : s'il y en a plus de {max_priority}, signale-le et aide à choisir lesquelles garder (voir PRIORISATION)."),
-        "3. S'il y a du RELIQUAT, traite-le ensuite : garder, reporter ou supprimer ?".to_string(),
-        "4. Aide à organiser les tâches \"Aussi prévu\" : les prioriser, les reporter, ou ajuster leur ordre.".to_string(),
-        "5. Ajustements : ajouter, retirer, modifier d'autres tâches.".to_string(),
-        "6. Conseils d'organisation si les données le permettent (voir CONSEILS D'ORGANISATION).".to_string(),
-        "7. Confirme le plan → prepComplete: true (sans remettre les tâches déjà ajoutées dans tasksToAdd).".to_string(),
+        format!("2. Si les priorités dépassent {max_priority}, signale-le et SUGGÈRE lesquelles garder ou déprioriser."),
+        "3. S'il y a du RELIQUAT, propose un tri : garder, reporter à demain, ou supprimer. Donne ton avis sur ce qui semble pertinent.".to_string(),
+        "4. SUGGÈRE des ajustements pour les tâches \"Aussi prévu\" : prioriser certaines, en reporter d'autres, ajuster l'ordre.".to_string(),
+        "5. Reste disponible pour tout ajustement : ajouter, retirer, renommer, déplacer, modifier la priorité ou l'estimation.".to_string(),
+        "6. Distille des conseils d'organisation si pertinent (voir CONSEILS D'ORGANISATION).".to_string(),
+        "7. Quand l'utilisateur est satisfait, confirme le plan → prepComplete: true (sans remettre les tâches déjà ajoutées dans tasksToAdd).".to_string(),
         String::new(),
         "PRIORISATION :".to_string(),
         format!("- Maximum {max_priority} tâche(s) dans ⚡ Priorités du jour (priority = \"main\"). C'est la limite configurée par l'utilisateur."),
         format!("- Si le nombre de priorités dépasse {max_priority}, SIGNALE-LE IMMÉDIATEMENT dans ton premier message (ex: \"Tu as X priorités, le max est {max_priority}. On en enlève ?\")."),
         "- Propose des choix binaires : \"Entre [tâche A] et [tâche B], laquelle est la plus urgente ?\"".to_string(),
-        "- Les tâches du reliquat et de \"Aussi prévu\" qui ont des scores d'urgence/importance élevés peuvent être candidates à devenir des priorités du jour — propose-le.".to_string(),
+        "- Les tâches du reliquat qui ÉTAIENT PRIORITAIRES (priorité: main) sont de fortes candidates à redevenir priorités du jour — propose-le en premier.".to_string(),
+        "- Les tâches du reliquat et de \"Aussi prévu\" qui ont des scores d'urgence/importance élevés sont aussi candidates — propose-le.".to_string(),
         String::new(),
         "SCORES D'URGENCE ET D'IMPORTANCE :".to_string(),
         "- Certaines tâches ont des scores sur 5. Utilise-les ACTIVEMENT pour guider tes recommandations.".to_string(),
@@ -1125,7 +1354,8 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         "  • Urgence 4-5 + Importance 1-3 → À traiter aujourd'hui, pas forcément en \"main\".".to_string(),
         "  • Urgence 1-3 + Importance 4-5 → Planifier cette semaine, pas empiler aujourd'hui.".to_string(),
         "  • Urgence 1-3 + Importance 1-3 → Reporter ou laisser en secondaire.".to_string(),
-        "- Mentionne les scores pour justifier tes suggestions (ex: \"urgence 5/5, importance 4/5 — c'est clairement une priorité\").".to_string(),
+        "- Mentionne les scores dans ton TEXTE d'analyse pour justifier tes suggestions (ex: \"urgence 5/5 — c'est clairement une priorité\").".to_string(),
+        "- Dans la LISTE des tâches, n'affiche un score QUE s'il est élevé (4/5 ou 5/5), format : [Urgence: 5/5]. Jamais les scores moyens.".to_string(),
         "- Signale les incohérences : tâche \"main\" avec scores faibles, ou tâche non-prioritaire avec scores élevés.".to_string(),
         "- Si aucune tâche n'a de scores, guide la priorisation via la discussion classique.".to_string(),
         String::new(),
@@ -1143,15 +1373,22 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         "RELIQUAT :".to_string(),
         "- Ne culpabilise JAMAIS. Normalise le report.".to_string(),
         "- 3 options par tâche : garder aujourd'hui, reporter (tasksToUpdate + scheduledDate), supprimer (tasksToRemove).".to_string(),
-        "- Utilise les scores d'urgence/importance pour aider à trier le reliquat.".to_string(),
+        format!("- IMPORTANT : pour déplacer une tâche du reliquat vers aujourd'hui, tu DOIS mettre scheduledDate à \"{today}\" dans tasksToUpdate. Juste changer priority ne suffit PAS — la tâche restera dans le reliquat si sa date reste dans le passé."),
+        "- Utilise les scores d'urgence/importance ET le statut \"était prioritaire\" pour aider à trier le reliquat.".to_string(),
         "- Si 3+ tâches en reliquat, regroupe et propose un tri rapide plutôt qu'un par un.".to_string(),
+        "- TÂCHES QUI ÉTAIENT PRIORITAIRES (priorité: main dans les données) : ce sont des tâches que l'utilisateur avait jugées importantes un jour précédent mais non terminées. Signale-les avec ⚡ dans la liste et SUGGÈRE de les remettre en priorité aujourd'hui. C'est un signal fort de priorisation.".to_string(),
+        "- N'affiche PAS [principal]/[secondaire] pour le reliquat. À la place, utilise ⚡ pour marquer celles qui étaient prioritaires. Liste le nom, l'estimation, les scores élevés, et ⚡ si applicable.".to_string(),
+        "- ORDRE DE PRÉSENTATION du reliquat : d'abord les ⚡ (étaient prioritaires), puis les tâches avec urgence/importance élevée, puis le reste.".to_string(),
         String::new(),
-        "ACTIONS SUR LES TÂCHES :".to_string(),
-        "- tasksToAdd : ajouter quand l'utilisateur mentionne ou confirme. Jamais inventer. Une seule fois par tâche dans toute la conversation.".to_string(),
+        "ACTIONS SUR LES TÂCHES (INCLURE OBLIGATOIREMENT dans le JSON quand une action est effectuée) :".to_string(),
+        "- tasksToAdd : ajouter quand l'utilisateur le demande ou confirme. Jamais inventer. Une seule fois par tâche dans toute la conversation.".to_string(),
         format!("  Ne mets JAMAIS priority \"main\" si ça dépasse le max de {max_priority}. Propose de déprioriser d'abord."),
-        "  Champs : name (requis), estimatedMinutes, priority (\"main\"/\"secondary\"), scheduledDate (YYYY-MM-DD, défaut: aujourd'hui).".to_string(),
-        "- tasksToRemove : tableau d'IDs à supprimer. Confirme dans ton message.".to_string(),
-        "- tasksToUpdate : modifier priority, scheduledDate, estimatedMinutes par ID.".to_string(),
+        "  Champs : name (requis), estimatedMinutes, priority (\"main\"/\"secondary\"), scheduledDate (YYYY-MM-DD, défaut: aujourd'hui), tags ([{label, color}]).".to_string(),
+        "- tasksToRemove : tableau d'IDs courts (ex: [\"t1\", \"t3\"]) à supprimer. Utilise l'ID exact de la liste. Confirme dans ton message.".to_string(),
+        "- tasksToUpdate : modifier name, priority, scheduledDate, estimatedMinutes, urgency (1-5), importance (1-5), description (texte libre) par ID court (ex: \"t2\"). Chaque champ sauf id est optionnel.".to_string(),
+        r#"- tagsToSet : ajouter/modifier/supprimer les tags d'une tâche. Ex: [{"taskId": "t1", "tags": [{"label": "Snowflake", "color": "data"}]}]. Couleurs : "crm" (vert), "data" (bleu), "roadmap" (accent), "saas" (violet), "urgent" (rouge). Pour ajouter un tag, inclure les tags existants + le nouveau."#.to_string(),
+        r#"- stepsToSet : attacher des micro-étapes à une tâche. Ex: [{"taskId": "t1", "steps": ["Étape 1", "Étape 2"]}]. Utilise quand l'utilisateur demande de décomposer une tâche."#.to_string(),
+        "- RAPPEL : si tu confirmes une action dans content, le champ JSON correspondant DOIT être rempli. Sinon rien ne se passe.".to_string(),
         String::new(),
     ];
 
@@ -1161,6 +1398,11 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
             parts.push(String::new());
         }
     }
+
+    let mut id_map: HashMap<String, String> = HashMap::new();
+    let mut id_counter = 1i32;
+    let tags_map = load_all_tags_map(db);
+    let empty_tags: Vec<Tag> = vec![];
 
     let mut priority_count = 0i32;
     let mut main_lines: Vec<String> = Vec::new();
@@ -1186,7 +1428,9 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         }) {
             for row in tasks.filter_map(|r| r.ok()) {
                 let (id, name, done, pri, est, sched, urg, imp) = row;
-                let line = format_task_line(&id, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp);
+                let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                let line = format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags);
                 if pri.as_deref() == Some("main") {
                     if !done { priority_count += 1; }
                     main_lines.push(line);
@@ -1232,10 +1476,13 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
                 row.get::<_, Option<i32>>(6)?,
             ))
         }) {
-            let overdue_lines: Vec<String> = overdue
-                .filter_map(|r| r.ok())
+            let overdue_data: Vec<_> = overdue.filter_map(|r| r.ok()).collect();
+            let overdue_lines: Vec<String> = overdue_data
+                .into_iter()
                 .map(|(id, name, pri, est, sched, urg, imp)| {
-                    format_task_line(&id, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp)
+                    let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                    let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                    format_task_line(&short, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
                 })
                 .collect();
             if !overdue_lines.is_empty() {
@@ -1258,51 +1505,125 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> String {
         parts.push(String::new());
     }
 
-    parts.push("FORMAT DE RÉPONSE (JSON valide uniquement, pas de texte autour) :".to_string());
-    parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "prepComplete": false}"#.to_string());
-    parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{today}"}}]"#));
-    parts.push("- tasksToRemove : [\"id1\", \"id2\"]".to_string());
-    parts.push(format!(r#"- tasksToUpdate : [{{"id": "...", "priority": "secondary", "scheduledDate": "{tomorrow}"}}]"#));
+    parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
+    parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
+    parts.push("- content : ton message texte. N'INCLUS JAMAIS le JSON dans le content. Pas de blocs de code JSON dans le content.".to_string());
+    parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{today}", "urgency": 4, "importance": 3, "tags": [{{"label": "CRM", "color": "crm"}}]}}] — urgency, importance et tags sont optionnels."#));
+    parts.push("- tasksToRemove : [\"t1\", \"t3\"] — utilise les IDs courts (t1, t2, etc.) tels que fournis dans la liste des tâches".to_string());
+    parts.push(format!(r#"- tasksToUpdate : [{{"id": "t2", "name": "nouveau nom", "priority": "secondary", "scheduledDate": "{tomorrow}", "description": "notes..."}}] — chaque champ sauf id est optionnel"#));
+    parts.push(r#"- tagsToSet : [{"taskId": "t1", "tags": [{"label": "...", "color": "data"}]}] — couleurs : "crm", "data", "roadmap", "saas", "urgent". Inclure les tags existants + le nouveau pour ajouter."#.to_string());
+    parts.push(r#"- stepsToSet : [{"taskId": "t1", "steps": ["Étape 1", "Étape 2"]}] — attacher des micro-étapes à une tâche."#.to_string());
     parts.push("- prepComplete : true quand l'utilisateur confirme la fin de la préparation".to_string());
     parts.push(String::new());
     parts.push("STYLE DU CONTENU (content) — RESPECTE STRICTEMENT CE FORMAT :".to_string());
     parts.push("- INTERDIT : titres markdown (#, ##, ###). Jamais de headers.".to_string());
     parts.push("- Autorisé : **gras** pour les noms de tâches, listes numérotées (1. 2. 3.), \\n pour les sauts de ligne.".to_string());
-    parts.push("- Priorité entre crochets après le nom : [principal] ou [secondaire].".to_string());
-    parts.push("- Temps estimé entre parenthèses : (~20 minutes).".to_string());
+    parts.push("- Priorité entre crochets après le nom : [principal] ou [secondaire]. SAUF pour le reliquat : utilise ⚡ devant le nom si la tâche était prioritaire (priorité: main dans les données), sinon pas de label.".to_string());
+    parts.push("- Temps estimé entre parenthèses, format court : (~20 min). Pas \"minutes\" en entier.".to_string());
+    parts.push("- SCORES URGENCE/IMPORTANCE DANS LA LISTE : ne les affiche PAS systématiquement sur chaque tâche. Affiche-les UNIQUEMENT quand un score est notable (4/5 ou 5/5), format : [Urgence: 5/5]. N'affiche jamais les scores moyens (3/5 ou moins) dans la liste.".to_string());
+    parts.push("- Utilise les scores dans ton TEXTE d'analyse pour justifier tes suggestions, mais pas dans la liste des tâches.".to_string());
     parts.push("- Sections séparées par des phrases naturelles (ex: \"En reliquat des jours précédents, on a :\"), PAS par des titres markdown.".to_string());
     parts.push("- Ton conversationnel et chaleureux. Phrases courtes.".to_string());
     parts.push("- Utilise les labels de section exacts : \"Priorités du jour\", \"Aussi prévu\", \"En reliquat\".".to_string());
     parts.push("- Exemple de format attendu :".to_string());
-    parts.push(r#"  "Pour aujourd'hui, voici ce qui est déjà planifié :\n\n⚡ **Priorités du jour :**\n\n1. **Nom de la tâche** (~30 minutes)\n2. **Autre tâche**\n\n📋 **Aussi prévu :**\n\n1. **Tâche secondaire** (~20 minutes)\n\n⏳ **En reliquat** des jours précédents :\n\n1. **Tâche en retard** [principal]\n\nTu as 2 priorités sur 3 max. On regarde le reliquat ?""#.to_string());
+    parts.push(r#"  "Pour aujourd'hui, on peut structurer ta journée comme suit :\n\n⚡ **Priorités du jour :**\n\n1. **Nom de la tâche** [principal] (~30 min)\n2. **Autre tâche** [principal]\n\n📋 **Aussi prévu :**\n\n1. **Tâche secondaire** [secondaire] (~20 min)\n2. **Autre tâche** [secondaire]\n\n⏳ **En reliquat** des jours précédents :\n\n1. ⚡ **Tâche qui était prioritaire** (~25 min)\n2. **Tâche urgente** (~20 min) [Urgence: 5/5]\n3. **Autre tâche** (~15 min)\n\nTu as une tâche qui était déjà prioritaire hier. On la remet dans les priorités du jour ?""#.to_string());
 
-    parts.join("\n")
+    (parts.join("\n"), id_map)
 }
 
-fn parse_daily_prep_response(raw: &str) -> Result<DailyPrepResponse, String> {
+fn parse_daily_prep_response(raw: &str, id_map: &HashMap<String, String>) -> Result<DailyPrepResponse, String> {
+    eprintln!("[daily_prep] raw LLM response (first 500 chars): {}", &raw[..raw.len().min(500)]);
+
     let Some(parsed) = clean_and_find_json(raw) else {
+        eprintln!("[daily_prep] WARN: no JSON found in response");
         return Ok(DailyPrepResponse {
             content: raw.to_string(),
             tasks_to_add: vec![],
             tasks_to_remove: vec![],
             tasks_to_update: vec![],
             prep_complete: false,
+            tags_to_set: vec![],
+            steps_to_set: vec![],
         });
     };
 
     let content = parsed.get("content").and_then(|v| v.as_str()).unwrap_or(raw).to_string();
+    let content = strip_json_from_content(&content);
 
     let prep_complete = json_field(&parsed, "prepComplete", "prep_complete")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let tasks_to_add = parse_tasks_to_add(&parsed);
+    eprintln!("[daily_prep] tasksToAdd parsed: {:?}", tasks_to_add);
+
+    let tasks_to_remove: Vec<String> = parse_string_list(&parsed, "tasksToRemove", "tasks_to_remove")
+        .into_iter()
+        .map(|short| id_map.get(&short).cloned().unwrap_or(short))
+        .collect();
+    eprintln!("[daily_prep] tasksToRemove resolved: {:?}", tasks_to_remove);
+
+    let tasks_to_update: Vec<ChatTaskUpdate> = parse_tasks_to_update(&parsed)
+        .into_iter()
+        .map(|mut upd| {
+            if let Some(real) = id_map.get(&upd.id) {
+                upd.id = real.clone();
+            }
+            upd
+        })
+        .collect();
+    eprintln!("[daily_prep] tasksToUpdate resolved: {:?}", tasks_to_update);
+
+    let tags_to_set = parse_tags_to_set(&parsed, id_map);
+    if !tags_to_set.is_empty() {
+        eprintln!("[daily_prep] tagsToSet resolved: {:?}", tags_to_set);
+    }
+
+    let steps_to_set = parse_steps_to_set(&parsed, id_map);
+    if !steps_to_set.is_empty() {
+        eprintln!("[daily_prep] stepsToSet resolved: {:?}", steps_to_set);
+    }
+
     Ok(DailyPrepResponse {
         content,
-        tasks_to_add: parse_tasks_to_add(&parsed),
-        tasks_to_remove: parse_string_list(&parsed, "tasksToRemove", "tasks_to_remove"),
-        tasks_to_update: parse_tasks_to_update(&parsed),
+        tasks_to_add,
+        tasks_to_remove,
+        tasks_to_update,
         prep_complete,
+        tags_to_set,
+        steps_to_set,
     })
+}
+
+fn strip_json_from_content(content: &str) -> String {
+    let mut result = content.to_string();
+
+    // Strip ```json ... ``` code blocks containing JSON
+    while let Some(start) = result.find("```json") {
+        if let Some(end) = result[start + 7..].find("```") {
+            result = format!("{}{}", &result[..start], &result[start + 7 + end + 3..]);
+        } else {
+            result = result[..start].to_string();
+            break;
+        }
+    }
+    while let Some(start) = result.find("```\n{") {
+        if let Some(end) = result[start + 4..].find("```") {
+            result = format!("{}{}", &result[..start], &result[start + 4 + end + 3..]);
+        } else {
+            result = result[..start].to_string();
+            break;
+        }
+    }
+
+    // Strip trailing bare JSON objects that start with {"content"
+    if let Some(pos) = result.rfind("{\"content\"") {
+        if serde_json::from_str::<serde_json::Value>(&result[pos..]).is_ok() {
+            result = result[..pos].to_string();
+        }
+    }
+
+    result.trim().to_string()
 }
 
 #[tauri::command]
@@ -1311,24 +1632,24 @@ pub async fn send_daily_prep_message(
     user_message: String,
     history: String,
 ) -> Result<DailyPrepResponse, String> {
-    let (provider_id, api_key, model, system_prompt) = {
+    let (provider_id, api_key, model, system_prompt, id_map) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let (provider, model) = get_active_provider(&db)?;
-        let system = build_daily_prep_prompt(&db);
-        (provider.id, provider.api_key, model, system)
+        let (system, id_map) = build_daily_prep_prompt(&db);
+        (provider.id, provider.api_key, model, system, id_map)
     };
 
     let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
     let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
     msgs.push(("user".to_string(), user_message));
 
-    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs).await?;
-    parse_daily_prep_response(&raw)
+    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs, true).await?;
+    parse_daily_prep_response(&raw, &id_map)
 }
 
 // ── Weekly Prep ──
 
-fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
+fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, String>) {
     let now = chrono::Local::now();
     let today = now.format("%Y-%m-%d").to_string();
     let weekday = now.weekday().num_days_from_monday() as i64;
@@ -1391,6 +1712,11 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
         }
     }
 
+    let mut id_map: HashMap<String, String> = HashMap::new();
+    let mut id_counter = 1i32;
+    let tags_map = load_all_tags_map(db);
+    let empty_tags: Vec<Tag> = vec![];
+
     if let Ok(mut stmt) = db.prepare(
         "SELECT id, name, done, priority, estimated_minutes, urgency, importance FROM tasks WHERE view_context = 'week' ORDER BY position",
     ) {
@@ -1405,10 +1731,13 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
                 row.get::<_, Option<i32>>(6)?,
             ))
         }) {
-            let task_lines: Vec<String> = tasks
-                .filter_map(|r| r.ok())
+            let task_data: Vec<_> = tasks.filter_map(|r| r.ok()).collect();
+            let task_lines: Vec<String> = task_data
+                .into_iter()
                 .map(|(id, name, done, pri, est, urg, imp)| {
-                    format_task_line(&id, &name, done, pri.as_deref(), est, None, urg, imp)
+                    let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                    let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                    format_task_line(&short, &name, done, pri.as_deref(), est, None, urg, imp, task_tags)
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -1434,10 +1763,13 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
                 row.get::<_, Option<i32>>(7)?,
             ))
         }) {
-            let task_lines: Vec<String> = tasks
-                .filter_map(|r| r.ok())
+            let task_data: Vec<_> = tasks.filter_map(|r| r.ok()).collect();
+            let task_lines: Vec<String> = task_data
+                .into_iter()
                 .map(|(id, name, done, pri, est, sched, urg, imp)| {
-                    format_task_line(&id, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp)
+                    let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                    let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                    format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -1465,10 +1797,13 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
                 row.get::<_, Option<i32>>(6)?,
             ))
         }) {
-            let overdue_lines: Vec<String> = overdue
-                .filter_map(|r| r.ok())
+            let overdue_data: Vec<_> = overdue.filter_map(|r| r.ok()).collect();
+            let overdue_lines: Vec<String> = overdue_data
+                .into_iter()
                 .map(|(id, name, pri, est, sched, urg, imp)| {
-                    format_task_line(&id, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp)
+                    let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                    let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                    format_task_line(&short, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
                 })
                 .collect();
             if !overdue_lines.is_empty() {
@@ -1480,17 +1815,17 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> String {
         }
     }
 
-    parts.push("FORMAT DE RÉPONSE :".to_string());
-    parts.push("Réponds UNIQUEMENT en JSON valide :".to_string());
-    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "prepComplete": false}"#.to_string());
-    parts.push("- content : ton message textuel (pas de markdown, utilise \\n pour les paragraphes)".to_string());
-    parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{monday_str}"}}]"#));
-    parts.push("- tasksToRemove : [\"id1\", \"id2\"] — vide si rien à supprimer".to_string());
-    parts.push(format!(r#"- tasksToUpdate : [{{"id": "...", "priority": "secondary", "scheduledDate": "{next_monday_str}"}}]"#));
+    parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
+    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
+    parts.push("- content : ton message texte. N'INCLUS JAMAIS le JSON dans le content. Pas de blocs de code JSON dans le content.".to_string());
+    parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{monday_str}", "urgency": 4, "importance": 3, "tags": [{{"label": "CRM", "color": "crm"}}]}}] — urgency, importance et tags sont optionnels."#));
+    parts.push("- tasksToRemove : [\"t1\", \"t3\"] — utilise les IDs courts tels que fournis dans la liste".to_string());
+    parts.push(format!(r#"- tasksToUpdate : [{{"id": "t2", "priority": "secondary", "scheduledDate": "{next_monday_str}", "description": "notes..."}}]"#));
+    parts.push(r#"- tagsToSet : [{"taskId": "t1", "tags": [{"label": "...", "color": "data"}]}] — couleurs : "crm", "data", "roadmap", "saas", "urgent""#.to_string());
+    parts.push(r#"- stepsToSet : [{"taskId": "t1", "steps": ["Étape 1", "Étape 2"]}] — attacher des micro-étapes"#.to_string());
     parts.push("- prepComplete : true UNIQUEMENT quand l'utilisateur confirme que la préparation est terminée".to_string());
-    parts.push("- Pas de texte avant ou après le JSON".to_string());
 
-    parts.join("\n")
+    (parts.join("\n"), id_map)
 }
 
 #[tauri::command]
@@ -1499,19 +1834,19 @@ pub async fn send_weekly_prep_message(
     user_message: String,
     history: String,
 ) -> Result<DailyPrepResponse, String> {
-    let (provider_id, api_key, model, system_prompt) = {
+    let (provider_id, api_key, model, system_prompt, id_map) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let (provider, model) = get_active_provider(&db)?;
-        let system = build_weekly_prep_prompt(&db);
-        (provider.id, provider.api_key, model, system)
+        let (system, id_map) = build_weekly_prep_prompt(&db);
+        (provider.id, provider.api_key, model, system, id_map)
     };
 
     let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
     let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
     msgs.push(("user".to_string(), user_message));
 
-    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs).await?;
-    parse_daily_prep_response(&raw)
+    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs, true).await?;
+    parse_daily_prep_response(&raw, &id_map)
 }
 
 // ── Onboarding ──
@@ -1639,7 +1974,7 @@ pub async fn send_onboarding_message(
     let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
     msgs.push(("user".to_string(), user_message));
 
-    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs).await?;
+    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs, true).await?;
     parse_onboarding_response(&raw)
 }
 
@@ -1736,7 +2071,7 @@ pub async fn analyze_profile_url(
     );
 
     let msgs = vec![("user".to_string(), prompt)];
-    let summary = call_llm(&provider_id, &api_key, &model, system, msgs).await?;
+    let summary = call_llm(&provider_id, &api_key, &model, system, msgs, false).await?;
 
     Ok(ProfileAnalysis {
         summary: summary.trim().to_string(),

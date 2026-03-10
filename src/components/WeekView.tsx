@@ -21,7 +21,7 @@ import {
 import PrepBanner from "./PrepBanner";
 import SortableTaskItem from "./SortableTaskItem";
 import TaskItem from "./TaskItem";
-import type { Task, MicroStep, WeekDayId } from "../types";
+import type { Task, MicroStep, Tag, WeekDayId } from "../types";
 import {
   getTasks as fetchTasks,
   getTasksByDateRange,
@@ -32,6 +32,7 @@ import {
   deleteTask as deleteTaskSvc,
   reorderTasks as reorderTasksSvc,
   setMicroSteps,
+  setTaskTags,
 } from "../services/tasks";
 import { decomposeTask } from "../services/chat";
 import { getSetting, setSetting } from "../services/settings";
@@ -277,6 +278,17 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
   const dayMainTasks = allDayTasks.filter((t) => t.priority === "main");
   const daySecTasks = allDayTasks.filter((t) => t.priority !== "main");
 
+  const sortedOverdueTasks = useMemo(() => {
+    return [...overdueTasks].sort((a, b) => {
+      const aMain = a.priority === "main" ? 1 : 0;
+      const bMain = b.priority === "main" ? 1 : 0;
+      if (aMain !== bMain) return bMain - aMain;
+      const aScore = Math.max(a.urgency ?? 0, a.importance ?? 0);
+      const bScore = Math.max(b.urgency ?? 0, b.importance ?? 0);
+      return bScore - aScore;
+    });
+  }, [overdueTasks]);
+
   const prioritiesDone = isWeekMode ? weekMainTasks.filter((t) => t.done).length : dayMainTasks.filter((t) => t.done).length;
   const secondaryDone = isWeekMode ? weekSecTasks.filter((t) => t.done).length : daySecTasks.filter((t) => t.done).length;
   const dayPriorityOverflow = !isWeekMode && dayMainTasks.length > dailyPriorityCount;
@@ -341,6 +353,11 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
   function setPriority(id: string, field: "urgency" | "importance", value: number | undefined) {
     updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
     updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) => console.error("[WeekView] setPriority error:", err));
+  }
+
+  function setTagsOnTask(id: string, tags: Tag[]) {
+    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, tags } : t)));
+    setTaskTags(id, tags).catch((err) => console.error("[WeekView] setTaskTags error:", err));
   }
 
   function renameTask(id: string, name: string) {
@@ -681,6 +698,10 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     if (task && onStuck) onStuck(taskId, task.name);
   }, [scheduledTasks, overdueTasks, onStuck]);
 
+  const handleTaskUpdated = useCallback((updated: Task) => {
+    updateTaskState((prev) => prev.map((t) => t.id === updated.id ? { ...t, ...updated } : t));
+  }, []);
+
   const taskCallbacks = {
     onToggle: toggleTask,
     onToggleStep: toggleStep,
@@ -695,6 +716,8 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     onRename: renameTask,
     onSetScheduledDate: setScheduledDate,
     onSetPriority: setPriority,
+    onSetTags: setTagsOnTask,
+    onTaskUpdated: handleTaskUpdated,
   };
 
   const dismissPrep = useCallback(() => {
@@ -831,21 +854,21 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
           </>
         )}
 
-        {overdueTasks.length > 0 && (
+        {sortedOverdueTasks.length > 0 && (
           <>
             <div className={`${styles.sectionHeader} ${styles.overdueHeader}`}>
               <span className={`${styles.sectionTitle} ${styles.overdueTitle}`}>
                 <span className={styles.priorityIcon}>📋</span>
                 Reliquat de la semaine passée
               </span>
-              <span className={styles.sectionCount}>{overdueTasks.length}</span>
+              <span className={styles.sectionCount}>{sortedOverdueTasks.length}</span>
             </div>
-            <SortableContext items={overdueTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={sortedOverdueTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <div className={styles.taskList}>
-                {overdueTasks.map((task, i) => (
+                {sortedOverdueTasks.map((task, i) => (
                   <SortableTaskItem key={task.id} task={task} {...taskCallbacks}
                     isDecomposing={decomposingId === task.id} decomposingStepId={getDecomposingStepId(task.id)}
-                    animDelay={0.16 + i * 0.04} isSecondary />
+                    animDelay={0.16 + i * 0.04} isSecondary isOverdue />
                 ))}
               </div>
             </SortableContext>

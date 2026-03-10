@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { Task } from "../types";
+import type { Task, Tag } from "../types";
 import TodoItemRow from "./TodoItemRow";
-import { getAllTasks, createTask, toggleTask as toggleTaskSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, reorderTasks } from "../services/tasks";
+import TaskDetailModal from "./TaskDetailModal";
+import { getAllTasks, createTask, toggleTask as toggleTaskSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, reorderTasks, setTaskTags } from "../services/tasks";
 import styles from "./TodoView.module.css";
 
 type Filter = "all" | "done" | "ai" | "prioritized" | "unscheduled";
@@ -30,6 +31,7 @@ export default function TodoView() {
   const [editText, setEditText] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -201,6 +203,12 @@ export default function TodoView() {
     { key: "done", label: `Terminés (${totalDone})` },
   ];
 
+  const handleTaskUpdated = useCallback((updated: Task) => {
+    setTasks((prev) => prev.map((t) => t.id === updated.id ? { ...t, ...updated } : t));
+  }, []);
+
+  const detailTask = detailTaskId ? tasks.find((t) => t.id === detailTaskId) : null;
+
   const renderTaskList = (items: Task[]) => (
     <div className={styles.todoList}>
       {items.map((task) => (
@@ -227,6 +235,7 @@ export default function TodoView() {
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onDragEnd={handleDragEnd}
+          onOpenDetail={setDetailTaskId}
         />
       ))}
     </div>
@@ -330,6 +339,26 @@ export default function TodoView() {
           renderTaskList(filtered)
         )}
       </div>
+
+      {detailTask && (
+        <TaskDetailModal
+          task={detailTask}
+          onClose={() => setDetailTaskId(null)}
+          onToggle={toggleDone}
+          onRename={(id, name) => {
+            setTasks((prev) => prev.map((t) => t.id === id ? { ...t, name } : t));
+            updateTaskSvc({ id, name }).catch(() => {});
+          }}
+          onSetPriority={setPriority}
+          onSetScheduledDate={setScheduledDate}
+          onDelete={(id) => { deleteItem(id); setDetailTaskId(null); }}
+          onSetTags={(id: string, tags: Tag[]) => {
+            setTasks((prev) => prev.map((t) => t.id === id ? { ...t, tags } : t));
+            setTaskTags(id, tags).catch(() => {});
+          }}
+          onTaskUpdated={handleTaskUpdated}
+        />
+      )}
     </div>
   );
 }

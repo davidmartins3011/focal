@@ -48,15 +48,16 @@ fn load_tasks(db: &rusqlite::Connection, ids: &[String]) -> Result<Vec<Task>, St
 }
 
 fn load_task(db: &rusqlite::Connection, task_id: &str) -> Result<Task, String> {
-    let (id, name, done, est, pri, ai, sched, urg, imp): (String, String, bool, Option<i32>, Option<String>, bool, Option<String>, Option<i32>, Option<i32>) = db
+    let (id, name, done, est, pri, ai, sched, urg, imp, desc, created): (String, String, bool, Option<i32>, Option<String>, bool, Option<String>, Option<i32>, Option<i32>, Option<String>, Option<String>) = db
         .query_row(
-            "SELECT id, name, done, estimated_minutes, priority, ai_decomposed, scheduled_date, urgency, importance FROM tasks WHERE id = ?1",
+            "SELECT id, name, done, estimated_minutes, priority, ai_decomposed, scheduled_date, urgency, importance, description, created_at FROM tasks WHERE id = ?1",
             params![task_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?)),
         )
         .map_err(|e| e.to_string())?;
     let tags = load_tags(db, &id)?;
     let steps = load_steps(db, &id)?;
+    let description = desc.filter(|d| !d.is_empty());
     Ok(Task {
         id,
         name,
@@ -69,6 +70,8 @@ fn load_task(db: &rusqlite::Connection, task_id: &str) -> Result<Task, String> {
         scheduled_date: sched,
         urgency: urg,
         importance: imp,
+        description,
+        created_at: created,
     })
 }
 
@@ -170,10 +173,14 @@ pub fn create_task(
     tags: Option<Vec<Tag>>,
     estimated_minutes: Option<i32>,
     scheduled_date: Option<String>,
+    urgency: Option<i32>,
+    importance: Option<i32>,
 ) -> Result<Task, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let ctx = context.as_deref().unwrap_or("today");
+    let urg = urgency.unwrap_or(3);
+    let imp = importance.unwrap_or(3);
     let max_pos: i32 = db
         .query_row(
             "SELECT COALESCE(MAX(position), -1) FROM tasks WHERE view_context = ?1",
@@ -182,8 +189,8 @@ pub fn create_task(
         )
         .map_err(|e| e.to_string())?;
     db.execute(
-        "INSERT INTO tasks (id, name, done, estimated_minutes, priority, ai_decomposed, view_context, scheduled_date, position, urgency, importance) VALUES (?1,?2,0,?3,?4,0,?5,?6,?7,3,3)",
-        params![id, name, estimated_minutes, priority, ctx, scheduled_date, max_pos + 1],
+        "INSERT INTO tasks (id, name, done, estimated_minutes, priority, ai_decomposed, view_context, scheduled_date, position, urgency, importance) VALUES (?1,?2,0,?3,?4,0,?5,?6,?7,?8,?9)",
+        params![id, name, estimated_minutes, priority, ctx, scheduled_date, max_pos + 1, urg, imp],
     )
     .map_err(|e| e.to_string())?;
     if let Some(tag_list) = &tags {
@@ -211,6 +218,7 @@ pub fn update_task(
     urgency: Option<i32>,
     importance: Option<i32>,
     view_context: Option<String>,
+    description: Option<String>,
 ) -> Result<Task, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     if let Some(v) = &name {
@@ -252,7 +260,58 @@ pub fn update_task(
         db.execute("UPDATE tasks SET view_context = ?1 WHERE id = ?2", params![v, id])
             .map_err(|e| e.to_string())?;
     }
+    if let Some(v) = &description {
+        db.execute("UPDATE tasks SET description = ?1 WHERE id = ?2", params![v, id])
+            .map_err(|e| e.to_string())?;
+    }
     load_task(&db, &id)
+}
+
+#[tauri::command]
+pub fn get_all_tags(state: State<'_, AppState>) -> Result<Vec<Tag>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = db
+        .prepare(
+            "SELECT label, color FROM task_tags \
+             GROUP BY label, color \
+             ORDER BY MAX(rowid) DESC"
+        )
+        .map_err(|e| e.to_string())?;
+    let tags = stmt
+        .query_map([], |row| {
+            Ok(Tag {
+                label: row.get(0)?,
+                color: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(tags)
+}
+
+#[tauri::command]
+pub fn set_task_tags(
+    state: State<'_, AppState>,
+    task_id: String,
+    tags: Vec<Tag>,
+) -> Result<Task, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute("DELETE FROM task_tags WHERE task_id = ?1", params![task_id])
+        .map_err(|e| e.to_string())?;
+    let mut seen = std::collections::HashSet::new();
+    let mut pos = 0i32;
+    for tag in &tags {
+        let key = tag.label.to_lowercase();
+        if !seen.insert(key) { continue; }
+        db.execute(
+            "INSERT INTO task_tags (task_id, label, color, position) VALUES (?1,?2,?3,?4)",
+            params![task_id, tag.label, tag.color, pos],
+        )
+        .map_err(|e| e.to_string())?;
+        pos += 1;
+    }
+    load_task(&db, &task_id)
 }
 
 #[tauri::command]

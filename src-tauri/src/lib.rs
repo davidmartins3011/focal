@@ -48,6 +48,8 @@ pub fn run() {
             commands::tasks::clear_all_tasks,
             commands::tasks::clear_today_tasks,
             commands::tasks::reorder_tasks,
+            commands::tasks::get_all_tags,
+            commands::tasks::set_task_tags,
             commands::tasks::set_micro_steps,
             commands::tasks::toggle_micro_step,
             commands::tasks::get_streak,

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   DndContext,
   closestCenter,
@@ -22,8 +22,8 @@ import FocusTimer from "./FocusTimer";
 import ProgressBar from "./ProgressBar";
 import SortableTaskItem from "./SortableTaskItem";
 import TaskItem from "./TaskItem";
-import type { Task, MicroStep } from "../types";
-import { getTasks as fetchTasks, getOverdueTasks, toggleTask as toggleTaskSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, setMicroSteps, getStreak } from "../services/tasks";
+import type { Task, MicroStep, Tag } from "../types";
+import { getTasks as fetchTasks, getOverdueTasks, toggleTask as toggleTaskSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, setMicroSteps, setTaskTags, getStreak } from "../services/tasks";
 import { decomposeTask } from "../services/chat";
 import { getSetting, setSetting } from "../services/settings";
 import styles from "./TodayView.module.css";
@@ -61,6 +61,16 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
   const [timerTaskId, setTimerTaskId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
+  const [dayKey, setDayKey] = useState(() => new Date().toISOString().slice(0, 10));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date().toISOString().slice(0, 10);
+      if (now !== dayKey) setDayKey(now);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [dayKey]);
+
   useEffect(() => {
     fetchTasks("today")
       .then((fetched) => {
@@ -84,7 +94,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
     getSetting(todayKey())
       .then((val) => setPrepDone(val === "done"))
       .catch(() => {});
-  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [refreshKey, dayKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setTasks((prev) => {
@@ -106,6 +116,17 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
   const doneCount = tasks.filter((t) => t.done).length;
   const mainDoneCount = mainTasks.filter((t) => t.done).length;
   const secondaryDoneCount = secondaryTasks.filter((t) => t.done).length;
+
+  const sortedOverdueTasks = useMemo(() => {
+    return [...overdueTasks].sort((a, b) => {
+      const aMain = a.priority === "main" ? 1 : 0;
+      const bMain = b.priority === "main" ? 1 : 0;
+      if (aMain !== bMain) return bMain - aMain;
+      const aScore = Math.max(a.urgency ?? 0, a.importance ?? 0);
+      const bScore = Math.max(b.urgency ?? 0, b.importance ?? 0);
+      return bScore - aScore;
+    });
+  }, [overdueTasks]);
 
   const defaultFocusId = mainTasks.find((t) => !t.done && t.estimatedMinutes)?.id ?? null;
   const effectiveSelectedId = selectedTaskId ?? defaultFocusId;
@@ -138,6 +159,11 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
   function setPriority(id: string, field: "urgency" | "importance", value: number | undefined) {
     updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
     updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) => console.error("[TodayView] setPriority error:", err));
+  }
+
+  function setTagsOnTask(id: string, tags: Tag[]) {
+    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, tags } : t)));
+    setTaskTags(id, tags).catch((err) => console.error("[TodayView] setTaskTags error:", err));
   }
 
   function setScheduledDate(id: string, date: string | undefined) {
@@ -399,6 +425,10 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
     if (task && onStuck) onStuck(taskId, task.name);
   }, [tasks, overdueTasks, onStuck]);
 
+  const handleTaskUpdated = useCallback((updated: Task) => {
+    updateTaskState((prev) => prev.map((t) => t.id === updated.id ? { ...t, ...updated } : t));
+  }, []);
+
   const taskCallbacks = {
     onToggle: toggleTask,
     onToggleStep: toggleStep,
@@ -413,6 +443,8 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
     onRename: renameTask,
     onSetScheduledDate: setScheduledDate,
     onSetPriority: setPriority,
+    onSetTags: setTagsOnTask,
+    onTaskUpdated: handleTaskUpdated,
   };
 
   const dismissPrep = useCallback(() => {
@@ -525,7 +557,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
           </>
         )}
 
-        {overdueTasks.length > 0 && (
+        {sortedOverdueTasks.length > 0 && (
           <>
             <div className={`${styles.sectionHeader} ${styles.overdueHeader}`}>
               <span className={`${styles.sectionTitle} ${styles.overdueTitle}`}>
@@ -533,13 +565,13 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
                 Reliquat des jours précédents
               </span>
               <span className={styles.sectionCount}>
-                {overdueTasks.length}
+                {sortedOverdueTasks.length}
               </span>
             </div>
 
-            <SortableContext items={overdueTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={sortedOverdueTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <div className={styles.taskList}>
-                {overdueTasks.map((task, i) => (
+                {sortedOverdueTasks.map((task, i) => (
                   <SortableTaskItem
                     key={task.id}
                     task={task}
@@ -548,6 +580,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
                     decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.16 + i * 0.04}
                     isSecondary
+                    isOverdue
                   />
                 ))}
               </div>
