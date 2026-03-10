@@ -157,9 +157,10 @@ interface ChatPanelProps {
   stuckTask?: StuckTaskInfo | null;
   onStuckConsumed?: () => void;
   onTasksChanged?: () => void;
+  onViewSwitch?: (tab: "today" | "week") => void;
 }
 
-export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, stuckTask, onStuckConsumed, onTasksChanged }: ChatPanelProps) {
+export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, stuckTask, onStuckConsumed, onTasksChanged, onViewSwitch }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -508,6 +509,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     pendingPrepExit.current = null;
     prepHistory.current = [];
     textareaRef.current?.focus();
+    onViewSwitch?.("today");
     const greetings = [
       "C'est parti ! Préparons la journée ensemble.",
       "Salut ! On organise ta journée ?",
@@ -522,7 +524,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     ];
     const greeting = greetings[Math.floor(Math.random() * greetings.length)];
     sendPrepMessage(greeting, "daily");
-  }, [isTyping, sendPrepMessage]);
+  }, [isTyping, sendPrepMessage, onViewSwitch]);
 
   const startWeeklyPrep = useCallback(() => {
     if (isTyping) return;
@@ -531,8 +533,9 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     pendingPrepExit.current = null;
     prepHistory.current = [];
     textareaRef.current?.focus();
+    onViewSwitch?.("week");
     sendPrepMessage("C'est parti ! Fais-moi un résumé de ce qui est prévu pour cette semaine, et on organise ensemble.", "weekly");
-  }, [isTyping, sendPrepMessage]);
+  }, [isTyping, sendPrepMessage, onViewSwitch]);
 
   useEffect(() => {
     if (!dailyPrepPending) return;

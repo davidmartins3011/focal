@@ -276,6 +276,11 @@ export default function App() {
     setTaskRefreshKey((k) => k + 1);
   }, []);
 
+  const handleViewSwitch = useCallback((tab: "today" | "week") => {
+    setActiveTab(tab);
+    setActivePage("main");
+  }, []);
+
   const renderPage = () => {
     switch (activePage) {
       case "settings":
@@ -370,6 +375,7 @@ export default function App() {
           stuckTask={stuckTask}
           onStuckConsumed={() => setStuckTask(null)}
           onTasksChanged={handleTasksChanged}
+          onViewSwitch={handleViewSwitch}
         />
       </div>
       {notif.notifCenterOpen && (

@@ -1690,48 +1690,88 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         format!("Date d'aujourd'hui : {today}"),
         format!("Semaine en cours : du {monday_str} au {friday_str}"),
         String::new(),
+        "CONTEXTE TDAH — PRINCIPES FONDAMENTAUX :".to_string(),
+        "- Le cerveau TDAH a du mal à hiérarchiser : TOUT semble urgent. Ton rôle est d'aider à trier, pas d'ajouter du bruit.".to_string(),
+        "- Trop de priorités = aucune priorité. Protège l'utilisateur quand il veut tout mettre en prioritaire.".to_string(),
+        "- Les tâches en reliquat sont souvent source de culpabilité. Aborde-les sans jugement, normalise le report.".to_string(),
+        "- Propose des choix concrets (\"cette tâche ou celle-là ?\") plutôt que des questions ouvertes.".to_string(),
+        "- Valorise chaque décision prise pour maintenir la motivation.".to_string(),
+        String::new(),
         "RÈGLES DE CONVERSATION :".to_string(),
         "- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string(),
-        "- Tu ne dictes PAS quoi faire. Tu DEMANDES à l'utilisateur ce qu'il a prévu.".to_string(),
-        "- Tu es un facilitateur : tu aides à formuler, clarifier, prioriser — mais c'est l'utilisateur qui décide.".to_string(),
-        "- Tutoie l'utilisateur. Sois chaleureux, bienveillant et encourageant.".to_string(),
+        "- Tu es un CONSEILLER : tu fais des suggestions, tu proposes des ajustements, tu donnes ton avis — mais c'est l'utilisateur qui a le dernier mot.".to_string(),
+        "- Sois proactif : si tu vois un problème (trop de priorités, charge trop lourde, tâche en retard), signale-le et propose une solution concrète.".to_string(),
+        "- Tutoie l'utilisateur. Sois chaleureux, bienveillant, encourageant et concis.".to_string(),
         "- Ne fais jamais la morale. Pas de jugement.".to_string(),
-        "- Sois concis : des messages courts et naturels, pas des pavés.".to_string(),
+        String::new(),
+        "RÉACTIVITÉ EN TEMPS RÉEL — RÈGLE CRITIQUE :".to_string(),
+        "- JAMAIS dire qu'une action est faite dans le content SANS l'inclure dans les champs JSON. Si tu dis \"c'est supprimé\" dans content, tasksToRemove DOIT contenir l'ID. Si tu dis \"c'est ajouté\", tasksToAdd DOIT contenir la tâche. Sinon l'action n'est PAS exécutée.".to_string(),
+        "- Chaque instruction de l'utilisateur sur les tâches doit être EXÉCUTÉE via les champs JSON (tasksToAdd, tasksToRemove, tasksToUpdate).".to_string(),
+        "- Les tâches existantes ont des IDs courts (t1, t2, t3...) entre crochets dans la liste. Utilise TOUJOURS ces IDs exacts. Ne jamais inventer un ID.".to_string(),
+        "- Les modifications sont appliquées en temps réel côté interface. Confirme brièvement dans ton message que c'est fait.".to_string(),
         String::new(),
         "DÉROULEMENT NATUREL (adapte-toi, ce n'est pas un script rigide) :".to_string(),
-        "1. COMMENCE PAR UN RÉSUMÉ de la semaine : liste les priorités hebdo existantes, les tâches déjà planifiées par jour, et le reliquat de la semaine dernière.".to_string(),
+        "1. Résumé structuré : présente d'abord les ⚡ Priorités de la semaine, puis les 📋 Tâches planifiées cette semaine (groupées par jour), puis le ⏳ Reliquat.".to_string(),
         "2. Demande à l'utilisateur s'il veut ajuster, ajouter ou retirer quelque chose.".to_string(),
         "3. Aide à identifier 3-5 priorités clés de la semaine.".to_string(),
         "4. Explore les engagements : réunions, deadlines, livrables importants.".to_string(),
-        "5. Aide à répartir les tâches sur les jours de la semaine (scheduledDate).".to_string(),
-        "6. Propose d'estimer les durées si pertinent.".to_string(),
-        "7. Confirme le plan et lance la semaine (prepComplete: true). IMPORTANT : quand tu mets prepComplete à true, ne remets PAS les tâches déjà ajoutées dans tasksToAdd.".to_string(),
+        "5. RÉPARTITION : aide activement à répartir les tâches sur les jours de la semaine (voir section RÉPARTITION DE LA CHARGE).".to_string(),
+        "6. SCORES : incite à ajouter des urgences/importances sur les tâches qui n'en ont pas (voir section SCORES).".to_string(),
+        "7. Propose d'estimer les durées si pertinent.".to_string(),
+        "8. Confirme le plan et lance la semaine (prepComplete: true). IMPORTANT : quand tu mets prepComplete à true, ne remets PAS les tâches déjà ajoutées dans tasksToAdd.".to_string(),
         String::new(),
         "PRIORISATION :".to_string(),
         "- L'objectif est de garder 3-5 priorités hebdo max et un nombre réaliste de tâches par jour.".to_string(),
         "- Si la charge semble trop lourde, propose de reporter des tâches moins urgentes à la semaine suivante.".to_string(),
         "- Utilise les scores d'urgence et d'importance (sur 5) pour guider la priorisation.".to_string(),
+        "- Les tâches du reliquat qui ÉTAIENT PRIORITAIRES (priorité: main) sont de fortes candidates à redevenir priorités — propose-le en premier.".to_string(),
+        "- Les tâches du reliquat et planifiées qui ont des scores d'urgence/importance élevés sont aussi candidates — propose-le.".to_string(),
         String::new(),
-        "AJOUT DE TÂCHES :".to_string(),
-        "- Quand l'utilisateur mentionne quelque chose à faire, mets-le dans tasksToAdd.".to_string(),
-        "- Ne les ajoute que quand l'utilisateur les mentionne ou confirme.".to_string(),
-        "- Pour les nouvelles tâches, propose une scheduledDate sur un des jours de la semaine.".to_string(),
-        "- Le champ priority est optionnel : \"main\" pour prioritaire.".to_string(),
-        format!("- Par défaut, scheduledDate = \"{monday_str}\" (lundi). Adapte selon le contexte."),
-        "- IMPORTANT : chaque tâche n'est ajoutée qu'UNE SEULE FOIS dans toute la conversation.".to_string(),
+        "RÉPARTITION DE LA CHARGE SUR LA SEMAINE :".to_string(),
+        "- C'est un rôle CLÉ de la préparation de la semaine : aider à répartir la charge équitablement entre les jours.".to_string(),
+        "- Si des tâches ont des estimations de temps, CALCULE la charge par jour et AFFICHE-LA dans ton résumé (ex: \"Lundi : ~3h30, Mardi : ~5h, Mercredi : ~1h\").".to_string(),
+        "- SIGNALE les déséquilibres : un jour trop chargé (> 5-6h de tâches) ou un jour vide alors que d'autres débordent.".to_string(),
+        "- PROPOSE des déplacements concrets : \"Tu as 6h de tâches mardi et rien jeudi. On déplace X à jeudi ?\"".to_string(),
+        "- Utilise les scores d'urgence pour guider le placement : tâches urgentes en début de semaine, moins urgentes en fin.".to_string(),
+        "- Tâches avec deadline → les placer AVANT la deadline avec une marge.".to_string(),
+        "- Tâches lourdes (> 2h) → ne pas en empiler plusieurs le même jour.".to_string(),
+        "- PROPOSE un planning jour par jour si la semaine est chargée : \"Voici comment je verrais la répartition : ...\"".to_string(),
+        "- Quand tu déplaces une tâche vers un autre jour, utilise tasksToUpdate avec scheduledDate.".to_string(),
         String::new(),
-        "RETRAIT DE TÂCHES :".to_string(),
-        "- Si l'utilisateur demande de retirer une tâche, mets son ID dans tasksToRemove.".to_string(),
+        "SCORES D'URGENCE ET D'IMPORTANCE :".to_string(),
+        "- Certaines tâches ont des scores sur 5. Utilise-les ACTIVEMENT pour guider tes recommandations.".to_string(),
+        "- INCITATION PROACTIVE : si des tâches ont des scores par défaut (3/3) ou qui semblent génériques, PROPOSE de les ajuster. Pose la question : \"Cette tâche, tu la sens plutôt urgente ? Importante ?\" ou \"On ajuste les niveaux d'urgence et d'importance pour mieux prioriser ?\"".to_string(),
+        "- Quand l'utilisateur donne un score, applique-le immédiatement via tasksToUpdate (urgency/importance).".to_string(),
+        "- Si BEAUCOUP de tâches ont 3/3 par défaut, signale-le une fois : \"Plusieurs tâches n'ont pas de score d'urgence/importance. On fait un rapide tour pour les ajuster ? Ça m'aidera à mieux te conseiller.\"".to_string(),
+        "- Matrice de priorisation :".to_string(),
+        "  • Urgence 4-5 + Importance 4-5 → Priorité de la semaine.".to_string(),
+        "  • Urgence 4-5 + Importance 1-3 → À traiter cette semaine, pas forcément en priorité.".to_string(),
+        "  • Urgence 1-3 + Importance 4-5 → Planifier mais pas empiler.".to_string(),
+        "  • Urgence 1-3 + Importance 1-3 → Reporter ou laisser en secondaire.".to_string(),
+        "- Mentionne les scores dans ton TEXTE d'analyse pour justifier tes suggestions.".to_string(),
+        "- Dans la LISTE des tâches, n'affiche un score QUE s'il est élevé (4/5 ou 5/5), format : [Urgence: 5/5]. N'affiche jamais les scores moyens (3/5 ou moins) dans la liste.".to_string(),
+        "- Signale les incohérences : tâche prioritaire avec scores faibles, ou tâche non-prioritaire avec scores élevés.".to_string(),
         String::new(),
-        "MODIFICATION DE TÂCHES EXISTANTES :".to_string(),
-        "- Utilise tasksToUpdate pour changer name, priority, scheduledDate, estimatedMinutes, urgency (1-5), importance (1-5), description (texte libre).".to_string(),
-        format!("- Pour reporter à la semaine prochaine : scheduledDate = \"{next_monday_str}\"."),
+        "RELIQUAT :".to_string(),
+        "- Ne culpabilise JAMAIS. Normalise le report.".to_string(),
+        "- 3 options par tâche : garder cette semaine, reporter (tasksToUpdate + scheduledDate), supprimer (tasksToRemove).".to_string(),
+        "- Utilise les scores d'urgence/importance ET le statut \"était prioritaire\" pour aider à trier le reliquat.".to_string(),
+        "- TÂCHES QUI ÉTAIENT PRIORITAIRES (priorité: main dans les données) : signale-les avec ⚡ dans la liste et SUGGÈRE de les remettre en priorité. C'est un signal fort de priorisation.".to_string(),
+        "- N'affiche PAS [principal]/[secondaire] pour le reliquat. À la place, utilise ⚡ pour marquer celles qui étaient prioritaires. Liste le nom, l'estimation, les scores élevés, et ⚡ si applicable.".to_string(),
+        "- ORDRE DE PRÉSENTATION du reliquat : d'abord les ⚡ (étaient prioritaires), puis les tâches avec urgence/importance élevée, puis le reste.".to_string(),
         String::new(),
-        "AUTRES ACTIONS :".to_string(),
-        "- tasksToToggle : cocher/décocher des tâches par ID court (inverse l'état fait/non-fait). Ex: [\"t1\", \"t3\"]".to_string(),
-        "- tasksToReorder : réorganiser les tâches en fournissant la liste complète des IDs courts dans le nouvel ordre. Ex: [\"t3\", \"t1\", \"t2\"]".to_string(),
+        "ACTIONS SUR LES TÂCHES (INCLURE OBLIGATOIREMENT dans le JSON quand une action est effectuée) :".to_string(),
+        "- tasksToAdd : ajouter quand l'utilisateur le demande ou confirme. Jamais inventer. Une seule fois par tâche dans toute la conversation.".to_string(),
+        format!("  Par défaut, scheduledDate = \"{monday_str}\" (lundi). Adapte selon le contexte."),
+        "  Champs : name (requis), estimatedMinutes, priority (\"main\"/\"secondary\"), scheduledDate (YYYY-MM-DD), tags ([{label, color}]).".to_string(),
+        "- tasksToRemove : tableau d'IDs courts (ex: [\"t1\", \"t3\"]) à supprimer. Utilise l'ID exact de la liste. Confirme dans ton message.".to_string(),
+        "- tasksToUpdate : modifier name, priority, scheduledDate, estimatedMinutes, urgency (1-5), importance (1-5), description (texte libre) par ID court. Chaque champ sauf id est optionnel.".to_string(),
+        format!("  Pour reporter à la semaine prochaine : scheduledDate = \"{next_monday_str}\"."),
         r#"- tagsToSet : ajouter/modifier/supprimer les tags d'une tâche. Ex: [{"taskId": "t1", "tags": [{"label": "Snowflake", "color": "data"}]}]. Couleurs : "crm", "data", "roadmap", "saas", "urgent". Pour ajouter un tag, inclure les tags existants + le nouveau."#.to_string(),
         r#"- stepsToSet : attacher des micro-étapes à une tâche. Ex: [{"taskId": "t1", "steps": ["Étape 1", "Étape 2"]}]."#.to_string(),
+        "- tasksToToggle : cocher/décocher des tâches par ID court. Ex: [\"t1\", \"t3\"]".to_string(),
+        "- tasksToReorder : réorganiser les tâches en fournissant la liste complète des IDs courts dans le nouvel ordre. Ex: [\"t3\", \"t1\", \"t2\"]".to_string(),
+        "- RAPPEL : si tu confirmes une action dans content, le champ JSON correspondant DOIT être rempli. Sinon rien ne se passe.".to_string(),
         String::new(),
     ];
 
@@ -1771,7 +1811,7 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
                 })
                 .collect();
             if !task_lines.is_empty() {
-                parts.push("PRIORITÉS DE LA SEMAINE (ID entre crochets = pour tasksToRemove/tasksToUpdate) :".to_string());
+                parts.push("⚡ PRIORITÉS DE LA SEMAINE (ID entre crochets = pour tasksToRemove/tasksToUpdate) :".to_string());
                 parts.extend(task_lines);
                 parts.push(String::new());
             }
@@ -1803,7 +1843,7 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
                 })
                 .collect();
             if !task_lines.is_empty() {
-                parts.push("TÂCHES PLANIFIÉES CETTE SEMAINE (ID entre crochets = pour tasksToRemove/tasksToUpdate) :".to_string());
+                parts.push("📋 TÂCHES PLANIFIÉES CETTE SEMAINE (ID entre crochets = pour tasksToRemove/tasksToUpdate) :".to_string());
                 parts.extend(task_lines);
                 parts.push(String::new());
             } else {
@@ -1845,8 +1885,23 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         }
     }
 
+    parts.push("STYLE DU CONTENU (content) — RESPECTE STRICTEMENT CE FORMAT :".to_string());
+    parts.push("- INTERDIT : titres markdown (#, ##, ###). Jamais de headers.".to_string());
+    parts.push("- Autorisé : **gras** pour les noms de tâches, listes numérotées (1. 2. 3.), \\n pour les sauts de ligne.".to_string());
+    parts.push("- Temps estimé entre parenthèses, format court : (~20 min). Pas \"minutes\" en entier.".to_string());
+    parts.push("- SCORES URGENCE/IMPORTANCE DANS LA LISTE : ne les affiche PAS systématiquement sur chaque tâche. Affiche-les UNIQUEMENT quand un score est notable (4/5 ou 5/5), format : [Urgence: 5/5]. N'affiche jamais les scores moyens (3/5 ou moins) dans la liste.".to_string());
+    parts.push("- Utilise les scores dans ton TEXTE d'analyse pour justifier tes suggestions, mais pas dans la liste des tâches.".to_string());
+    parts.push("- Sections séparées par des phrases naturelles, PAS par des titres markdown.".to_string());
+    parts.push("- Ton conversationnel et chaleureux. Phrases courtes.".to_string());
+    parts.push("- Utilise les labels de section exacts : \"Priorités de la semaine\", \"Tâches planifiées cette semaine\", \"En reliquat de la semaine passée\".".to_string());
+    parts.push("- Pour le reliquat : utilise ⚡ devant le nom si la tâche était prioritaire (priorité: main dans les données), sinon pas de label.".to_string());
+    parts.push("- Pour les tâches planifiées : indique le jour entre parenthèses (ex: \"(lundi)\", \"(aujourd'hui)\").".to_string());
+    parts.push("- Exemple de format attendu :".to_string());
+    parts.push(r#"  "Voici un récapitulatif de ta semaine :\n\n⚡ **Priorités de la semaine :**\n\n1. **Nom de la tâche** (~120 min)\n2. **Autre tâche** [Urgence: 5/5]\n\n📋 **Tâches planifiées cette semaine :**\n\n1. **Tâche A** (lundi) (~30 min)\n2. **Tâche B** (mardi)\n3. ✓ **Tâche terminée** (aujourd'hui)\n4. **Tâche C** (jeudi) (~45 min)\n\n⏳ **En reliquat** de la semaine passée :\n\n1. ⚡ **Tâche qui était prioritaire** (~25 min)\n2. **Autre tâche** [Importance: 4/5]\n3. **Tâche en retard**\n\nTu as une tâche qui était déjà prioritaire la semaine dernière. On la remet dans les priorités ?""#.to_string());
+    parts.push(String::new());
+
     parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
-    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tasksToToggle": [], "tasksToReorder": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
+    parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tasksToToggle": [], "tasksToReorder": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
     parts.push("- content : ton message texte. N'INCLUS JAMAIS le JSON dans le content. Pas de blocs de code JSON dans le content.".to_string());
     parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{monday_str}", "urgency": 4, "importance": 3, "tags": [{{"label": "CRM", "color": "crm"}}]}}] — urgency, importance et tags sont optionnels."#));
     parts.push("- tasksToRemove : [\"t1\", \"t3\"] — utilise les IDs courts tels que fournis dans la liste".to_string());
