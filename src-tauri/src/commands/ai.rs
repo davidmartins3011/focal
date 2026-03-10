@@ -1229,6 +1229,10 @@ pub struct DailyPrepResponse {
     #[serde(default)]
     pub tasks_to_update: Vec<ChatTaskUpdate>,
     #[serde(default)]
+    pub tasks_to_toggle: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tasks_to_reorder: Option<Vec<String>>,
+    #[serde(default)]
     pub prep_complete: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags_to_set: Vec<TagAction>,
@@ -1388,6 +1392,8 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String
         "- tasksToUpdate : modifier name, priority, scheduledDate, estimatedMinutes, urgency (1-5), importance (1-5), description (texte libre) par ID court (ex: \"t2\"). Chaque champ sauf id est optionnel.".to_string(),
         r#"- tagsToSet : ajouter/modifier/supprimer les tags d'une tâche. Ex: [{"taskId": "t1", "tags": [{"label": "Snowflake", "color": "data"}]}]. Couleurs : "crm" (vert), "data" (bleu), "roadmap" (accent), "saas" (violet), "urgent" (rouge). Pour ajouter un tag, inclure les tags existants + le nouveau."#.to_string(),
         r#"- stepsToSet : attacher des micro-étapes à une tâche. Ex: [{"taskId": "t1", "steps": ["Étape 1", "Étape 2"]}]. Utilise quand l'utilisateur demande de décomposer une tâche."#.to_string(),
+        "- tasksToToggle : cocher/décocher des tâches par ID court (inverse l'état fait/non-fait). Ex: [\"t1\", \"t3\"]".to_string(),
+        "- tasksToReorder : réorganiser les tâches du jour en fournissant la liste complète des IDs courts dans le nouvel ordre. Ex: [\"t3\", \"t1\", \"t2\"]".to_string(),
         "- RAPPEL : si tu confirmes une action dans content, le champ JSON correspondant DOIT être rempli. Sinon rien ne se passe.".to_string(),
         String::new(),
     ];
@@ -1506,11 +1512,13 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String
     }
 
     parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
-    parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
+    parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tasksToToggle": [], "tasksToReorder": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
     parts.push("- content : ton message texte. N'INCLUS JAMAIS le JSON dans le content. Pas de blocs de code JSON dans le content.".to_string());
     parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{today}", "urgency": 4, "importance": 3, "tags": [{{"label": "CRM", "color": "crm"}}]}}] — urgency, importance et tags sont optionnels."#));
     parts.push("- tasksToRemove : [\"t1\", \"t3\"] — utilise les IDs courts (t1, t2, etc.) tels que fournis dans la liste des tâches".to_string());
     parts.push(format!(r#"- tasksToUpdate : [{{"id": "t2", "name": "nouveau nom", "priority": "secondary", "scheduledDate": "{tomorrow}", "description": "notes..."}}] — chaque champ sauf id est optionnel"#));
+    parts.push("- tasksToToggle : [\"t1\", \"t3\"] — cocher/décocher des tâches par ID court".to_string());
+    parts.push("- tasksToReorder : [\"t3\", \"t1\", \"t2\"] — réorganiser les tâches dans le nouvel ordre souhaité".to_string());
     parts.push(r#"- tagsToSet : [{"taskId": "t1", "tags": [{"label": "...", "color": "data"}]}] — couleurs : "crm", "data", "roadmap", "saas", "urgent". Inclure les tags existants + le nouveau pour ajouter."#.to_string());
     parts.push(r#"- stepsToSet : [{"taskId": "t1", "steps": ["Étape 1", "Étape 2"]}] — attacher des micro-étapes à une tâche."#.to_string());
     parts.push("- prepComplete : true quand l'utilisateur confirme la fin de la préparation".to_string());
@@ -1541,6 +1549,8 @@ fn parse_daily_prep_response(raw: &str, id_map: &HashMap<String, String>) -> Res
             tasks_to_add: vec![],
             tasks_to_remove: vec![],
             tasks_to_update: vec![],
+            tasks_to_toggle: vec![],
+            tasks_to_reorder: None,
             prep_complete: false,
             tags_to_set: vec![],
             steps_to_set: vec![],
@@ -1574,6 +1584,18 @@ fn parse_daily_prep_response(raw: &str, id_map: &HashMap<String, String>) -> Res
         .collect();
     eprintln!("[daily_prep] tasksToUpdate resolved: {:?}", tasks_to_update);
 
+    let tasks_to_toggle: Vec<String> = parse_string_list(&parsed, "tasksToToggle", "tasks_to_toggle")
+        .into_iter()
+        .map(|short| id_map.get(&short).cloned().unwrap_or(short))
+        .collect();
+
+    let tasks_to_reorder: Option<Vec<String>> = json_field(&parsed, "tasksToReorder", "tasks_to_reorder")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| {
+            let s = s.to_string();
+            id_map.get(&s).cloned().unwrap_or(s)
+        })).collect());
+
     let tags_to_set = parse_tags_to_set(&parsed, id_map);
     if !tags_to_set.is_empty() {
         eprintln!("[daily_prep] tagsToSet resolved: {:?}", tags_to_set);
@@ -1589,6 +1611,8 @@ fn parse_daily_prep_response(raw: &str, id_map: &HashMap<String, String>) -> Res
         tasks_to_add,
         tasks_to_remove,
         tasks_to_update,
+        tasks_to_toggle,
+        tasks_to_reorder,
         prep_complete,
         tags_to_set,
         steps_to_set,
@@ -1700,8 +1724,14 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         "- Si l'utilisateur demande de retirer une tâche, mets son ID dans tasksToRemove.".to_string(),
         String::new(),
         "MODIFICATION DE TÂCHES EXISTANTES :".to_string(),
-        "- Utilise tasksToUpdate pour changer priority, scheduledDate, ou estimatedMinutes.".to_string(),
+        "- Utilise tasksToUpdate pour changer name, priority, scheduledDate, estimatedMinutes, urgency (1-5), importance (1-5), description (texte libre).".to_string(),
         format!("- Pour reporter à la semaine prochaine : scheduledDate = \"{next_monday_str}\"."),
+        String::new(),
+        "AUTRES ACTIONS :".to_string(),
+        "- tasksToToggle : cocher/décocher des tâches par ID court (inverse l'état fait/non-fait). Ex: [\"t1\", \"t3\"]".to_string(),
+        "- tasksToReorder : réorganiser les tâches en fournissant la liste complète des IDs courts dans le nouvel ordre. Ex: [\"t3\", \"t1\", \"t2\"]".to_string(),
+        r#"- tagsToSet : ajouter/modifier/supprimer les tags d'une tâche. Ex: [{"taskId": "t1", "tags": [{"label": "Snowflake", "color": "data"}]}]. Couleurs : "crm", "data", "roadmap", "saas", "urgent". Pour ajouter un tag, inclure les tags existants + le nouveau."#.to_string(),
+        r#"- stepsToSet : attacher des micro-étapes à une tâche. Ex: [{"taskId": "t1", "steps": ["Étape 1", "Étape 2"]}]."#.to_string(),
         String::new(),
     ];
 
@@ -1816,11 +1846,13 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
     }
 
     parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
-    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
+    parts.push(r#"{"content": "ton message", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tasksToToggle": [], "tasksToReorder": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
     parts.push("- content : ton message texte. N'INCLUS JAMAIS le JSON dans le content. Pas de blocs de code JSON dans le content.".to_string());
     parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{monday_str}", "urgency": 4, "importance": 3, "tags": [{{"label": "CRM", "color": "crm"}}]}}] — urgency, importance et tags sont optionnels."#));
     parts.push("- tasksToRemove : [\"t1\", \"t3\"] — utilise les IDs courts tels que fournis dans la liste".to_string());
-    parts.push(format!(r#"- tasksToUpdate : [{{"id": "t2", "priority": "secondary", "scheduledDate": "{next_monday_str}", "description": "notes..."}}]"#));
+    parts.push(format!(r#"- tasksToUpdate : [{{"id": "t2", "name": "nouveau nom", "priority": "secondary", "scheduledDate": "{next_monday_str}", "description": "notes..."}}] — chaque champ sauf id est optionnel"#));
+    parts.push("- tasksToToggle : [\"t1\", \"t3\"] — cocher/décocher des tâches par ID court".to_string());
+    parts.push("- tasksToReorder : [\"t3\", \"t1\", \"t2\"] — réorganiser les tâches dans le nouvel ordre souhaité".to_string());
     parts.push(r#"- tagsToSet : [{"taskId": "t1", "tags": [{"label": "...", "color": "data"}]}] — couleurs : "crm", "data", "roadmap", "saas", "urgent""#.to_string());
     parts.push(r#"- stepsToSet : [{"taskId": "t1", "steps": ["Étape 1", "Étape 2"]}] — attacher des micro-étapes"#.to_string());
     parts.push("- prepComplete : true UNIQUEMENT quand l'utilisateur confirme que la préparation est terminée".to_string());

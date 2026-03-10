@@ -78,6 +78,8 @@ export interface DailyPrepResponse {
   tasksToAdd: DailyPrepTask[];
   tasksToRemove: string[];
   tasksToUpdate: ChatTaskUpdate[];
+  tasksToToggle?: string[];
+  tasksToReorder?: string[];
   tagsToSet?: TagAction[];
   stepsToSet?: StepsAction[];
   prepComplete: boolean;
