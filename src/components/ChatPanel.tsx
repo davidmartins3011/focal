@@ -110,6 +110,11 @@ const endPrepVariations: Record<string, string[]> = {
     "Planning du jour terminé ! Passe une super journée. ✨",
     "Journée bien organisée ! On se retrouve si besoin. 👋",
     "Top, la journée est planifiée. Bonne productivité ! 🚀",
+    "Parfait, tout est en place. Bonne journée ! ☀️",
+    "La journée est calée ! Tu vas assurer. 🔥",
+    "C'est bouclé ! Fonce, et reviens si besoin. 🏃",
+    "Plan du jour validé. À toi de briller ! ⭐",
+    "Nickel, on est au clair pour aujourd'hui. Go ! 👊",
   ],
   weekly: [
     "Le planning de la semaine est bouclé. Bonne semaine ! 🚀",
@@ -117,6 +122,11 @@ const endPrepVariations: Record<string, string[]> = {
     "C'est calé pour la semaine. On avance ! 🎯",
     "Planning hebdo terminé ! Bonne semaine à toi. ✨",
     "La semaine est en place. Tu sais où tu vas ! 👋",
+    "Parfait, la semaine est structurée. En avant ! 🔥",
+    "Top, tout est réparti. Belle semaine en perspective ! ☀️",
+    "Semaine planifiée ! Tu as un bon plan. 📋",
+    "C'est bouclé pour la semaine. Tu gères ! 👊",
+    "Plan hebdo validé. Bonne semaine productive ! ⭐",
   ],
   daily_review: [
     "La revue du jour est terminée. Bravo pour cette journée ! ✅",
@@ -124,6 +134,11 @@ const endPrepVariations: Record<string, string[]> = {
     "Revue bouclée. Belle journée derrière toi ! 👏",
     "Journée passée en revue. Bien joué ! ✨",
     "C'est tout pour aujourd'hui. Bravo ! 🎯",
+    "Bilan du jour fait. Tu peux souffler ! 😌",
+    "Revue terminée, belle journée accomplie ! 💪",
+    "La journée est derrière toi. Bien joué ! 🌟",
+    "Beau récap ! Profite de ta soirée. 🌙",
+    "Journée bouclée et analysée. Repos mérité ! 🛋️",
   ],
   weekly_review: [
     "La revue de la semaine est terminée. Bon bilan ! 📊",
@@ -131,6 +146,11 @@ const endPrepVariations: Record<string, string[]> = {
     "Revue hebdo bouclée. Beau travail cette semaine ! ✅",
     "Semaine bien analysée. En route pour la suivante ! 🚀",
     "Bilan de la semaine fait. Bravo ! 👏",
+    "Super rétrospective ! Tu as bien avancé. ⭐",
+    "Semaine passée en revue. Belle progression ! 📈",
+    "Revue terminée, la semaine prochaine s'annonce bien ! 🔥",
+    "Bon bilan hebdo. Tu peux être fier ! 🌟",
+    "C'est bouclé pour cette semaine. Bien joué ! 🎯",
   ],
 };
 
@@ -534,7 +554,20 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     prepHistory.current = [];
     textareaRef.current?.focus();
     onViewSwitch?.("week");
-    sendPrepMessage("C'est parti ! Fais-moi un résumé de ce qui est prévu pour cette semaine, et on organise ensemble.", "weekly");
+    const greetings = [
+      "C'est parti ! Préparons la semaine ensemble.",
+      "Salut ! On organise ta semaine ?",
+      "Hello ! Voyons ce qui t'attend cette semaine.",
+      "Allez, on prépare la semaine !",
+      "Prêt à planifier ta semaine ? C'est parti !",
+      "On s'y met ! Qu'est-ce qu'on a cette semaine ?",
+      "C'est le moment de poser la semaine. On y va ?",
+      "Hop, on regarde le programme de la semaine !",
+      "Let's go ! On structure ta semaine.",
+      "Allez, on fait le point sur la semaine !",
+    ];
+    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+    sendPrepMessage(greeting, "weekly");
   }, [isTyping, sendPrepMessage, onViewSwitch]);
 
   useEffect(() => {
