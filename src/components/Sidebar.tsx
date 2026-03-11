@@ -5,6 +5,7 @@ import {
   CalendarIcon,
   SuggestionsIcon,
   TodoIcon,
+  ToolboxIcon,
   SettingsIcon,
   UserIcon,
   IntegrationsIcon,
@@ -57,6 +58,13 @@ export default function Sidebar({
         title="Suggestions"
       >
         <SuggestionsIcon />
+      </button>
+      <button
+        className={`${styles.icon} ${activePage === "toolbox" ? styles.active : ""}`}
+        onClick={() => onPageChange("toolbox")}
+        title="Boîte à outils"
+      >
+        <ToolboxIcon />
       </button>
 
       <div className={styles.spacer} />

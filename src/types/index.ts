@@ -43,7 +43,7 @@ export interface ChatMessage {
 
 export type ViewTab = "today" | "week" | "strategy";
 
-export type SidebarPage = "main" | "calendar" | "suggestions" | "todos" | "integrations" | "settings" | "profile";
+export type SidebarPage = "main" | "calendar" | "suggestions" | "todos" | "toolbox" | "integrations" | "settings" | "profile";
 
 /** Une source de recherche de profil (LinkedIn, site web, etc.) */
 export interface ProfileResearchSource {
@@ -167,6 +167,55 @@ export interface StrategyReview {
   pillars: StrategyPillar[];
   reflections: StrategyReflection[];
   top3: string[];
+}
+
+export interface StrategyAction {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface StrategyTactic {
+  id: string;
+  title: string;
+  description: string;
+  actions: StrategyAction[];
+}
+
+export interface StrategyStrategy {
+  id: string;
+  title: string;
+  description: string;
+  tactics: StrategyTactic[];
+}
+
+export interface StrategyGoal {
+  id: string;
+  title: string;
+  target: string;
+  deadline?: string;
+  strategies: StrategyStrategy[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TagDistribution {
+  tag: string;
+  count: number;
+}
+
+export interface TaskHighlight {
+  name: string;
+  tag?: string;
+}
+
+export interface PeriodSummary {
+  tasksCompleted: number;
+  tasksTotal: number;
+  focusDays: number;
+  totalDays: number;
+  distribution: TagDistribution[];
+  highlights: TaskHighlight[];
 }
 
 export interface IntegrationRule {

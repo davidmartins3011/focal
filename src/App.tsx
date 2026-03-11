@@ -6,6 +6,7 @@ import CalendarView from "./components/CalendarView";
 import IntegrationsView from "./components/IntegrationsView";
 import ProfileView from "./components/ProfileView";
 import SuggestionsView from "./components/SuggestionsView";
+import ToolboxView from "./components/ToolboxView";
 import TodoView from "./components/TodoView";
 import SettingsView from "./components/SettingsView";
 import OnboardingView from "./components/OnboardingView";
@@ -311,6 +312,8 @@ export default function App() {
         return <CalendarView />;
       case "suggestions":
         return <SuggestionsView />;
+      case "toolbox":
+        return <ToolboxView />;
       case "todos":
         return <TodoView />;
       case "integrations":

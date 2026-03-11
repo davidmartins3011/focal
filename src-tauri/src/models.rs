@@ -94,6 +94,66 @@ pub struct StrategyReview {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrategyAction {
+    pub id: String,
+    pub text: String,
+    pub done: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrategyTactic {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub actions: Vec<StrategyAction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrategyStrategy {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub tactics: Vec<StrategyTactic>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyGoal {
+    pub id: String,
+    pub title: String,
+    pub target: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadline: Option<String>,
+    pub strategies: Vec<StrategyStrategy>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagDistribution {
+    pub tag: String,
+    pub count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskHighlight {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeriodSummary {
+    pub tasks_completed: i32,
+    pub tasks_total: i32,
+    pub focus_days: i32,
+    pub total_days: i32,
+    pub distribution: Vec<TagDistribution>,
+    pub highlights: Vec<TaskHighlight>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntegrationRule {
     pub id: String,
     pub text: String,

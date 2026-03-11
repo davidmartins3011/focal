@@ -2,6 +2,512 @@
   animation: fadeUp 0.3s ease both;
 }
 
+/* ══════════════════════════════════════════════════════════════ */
+/* SECTION GSTA — Goal → Strategy → Tactic → Action              */
+/* ══════════════════════════════════════════════════════════════ */
+
+.addGoalBtn {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Outfit', sans-serif;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-left: auto;
+  padding: 0;
+  transition: all 0.15s;
+  opacity: 0.7;
+}
+
+.addGoalBtn:hover {
+  opacity: 1;
+}
+
+/* ── GSTA empty state ── */
+.gstaEmpty {
+  text-align: center;
+  padding: 30px 20px;
+  margin-bottom: 28px;
+  background: var(--bg2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.gstaEmptyText {
+  font-size: 13px;
+  color: var(--text3);
+  margin-bottom: 12px;
+}
+
+.gstaEmptyBtn {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 7px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+}
+
+.gstaEmptyBtn:hover {
+  background: var(--accent-light);
+}
+
+/* ── Goals list ── */
+.goalsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+/* ── Goal card ── */
+.goalCard {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  animation: fadeUp 0.25s ease both;
+}
+
+.goalCard:nth-child(1) { animation-delay: 0.03s; }
+.goalCard:nth-child(2) { animation-delay: 0.08s; }
+.goalCard:nth-child(3) { animation-delay: 0.13s; }
+
+.goalHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 18px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.goalHeaderContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.goalTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.goalTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  cursor: text;
+}
+
+.goalMeta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.goalTarget {
+  font-size: 12px;
+  color: var(--text3);
+  cursor: text;
+}
+
+.goalDeadline {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent-muted);
+  background: rgba(var(--accent-rgb), 0.06);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* ── Progress ── */
+.progressRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progressBar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.6s ease;
+}
+
+.progressPct {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ── Chevrons ── */
+.chevron {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text3);
+  transition: transform 0.2s;
+  transform: rotate(0deg);
+  flex-shrink: 0;
+  margin-top: 1px;
+  width: 14px;
+  text-align: center;
+}
+
+.chevronSm {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text3);
+  transition: transform 0.2s;
+  transform: rotate(0deg);
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+/* ── Goal body ── */
+.goalBody {
+  padding: 0 18px 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Strategy block ── */
+.strategyBlock {
+  margin-top: 14px;
+}
+
+.strategyHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 0;
+}
+
+.strategyLabel {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--accent-muted);
+  white-space: nowrap;
+}
+
+.strategyTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  cursor: text;
+}
+
+.strategyPct {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  margin-left: auto;
+}
+
+.strategyDesc {
+  padding-left: 20px;
+  margin-bottom: 6px;
+}
+
+.strategyDescText {
+  font-size: 11.5px;
+  color: var(--text3);
+  font-style: italic;
+  cursor: text;
+}
+
+/* ── Tactics group ── */
+.tacticsGroup {
+  padding-left: 20px;
+}
+
+.tacticBlock {
+  margin-bottom: 10px;
+}
+
+.tacticHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.tacticPin {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.tacticTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  cursor: text;
+}
+
+.tacticCountBadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text3);
+  background: var(--bg3);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+/* ── Actions list ── */
+.actionsList {
+  padding-left: 22px;
+}
+
+.actionItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  position: relative;
+}
+
+.actionItem:hover .deleteBtnXs {
+  opacity: 1;
+}
+
+.actionCheck {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.actionCheck input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.checkmark {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid var(--border2);
+  background: var(--bg);
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkmark::after {
+  content: '';
+  display: none;
+  width: 4px;
+  height: 7px;
+  border: solid var(--bg);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg) translateY(-1px);
+}
+
+.actionCheck input:checked ~ .checkmark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.actionCheck input:checked ~ .checkmark::after {
+  display: block;
+}
+
+.actionText {
+  font-size: 12.5px;
+  color: var(--text2);
+  flex: 1;
+  cursor: text;
+  line-height: 1.3;
+}
+
+.actionDone {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+/* ── Add buttons ── */
+.addActionBtn,
+.addTacticBtn,
+.addStrategyBtn {
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'Outfit', sans-serif;
+  color: var(--text3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  opacity: 0.6;
+  transition: all 0.15s;
+}
+
+.addActionBtn:hover,
+.addTacticBtn:hover,
+.addStrategyBtn:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.addActionBtn {
+  padding-left: 22px;
+}
+
+.addTacticBtn {
+  margin-top: 4px;
+}
+
+.addStrategyBtn {
+  margin-top: 8px;
+  padding-left: 0;
+}
+
+.addActionDot {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.addActionInput {
+  flex: 1;
+  font-size: 12.5px;
+  font-family: 'Outfit', sans-serif;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border2);
+  padding: 2px 0;
+  outline: none;
+}
+
+.addActionInput::placeholder {
+  color: var(--text3);
+  opacity: 0.6;
+}
+
+/* ── Delete buttons ── */
+.deleteBtn {
+  font-size: 16px;
+  color: var(--text3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.goalTitleRow:hover .deleteBtn {
+  opacity: 0.5;
+}
+
+.deleteBtn:hover {
+  opacity: 1 !important;
+  color: var(--red, #e74c3c);
+}
+
+.deleteBtnSm {
+  font-size: 14px;
+  color: var(--text3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.strategyHeader:hover .deleteBtnSm,
+.tacticHeader:hover .deleteBtnSm {
+  opacity: 0.5;
+}
+
+.deleteBtnSm:hover {
+  opacity: 1 !important;
+  color: var(--red, #e74c3c);
+}
+
+.deleteBtnXs {
+  font-size: 12px;
+  color: var(--text3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.deleteBtnXs:hover {
+  color: var(--red, #e74c3c);
+}
+
+/* ── Inline editing ── */
+.inlineText {
+  cursor: text;
+  border-radius: 3px;
+  padding: 1px 3px;
+  margin: -1px -3px;
+  transition: background 0.15s;
+}
+
+.inlineText:hover {
+  background: rgba(var(--accent-rgb), 0.05);
+}
+
+.inlineInput {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+
+/* ══════════════════════════════════════════════════════════════ */
+/* SECTION REVIEWS — Revues périodiques                           */
+/* ══════════════════════════════════════════════════════════════ */
+
 /* ── Month selector ── */
 .monthSelector {
   display: flex;
@@ -327,26 +833,148 @@
   line-height: 1.4;
 }
 
-/* ── Empty state ── */
-.emptyState {
-  text-align: center;
-  padding: 60px 20px;
-}
+/* ══════════════════════════════════════════════════════════════ */
+/* BILAN DE LA PÉRIODE                                           */
+/* ══════════════════════════════════════════════════════════════ */
 
-.emptyIcon {
-  font-size: 36px;
+.bilanGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
   margin-bottom: 12px;
 }
 
-.emptyTitle {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 6px;
+.bilanStat {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  animation: fadeUp 0.25s ease both;
 }
 
-.emptyText {
-  font-size: 13px;
+.bilanStat:nth-child(1) { animation-delay: 0.03s; }
+.bilanStat:nth-child(2) { animation-delay: 0.08s; }
+
+.bilanStatValue {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.bilanStatSlash {
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text3);
-  line-height: 1.5;
+}
+
+.bilanStatLabel {
+  font-size: 11px;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+
+.bilanStatBar {
+  height: 4px;
+  background: var(--bg4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bilanStatFill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.8s ease;
+}
+
+.bilanStatFillAlt {
+  background: var(--blue);
+}
+
+/* ── Distribution bar ── */
+.bilanDistribution {
+  margin-bottom: 12px;
+  animation: fadeUp 0.25s ease 0.1s both;
+}
+
+.bilanDistBar {
+  display: flex;
+  height: 6px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  gap: 2px;
+}
+
+.bilanDistSegment {
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+.bilanDistLegend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.bilanDistItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bilanDistDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bilanDistLabel {
+  font-size: 10.5px;
+  color: var(--text3);
+}
+
+.bilanDistPct {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+/* ── Highlights ── */
+.bilanHighlights {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 28px;
+}
+
+.bilanHighlight {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  animation: fadeUp 0.25s ease both;
+}
+
+.bilanHighlight:nth-child(1) { animation-delay: 0.05s; }
+.bilanHighlight:nth-child(2) { animation-delay: 0.1s; }
+.bilanHighlight:nth-child(3) { animation-delay: 0.15s; }
+.bilanHighlight:nth-child(4) { animation-delay: 0.2s; }
+
+.bilanHighlightIcon {
+  font-size: 14px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.bilanHighlightText {
+  font-size: 12.5px;
+  color: var(--text2);
+  line-height: 1.4;
 }

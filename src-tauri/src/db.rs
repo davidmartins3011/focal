@@ -87,6 +87,43 @@ CREATE TABLE IF NOT EXISTS strategy_top3 (
     FOREIGN KEY (review_id) REFERENCES strategy_reviews(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS strategy_goals (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    target TEXT NOT NULL DEFAULT '',
+    deadline TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS strategy_strategies (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (goal_id) REFERENCES strategy_goals(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS strategy_tactics (
+    id TEXT PRIMARY KEY,
+    strategy_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (strategy_id) REFERENCES strategy_strategies(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS strategy_actions (
+    id TEXT PRIMARY KEY,
+    tactic_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0,
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (tactic_id) REFERENCES strategy_tactics(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS integrations (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -277,18 +314,26 @@ fn migrate_oauth_providers(conn: &Connection) {
 }
 
 pub fn seed_if_empty(conn: &mut Connection) -> Result<(), rusqlite::Error> {
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))?;
-    if count > 0 {
-        return Ok(());
+    let task_count: i64 = conn.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))?;
+    if task_count == 0 {
+        let tx = conn.transaction()?;
+        seed_tasks(&tx)?;
+        seed_reviews(&tx)?;
+        seed_goals(&tx)?;
+        seed_chat(&tx)?;
+        seed_integrations(&tx)?;
+        seed_settings(&tx)?;
+        seed_profile(&tx)?;
+        tx.commit()?;
     }
-    let tx = conn.transaction()?;
-    seed_tasks(&tx)?;
-    seed_reviews(&tx)?;
-    seed_chat(&tx)?;
-    seed_integrations(&tx)?;
-    seed_settings(&tx)?;
-    seed_profile(&tx)?;
-    tx.commit()
+    // Seed GSTA goals independently for existing databases
+    let goal_count: i64 = conn.query_row("SELECT COUNT(*) FROM strategy_goals", [], |row| row.get(0))?;
+    if goal_count == 0 {
+        let tx = conn.transaction()?;
+        seed_goals(&tx)?;
+        tx.commit()?;
+    }
+    Ok(())
 }
 
 fn seed_tasks(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -510,6 +555,70 @@ fn seed_reviews(conn: &Connection) -> Result<(), rusqlite::Error> {
     ins_top3(rid, "Livrer la feature Q4 et la mettre en prod", 0)?;
     ins_top3(rid, "Automatiser le reporting : 0 action manuelle", 1)?;
     ins_top3(rid, "Faire les bilans annuels clients avant décembre", 2)?;
+
+    Ok(())
+}
+
+fn seed_goals(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let ins_goal = |id: &str, title: &str, target: &str, deadline: Option<&str>, pos: i32| -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "INSERT INTO strategy_goals (id, title, target, deadline, position) VALUES (?1,?2,?3,?4,?5)",
+            params![id, title, target, deadline, pos],
+        )?;
+        Ok(())
+    };
+    let ins_strategy = |id: &str, goal_id: &str, title: &str, desc: &str, pos: i32| -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "INSERT INTO strategy_strategies (id, goal_id, title, description, position) VALUES (?1,?2,?3,?4,?5)",
+            params![id, goal_id, title, desc, pos],
+        )?;
+        Ok(())
+    };
+    let ins_tactic = |id: &str, strategy_id: &str, title: &str, desc: &str, pos: i32| -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "INSERT INTO strategy_tactics (id, strategy_id, title, description, position) VALUES (?1,?2,?3,?4,?5)",
+            params![id, strategy_id, title, desc, pos],
+        )?;
+        Ok(())
+    };
+    let ins_action = |id: &str, tactic_id: &str, text: &str, done: bool, pos: i32| -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "INSERT INTO strategy_actions (id, tactic_id, text, done, position) VALUES (?1,?2,?3,?4,?5)",
+            params![id, tactic_id, text, done, pos],
+        )?;
+        Ok(())
+    };
+
+    // ── Goal 1: SaaS growth ──
+    ins_goal("g1", "Atteindre 1000 utilisateurs payants", "1000 utilisateurs payants en 12 mois", Some("2027-03-01"), 0)?;
+
+    ins_strategy("s1", "g1", "Acquisition via SEO", "Se positionner sur des requêtes niche à forte intention", 0)?;
+    ins_tactic("t1", "s1", "Blog expert", "Articles longs et ciblés sur des problèmes spécifiques", 0)?;
+    ins_action("a1", "t1", "Recherche de mots-clés à fort potentiel", true, 0)?;
+    ins_action("a2", "t1", "Écrire 2 articles SEO par semaine", false, 1)?;
+    ins_action("a3", "t1", "Optimiser les 10 pages les plus visitées", false, 2)?;
+    ins_tactic("t2", "s1", "Programmatic SEO", "Générer des pages automatisées sur des requêtes longue traîne", 1)?;
+    ins_action("a4", "t2", "Scraper 500 mots-clés longue traîne", true, 0)?;
+    ins_action("a5", "t2", "Générer 100 landing pages automatisées", false, 1)?;
+
+    ins_strategy("s2", "g1", "Conversion & activation", "Transformer les visiteurs en utilisateurs actifs", 1)?;
+    ins_tactic("t3", "s2", "Optimisation onboarding", "Réduire le temps entre inscription et première valeur", 0)?;
+    ins_action("a6", "t3", "Réduire le temps de première valeur à 5 min", false, 0)?;
+    ins_action("a7", "t3", "Ajouter un checklist d'onboarding interactif", false, 1)?;
+    ins_tactic("t4", "s2", "Email nurturing", "Séquence d'emails pour accompagner les nouveaux utilisateurs", 1)?;
+    ins_action("a8", "t4", "Créer la séquence d'emails J+1, J+3, J+7", false, 0)?;
+    ins_action("a9", "t4", "Ajouter un CTA personnalisé dans chaque email", false, 1)?;
+
+    // ── Goal 2: Personal organization ──
+    ins_goal("g2", "Structurer mon organisation personnelle", "Routine stable et focus protégé chaque semaine", None, 1)?;
+
+    ins_strategy("s3", "g2", "Deep work systématique", "Protéger des blocs de concentration chaque jour", 0)?;
+    ins_tactic("t5", "s3", "Blocs de focus", "Créneaux protégés sans interruption", 0)?;
+    ins_action("a10", "t5", "Bloquer 2h chaque matin sans interruption", true, 0)?;
+    ins_action("a11", "t5", "Couper les notifications pendant les blocs", true, 1)?;
+    ins_tactic("t6", "s3", "Routine hebdomadaire", "Points de contrôle réguliers pour rester aligné", 1)?;
+    ins_action("a12", "t6", "Revue du dimanche soir (30 min)", false, 0)?;
+    ins_action("a13", "t6", "Planification du lundi matin (15 min)", true, 1)?;
 
     Ok(())
 }
