@@ -23,13 +23,7 @@ export interface TodoItemRowProps {
   onEditChange: (text: string) => void;
   onConfirmEdit: () => void;
   onCancelEdit: () => void;
-  isDragging: boolean;
-  isDragOver: boolean;
-  dragOverSide?: "top" | "bottom";
-  onDragStart: (id: string) => void;
-  onDragOver: (e: React.DragEvent, id: string) => void;
-  onDrop: (e: React.DragEvent) => void;
-  onDragEnd: () => void;
+  dragHandleProps?: Record<string, unknown>;
   onOpenDetail?: (id: string) => void;
 }
 
@@ -48,13 +42,7 @@ export default function TodoItemRow({
   onEditChange,
   onConfirmEdit,
   onCancelEdit,
-  isDragging,
-  isDragOver,
-  dragOverSide,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
+  dragHandleProps,
   onOpenDetail,
 }: TodoItemRowProps) {
   const editRef = useRef<HTMLTextAreaElement>(null);
@@ -70,26 +58,13 @@ export default function TodoItemRow({
   const itemClasses = [
     styles.todoItem,
     task.done ? styles.done : "",
-    isDragging ? styles.dragging : "",
-    isDragOver && dragOverSide === "top" ? styles.dragOverTop : "",
-    isDragOver && dragOverSide === "bottom" ? styles.dragOverBottom : "",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <div
-      className={itemClasses}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = "move";
-        onDragStart(task.id);
-      }}
-      onDragOver={(e) => onDragOver(e, task.id)}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-    >
-      <div className={styles.dragHandle} title="Glisser pour réorganiser">
+    <div className={itemClasses}>
+      <div className={styles.dragHandle} title="Glisser pour réorganiser" {...dragHandleProps}>
         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
           <circle cx="5" cy="3" r="1.5" />
           <circle cx="11" cy="3" r="1.5" />

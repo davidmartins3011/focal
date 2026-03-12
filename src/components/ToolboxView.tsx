@@ -305,17 +305,49 @@ function ComparatorTool() {
 
 // ─── Top 5 (Warren Buffett's 25/5 Rule) ───
 
+const TOP5_SETTING_KEY = "top5-task-ids";
+
 function Top5Tool() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [locked, setLocked] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    invoke<Task[]>("get_tasks")
-      .then((t) => setTasks(t.filter((task) => !task.done)))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [allTasks, savedJson] = await Promise.all([
+          invoke<Task[]>("get_all_tasks"),
+          invoke<string | null>("get_setting", { key: TOP5_SETTING_KEY }),
+        ]);
+
+        if (cancelled) return;
+
+        const pending = allTasks.filter((task) => !task.done);
+        setTasks(pending);
+
+        if (savedJson) {
+          const savedIds: string[] = JSON.parse(savedJson);
+          const pendingIds = new Set(pending.map((t) => t.id));
+          const validIds = savedIds.filter((id) => pendingIds.has(id));
+
+          if (validIds.length > 0) {
+            setSelected(new Set(validIds));
+            setLocked(true);
+          }
+        }
+      } catch {
+        // silently ignore load errors
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   const toggleTask = (id: string) => {
@@ -331,13 +363,46 @@ function Top5Tool() {
     });
   };
 
-  const handleLock = () => setLocked(true);
-  const handleReset = () => {
-    setSelected(new Set());
-    setLocked(false);
+  const handleLock = async () => {
+    setSaving(true);
+    try {
+      const ids = Array.from(selected);
+      await invoke("set_setting", {
+        key: TOP5_SETTING_KEY,
+        value: JSON.stringify(ids),
+      });
+      setLocked(true);
+    } catch {
+      // persist failed — lock locally anyway
+      setLocked(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const top5 = tasks.filter((t) => selected.has(t.id));
+  const handleReset = async () => {
+    setSaving(true);
+    try {
+      await invoke("set_setting", {
+        key: TOP5_SETTING_KEY,
+        value: JSON.stringify([]),
+      });
+    } catch {
+      // ignore
+    } finally {
+      setSelected(new Set());
+      setLocked(false);
+      setSaving(false);
+    }
+  };
+
+  const completedCount = tasks.filter(
+    (t) => selected.has(t.id) && t.done,
+  ).length;
+
+  const top5 = Array.from(selected)
+    .map((id) => tasks.find((t) => t.id === id))
+    .filter((t): t is Task => t !== undefined);
   const avoid = tasks.filter((t) => !selected.has(t.id));
 
   if (loading) {
@@ -387,14 +452,34 @@ function Top5Tool() {
             <button
               className={styles.brainDumpBtn}
               onClick={handleLock}
-              disabled={selected.size === 0}
+              disabled={selected.size === 0 || saving}
             >
-              Valider mon top {selected.size > 0 ? selected.size : 5}
+              {saving ? "Enregistrement…" : `Valider mon top ${selected.size > 0 ? selected.size : 5}`}
             </button>
           </div>
         </div>
       ) : (
         <div className={styles.top5Result}>
+          {completedCount > 0 && completedCount < top5.length && (
+            <div className={styles.top5Progress}>
+              <div className={styles.top5ProgressBar}>
+                <div
+                  className={styles.top5ProgressFill}
+                  style={{ width: `${(completedCount / top5.length) * 100}%` }}
+                />
+              </div>
+              <span className={styles.top5ProgressLabel}>
+                {completedCount} / {top5.length} terminées
+              </span>
+            </div>
+          )}
+          {completedCount === top5.length && top5.length > 0 && (
+            <div className={styles.top5AllDone}>
+              <span className={styles.top5AllDoneIcon}>🎉</span>
+              <span>Top {top5.length} terminé ! Tu peux recommencer avec de nouvelles priorités.</span>
+            </div>
+          )}
+
           <div className={styles.top5Section}>
             <div className={styles.top5SectionHeader}>
               <span className={styles.top5SectionIcon}>🟢</span>
@@ -402,9 +487,10 @@ function Top5Tool() {
             </div>
             <div className={styles.top5SectionList}>
               {top5.map((t, i) => (
-                <div key={t.id} className={styles.top5ResultItem}>
+                <div key={t.id} className={`${styles.top5ResultItem} ${t.done ? styles.top5ResultItemDone : ""}`}>
                   <span className={styles.top5Rank}>{i + 1}</span>
-                  <span>{t.name}</span>
+                  <span className={t.done ? styles.top5DoneText : ""}>{t.name}</span>
+                  {t.done && <span className={styles.top5DoneCheck}>✓</span>}
                 </div>
               ))}
             </div>
@@ -434,8 +520,9 @@ function Top5Tool() {
             <button
               className={`${styles.comparatorBtn} ${styles.comparatorBtnSecondary}`}
               onClick={handleReset}
+              disabled={saving}
             >
-              Recommencer
+              {saving ? "…" : "Recommencer"}
             </button>
           </div>
         </div>

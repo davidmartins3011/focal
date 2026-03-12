@@ -43,7 +43,7 @@ export interface ChatMessage {
 
 export type ViewTab = "today" | "week" | "strategy";
 
-export type SidebarPage = "main" | "calendar" | "suggestions" | "todos" | "toolbox" | "integrations" | "settings" | "profile";
+export type SidebarPage = "main" | "suggestions" | "todos" | "toolbox" | "integrations" | "settings" | "profile";
 
 /** Une source de recherche de profil (LinkedIn, site web, etc.) */
 export interface ProfileResearchSource {
@@ -197,6 +197,33 @@ export interface StrategyGoal {
   strategies: StrategyStrategy[];
   createdAt: string;
   updatedAt: string;
+  periodId?: string;
+}
+
+export interface GoalStrategyLink {
+  goalId: string;
+  strategyId: string;
+}
+
+export type PeriodStatus = "active" | "closed";
+
+export interface PeriodReflection {
+  id: string;
+  prompt: string;
+  answer: string;
+}
+
+export interface StrategyPeriod {
+  id: string;
+  startMonth: number;
+  startYear: number;
+  endMonth: number;
+  endYear: number;
+  frequency: string;
+  status: PeriodStatus;
+  closedAt?: string;
+  createdAt: string;
+  reflections: PeriodReflection[];
 }
 
 export interface TagDistribution {

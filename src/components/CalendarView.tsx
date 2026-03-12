@@ -43,7 +43,6 @@ function relativeLabel(day: Date, now: Date): string | null {
   if (diff === 0) return "Auj.";
   if (diff === 1) return "Dem.";
   if (diff === -1) return "Hier";
-  if (diff >= 2 && diff <= 6) return `+${diff}j`;
   return null;
 }
 
@@ -322,7 +321,6 @@ export default function CalendarView() {
     [selectedDate]
   );
 
-  const isSelectedToday = isSameDay(selectedDate, today);
   const isOverloaded = totalTasks >= 5;
 
   const rows: Date[][] = [];
@@ -337,16 +335,14 @@ export default function CalendarView() {
     <div className={styles.calendar}>
       <div className={styles.header}>
         <div className={styles.headerTop}>
-          <h1>Calendrier</h1>
-          <button className={styles.todayBtn} onClick={goToday}>Aujourd'hui</button>
-        </div>
-
-        <div className={styles.weekScore}>
-          <span>Cette semaine</span>
-          <div className={styles.weekScoreBar}>
-            <div className={styles.weekScoreFill} style={{ width: `${weekPct}%` }} />
+          <div className={styles.weekScore}>
+            <span>Cette semaine</span>
+            <div className={styles.weekScoreBar}>
+              <div className={styles.weekScoreFill} style={{ width: `${weekPct}%` }} />
+            </div>
+            <span className={styles.weekScoreCount}>{weekStats.done}/{weekStats.total}</span>
           </div>
-          <span className={styles.weekScoreCount}>{weekStats.done}/{weekStats.total}</span>
+          <button className={styles.todayBtn} onClick={goToday}>Aujourd'hui</button>
         </div>
       </div>
 
@@ -463,12 +459,6 @@ export default function CalendarView() {
                 </div>
               ))}
             </div>
-          )}
-
-          {totalTasks > 0 && !allDone && (
-            <button className={styles.prepareBtn}>
-              {isSelectedToday ? "✦ Préparer ma journée" : "✦ Planifier cette journée"}
-            </button>
           )}
 
           {allDone && (

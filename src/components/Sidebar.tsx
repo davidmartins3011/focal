@@ -2,7 +2,6 @@ import styles from "./Sidebar.module.css";
 import type { SidebarPage } from "../types";
 import {
   TasksIcon,
-  CalendarIcon,
   SuggestionsIcon,
   TodoIcon,
   ToolboxIcon,
@@ -44,13 +43,6 @@ export default function Sidebar({
         title="ToDo"
       >
         <TodoIcon />
-      </button>
-      <button
-        className={`${styles.icon} ${activePage === "calendar" ? styles.active : ""}`}
-        onClick={() => onPageChange("calendar")}
-        title="Calendrier"
-      >
-        <CalendarIcon />
       </button>
       <button
         className={`${styles.icon} ${activePage === "suggestions" ? styles.active : ""}`}

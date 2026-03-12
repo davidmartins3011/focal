@@ -949,6 +949,72 @@
   flex-shrink: 0;
 }
 
+.top5Progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  animation: fadeUp 0.25s ease both;
+}
+
+.top5ProgressBar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg3);
+  overflow: hidden;
+}
+
+.top5ProgressFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.top5ProgressLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+.top5AllDone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 16px;
+  animation: fadeUp 0.25s ease both;
+}
+
+.top5AllDoneIcon {
+  font-size: 20px;
+}
+
+.top5ResultItemDone {
+  opacity: 0.6;
+}
+
+.top5DoneText {
+  text-decoration: line-through;
+  text-decoration-color: var(--text3);
+}
+
+.top5DoneCheck {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
 /* ─── Animations ─── */
 
 @keyframes fadeUp {

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Sidebar from "./components/Sidebar";
 import MainPanel from "./components/MainPanel";
 import ChatPanel from "./components/ChatPanel";
-import CalendarView from "./components/CalendarView";
 import IntegrationsView from "./components/IntegrationsView";
 import ProfileView from "./components/ProfileView";
 import SuggestionsView from "./components/SuggestionsView";
@@ -318,8 +317,6 @@ export default function App() {
             onWorkingDaysChange={setWorkingDays}
           />
         );
-      case "calendar":
-        return <CalendarView />;
       case "suggestions":
         return <SuggestionsView />;
       case "toolbox":
