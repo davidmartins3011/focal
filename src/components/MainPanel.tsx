@@ -13,6 +13,7 @@ interface Props {
   activeTab: ViewTab;
   onTabChange: (tab: ViewTab) => void;
   dailyPriorityCount: number;
+  strategyEnabled: boolean;
   strategyFrequency: StrategyFrequency;
   strategyCycleStart: number;
   onLaunchDailyPrep?: () => void;
@@ -22,13 +23,13 @@ interface Props {
   workingDays?: WeekDayId[];
 }
 
-const tabs: { id: ViewTab; label: string }[] = [
+const ALL_TABS: { id: ViewTab; label: string }[] = [
   { id: "today", label: "Aujourd'hui" },
   { id: "week", label: "Cette semaine" },
   { id: "strategy", label: "Prise de recul" },
 ];
 
-export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchWeeklyPrep, onStuck, taskRefreshKey, workingDays }: Props) {
+export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyEnabled, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchWeeklyPrep, onStuck, taskRefreshKey, workingDays }: Props) {
   const { dayName, dayNum, monthShort, weekNum } = useMemo(() => {
     const now = new Date();
     return {
@@ -38,6 +39,11 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
       weekNum: getISOWeekNumber(now),
     };
   }, []);
+
+  const tabs = useMemo(
+    () => ALL_TABS.filter((t) => t.id !== "strategy" || strategyEnabled),
+    [strategyEnabled],
+  );
 
   return (
     <div className={styles.main}>

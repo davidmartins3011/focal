@@ -37,6 +37,7 @@ export default function App() {
   const [theme, setTheme] = useState<ThemeId>("default");
   const [aiSettings, setAISettings] = useState<AISettings>(defaultAISettings);
   const [dailyPriorityCount, setDailyPriorityCount] = useState<number>(3);
+  const [strategyEnabled, setStrategyEnabled] = useState<boolean>(true);
   const [strategyFrequency, setStrategyFrequency] = useState<StrategyFrequency>("monthly");
   const [strategyCycleStart, setStrategyCycleStart] = useState<number>(1);
   const [strategyOccurrence, setStrategyOccurrence] = useState<FrequencyOccurrence>("last");
@@ -72,6 +73,8 @@ export default function App() {
           const n = parseInt(s["daily-priority-count"], 10);
           if (n >= 1 && n <= 7) setDailyPriorityCount(n);
         }
+        if (s["strategy-enabled"] !== undefined)
+          setStrategyEnabled(s["strategy-enabled"] !== "false");
         if (s["strategy-frequency"] && VALID_STRATEGY_FREQS.includes(s["strategy-frequency"] as StrategyFrequency))
           setStrategyFrequency(s["strategy-frequency"] as StrategyFrequency);
         if (s["strategy-cycle-start"]) {
@@ -151,6 +154,11 @@ export default function App() {
   useEffect(() => {
     if (loaded.current) setSetting("daily-priority-count", String(dailyPriorityCount));
   }, [dailyPriorityCount]);
+
+  useEffect(() => {
+    if (loaded.current) setSetting("strategy-enabled", String(strategyEnabled));
+    if (!strategyEnabled && activeTab === "strategy") setActiveTab("today");
+  }, [strategyEnabled]);
 
   useEffect(() => {
     if (loaded.current) setSetting("strategy-frequency", strategyFrequency);
@@ -296,6 +304,8 @@ export default function App() {
             onTestNotification={notif.handleTestNotification}
             dailyPriorityCount={dailyPriorityCount}
             onDailyPriorityCountChange={setDailyPriorityCount}
+            strategyEnabled={strategyEnabled}
+            onStrategyEnabledChange={setStrategyEnabled}
             strategyFrequency={strategyFrequency}
             onStrategyFrequencyChange={handleStrategyFrequencyChange}
             strategyCycleStart={strategyCycleStart}
@@ -326,6 +336,7 @@ export default function App() {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             dailyPriorityCount={dailyPriorityCount}
+            strategyEnabled={strategyEnabled}
             strategyFrequency={strategyFrequency}
             strategyCycleStart={strategyCycleStart}
             onLaunchDailyPrep={handleLaunchDailyPrep}

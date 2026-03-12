@@ -33,6 +33,8 @@ interface SettingsViewProps {
   onTestNotification?: () => void;
   dailyPriorityCount: number;
   onDailyPriorityCountChange: (count: number) => void;
+  strategyEnabled: boolean;
+  onStrategyEnabledChange: (enabled: boolean) => void;
   strategyFrequency: StrategyFrequency;
   onStrategyFrequencyChange: (freq: StrategyFrequency) => void;
   strategyCycleStart: number;
@@ -55,6 +57,8 @@ export default function SettingsView({
   onTestNotification,
   dailyPriorityCount,
   onDailyPriorityCountChange,
+  strategyEnabled,
+  onStrategyEnabledChange,
   strategyFrequency,
   onStrategyFrequencyChange,
   strategyCycleStart,
@@ -286,12 +290,18 @@ export default function SettingsView({
               <div className={styles.settingInfo}>
                 <div className={styles.settingLabel}>Prise de recul</div>
                 <div className={styles.settingDesc}>
-                  À quelle fréquence veux-tu prendre du recul sur tes piliers et objectifs ?
+                  Active cette section pour planifier des moments de prise de recul sur tes piliers et objectifs.
                 </div>
               </div>
+              <button
+                className={`${styles.toggle} ${strategyEnabled ? styles.on : ""}`}
+                onClick={() => onStrategyEnabledChange(!strategyEnabled)}
+              >
+                <span className={styles.toggleDot} />
+              </button>
             </div>
 
-            <div className={styles.strategyBody}>
+            {strategyEnabled && <div className={styles.strategyBody}>
               <div className={styles.strategyFreqRow}>
                 <label className={styles.strategyLabel}>Fréq.</label>
                 <div className={styles.freqPills}>
@@ -384,7 +394,7 @@ export default function SettingsView({
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
       </section>
