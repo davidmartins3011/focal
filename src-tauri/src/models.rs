@@ -94,6 +94,13 @@ pub struct StrategyReview {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalStrategyLink {
+    pub goal_id: String,
+    pub strategy_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyAction {
     pub id: String,
     pub text: String,
@@ -127,6 +134,31 @@ pub struct StrategyGoal {
     pub strategies: Vec<StrategyStrategy>,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub period_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeriodReflection {
+    pub id: String,
+    pub prompt: String,
+    pub answer: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyPeriod {
+    pub id: String,
+    pub start_month: i32,
+    pub start_year: i32,
+    pub end_month: i32,
+    pub end_year: i32,
+    pub frequency: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub closed_at: Option<String>,
+    pub created_at: String,
+    pub reflections: Vec<PeriodReflection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

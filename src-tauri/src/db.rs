@@ -1,4 +1,4 @@
-use chrono::Local;
+use chrono::{Datelike, Local};
 use rusqlite::{params, Connection};
 
 const SCHEMA: &str = "
@@ -124,6 +124,35 @@ CREATE TABLE IF NOT EXISTS strategy_actions (
     FOREIGN KEY (tactic_id) REFERENCES strategy_tactics(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS strategy_periods (
+    id TEXT PRIMARY KEY,
+    start_month INTEGER NOT NULL,
+    start_year INTEGER NOT NULL,
+    end_month INTEGER NOT NULL,
+    end_year INTEGER NOT NULL,
+    frequency TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    closed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS period_reflections (
+    id TEXT PRIMARY KEY,
+    period_id TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    answer TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (period_id) REFERENCES strategy_periods(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS goal_strategy_links (
+    goal_id TEXT NOT NULL,
+    strategy_id TEXT NOT NULL,
+    PRIMARY KEY(goal_id, strategy_id),
+    FOREIGN KEY (goal_id) REFERENCES strategy_goals(id) ON DELETE CASCADE,
+    FOREIGN KEY (strategy_id) REFERENCES strategy_strategies(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS integrations (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -210,6 +239,13 @@ pub fn create_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     // Backfill existing tasks that have NULL urgency/importance
     conn.execute("UPDATE tasks SET urgency = 3 WHERE urgency IS NULL", []).ok();
     conn.execute("UPDATE tasks SET importance = 3 WHERE importance IS NULL", []).ok();
+    // Migration: add period_id to strategy_goals for pre-existing DBs
+    conn.execute("ALTER TABLE strategy_goals ADD COLUMN period_id TEXT", []).ok();
+    // Migration: populate goal_strategy_links from existing goal_id
+    conn.execute(
+        "INSERT OR IGNORE INTO goal_strategy_links (goal_id, strategy_id) SELECT goal_id, id FROM strategy_strategies WHERE goal_id IS NOT NULL",
+        [],
+    ).ok();
     // Migration: add oauth_provider column for pre-existing DBs
     conn.execute("ALTER TABLE integrations ADD COLUMN oauth_provider TEXT", []).ok();
     migrate_oauth_providers(conn);
@@ -319,19 +355,27 @@ pub fn seed_if_empty(conn: &mut Connection) -> Result<(), rusqlite::Error> {
         let tx = conn.transaction()?;
         seed_tasks(&tx)?;
         seed_reviews(&tx)?;
+        seed_periods(&tx)?;
         seed_goals(&tx)?;
         seed_chat(&tx)?;
         seed_integrations(&tx)?;
         seed_settings(&tx)?;
         seed_profile(&tx)?;
         tx.commit()?;
+        return Ok(());
     }
-    // Seed GSTA goals independently for existing databases
-    let goal_count: i64 = conn.query_row("SELECT COUNT(*) FROM strategy_goals", [], |row| row.get(0))?;
-    if goal_count == 0 {
-        let tx = conn.transaction()?;
-        seed_goals(&tx)?;
-        tx.commit()?;
+    // Migrate reviews→periods for existing databases
+    let period_count: i64 = conn.query_row("SELECT COUNT(*) FROM strategy_periods", [], |row| row.get(0))?;
+    if period_count == 0 {
+        migrate_reviews_to_periods(conn)?;
+    }
+    // Link orphan goals to active period
+    let active_id: Option<String> = conn.query_row(
+        "SELECT id FROM strategy_periods WHERE status = 'active' LIMIT 1",
+        [], |row| row.get(0),
+    ).ok();
+    if let Some(ref pid) = active_id {
+        conn.execute("UPDATE strategy_goals SET period_id = ?1 WHERE period_id IS NULL", params![pid])?;
     }
     Ok(())
 }
@@ -559,11 +603,109 @@ fn seed_reviews(conn: &Connection) -> Result<(), rusqlite::Error> {
     Ok(())
 }
 
-fn seed_goals(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let ins_goal = |id: &str, title: &str, target: &str, deadline: Option<&str>, pos: i32| -> Result<(), rusqlite::Error> {
+fn migrate_reviews_to_periods(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let mut stmt = conn.prepare("SELECT id, month, year, created_at FROM strategy_reviews ORDER BY year, month")?;
+    let reviews: Vec<(String, i32, i32, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    for (review_id, month, year, created_at) in &reviews {
+        let period_id = review_id.replace("review-", "period-");
         conn.execute(
-            "INSERT INTO strategy_goals (id, title, target, deadline, position) VALUES (?1,?2,?3,?4,?5)",
-            params![id, title, target, deadline, pos],
+            "INSERT OR IGNORE INTO strategy_periods (id, start_month, start_year, end_month, end_year, frequency, status, closed_at, created_at) VALUES (?1,?2,?3,?4,?5,'monthly','closed',?6,?6)",
+            params![period_id, month, year, month, year, created_at],
+        )?;
+        let mut rstmt = conn.prepare("SELECT id, prompt, answer, position FROM strategy_reflections WHERE review_id = ?1")?;
+        let refls: Vec<(String, String, String, i32)> = rstmt
+            .query_map(params![review_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+            .filter_map(|r| r.ok())
+            .collect();
+        for (ref_id, prompt, answer, position) in refls {
+            let new_id = format!("{}-{}", period_id, ref_id);
+            conn.execute(
+                "INSERT OR IGNORE INTO period_reflections (id, period_id, prompt, answer, position) VALUES (?1,?2,?3,?4,?5)",
+                params![new_id, period_id, prompt, answer, position],
+            )?;
+        }
+    }
+
+    let now = Local::now();
+    let month = now.month0() as i32;
+    let year = now.year();
+    let active_id = format!("period-{}-{:02}", year, month + 1);
+    conn.execute(
+        "INSERT OR IGNORE INTO strategy_periods (id, start_month, start_year, end_month, end_year, frequency, status) VALUES (?1,?2,?3,?4,?5,'monthly','active')",
+        params![active_id, month, year, month, year],
+    )?;
+    for (suffix, prompt, pos) in [
+        ("worked", "Ce qui a bien marché", 0i32),
+        ("blocked", "Ce qui m'a bloqué", 1),
+        ("stop", "Ce que je veux arrêter", 2),
+        ("start", "Ce que je veux commencer", 3),
+    ] {
+        conn.execute(
+            "INSERT OR IGNORE INTO period_reflections (id, period_id, prompt, answer, position) VALUES (?1,?2,?3,'',?4)",
+            params![format!("{}-{}", active_id, suffix), active_id, prompt, pos],
+        )?;
+    }
+    Ok(())
+}
+
+fn seed_periods(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let ins_p = |id: &str, sm: i32, sy: i32, em: i32, ey: i32, freq: &str, status: &str, closed: Option<&str>, at: &str| -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "INSERT INTO strategy_periods (id, start_month, start_year, end_month, end_year, frequency, status, closed_at, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![id, sm, sy, em, ey, freq, status, closed, at],
+        )?;
+        Ok(())
+    };
+    let ins_r = |id: &str, pid: &str, prompt: &str, answer: &str, pos: i32| -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "INSERT INTO period_reflections (id, period_id, prompt, answer, position) VALUES (?1,?2,?3,?4,?5)",
+            params![id, pid, prompt, answer, pos],
+        )?;
+        Ok(())
+    };
+
+    ins_p("period-2025-11", 10, 2025, 10, 2025, "monthly", "closed", Some("2025-12-01T09:00:00"), "2025-11-04T08:45:00")?;
+    ins_r("pr-2025-11-worked", "period-2025-11", "Ce qui a bien marché", "Le fait de commencer la journée sans réunion m'a donné un vrai boost de productivité.", 0)?;
+    ins_r("pr-2025-11-blocked", "period-2025-11", "Ce qui m'a bloqué", "Trop de tâches en parallèle. Je perds du temps à redécouvrir le contexte quand je switch.", 1)?;
+    ins_r("pr-2025-11-stop", "period-2025-11", "Ce que je veux arrêter", "Garder 10 onglets ouverts \"pour plus tard\". Essayer de tout faire en même temps.", 2)?;
+    ins_r("pr-2025-11-start", "period-2025-11", "Ce que je veux commencer", "Utiliser un timer Pomodoro. Bloquer des créneaux \"pas de réunion\" dans le calendrier.", 3)?;
+
+    ins_p("period-2025-12", 11, 2025, 11, 2025, "monthly", "closed", Some("2026-01-02T10:00:00"), "2025-12-02T11:30:00")?;
+    ins_r("pr-2025-12-worked", "period-2025-12", "Ce qui a bien marché", "La rétrospective Q4 a été très productive. J'ai mieux géré mon énergie en respectant mes pauses.", 0)?;
+    ins_r("pr-2025-12-blocked", "period-2025-12", "Ce qui m'a bloqué", "La fatigue de fin d'année. Beaucoup de distractions liées aux fêtes.", 1)?;
+    ins_r("pr-2025-12-stop", "period-2025-12", "Ce que je veux arrêter", "Me surcharger en fin de mois pour \"rattraper\". Ignorer les signaux de fatigue.", 2)?;
+    ins_r("pr-2025-12-start", "period-2025-12", "Ce que je veux commencer", "Planifier les semaines le dimanche soir. Mettre en place un vrai outil de suivi.", 3)?;
+
+    ins_p("period-2026-01", 0, 2026, 0, 2026, "monthly", "closed", Some("2026-02-01T09:00:00"), "2026-01-03T09:00:00")?;
+    ins_r("pr-2026-01-worked", "period-2026-01", "Ce qui a bien marché", "Le morning routine est installé. Les blocs de focus marchent quand je coupe les notifs.", 0)?;
+    ins_r("pr-2026-01-blocked", "period-2026-01", "Ce qui m'a bloqué", "Trop de contexte switching entre les projets. Difficulté à dire non aux urgences des autres.", 1)?;
+    ins_r("pr-2026-01-stop", "period-2026-01", "Ce que je veux arrêter", "Dire oui à toutes les réunions. Travailler le soir au lieu de couper.", 2)?;
+    ins_r("pr-2026-01-start", "period-2026-01", "Ce que je veux commencer", "Poser des limites claires sur les créneaux de deep work. Dédier le vendredi après-midi au SaaS.", 3)?;
+
+    ins_p("period-2026-02", 1, 2026, 1, 2026, "monthly", "closed", Some("2026-03-01T10:00:00"), "2026-02-01T10:00:00")?;
+    ins_r("pr-2026-02-worked", "period-2026-02", "Ce qui a bien marché", "Bonne discipline sur les standups. La décomposition de tâches m'aide vraiment.", 0)?;
+    ins_r("pr-2026-02-blocked", "period-2026-02", "Ce qui m'a bloqué", "Procrastination sur le projet SaaS : trop de tâches floues, pas assez décomposées.", 1)?;
+    ins_r("pr-2026-02-stop", "period-2026-02", "Ce que je veux arrêter", "Checker Slack toutes les 10 min. Accepter des réunions sans agenda clair.", 2)?;
+    ins_r("pr-2026-02-start", "period-2026-02", "Ce que je veux commencer", "Bloquer 1h chaque matin pour le SaaS. Faire la revue du soir systématiquement.", 3)?;
+
+    ins_p("period-2026-03", 2, 2026, 2, 2026, "monthly", "active", None, "2026-03-01T09:00:00")?;
+    ins_r("pr-2026-03-worked", "period-2026-03", "Ce qui a bien marché", "", 0)?;
+    ins_r("pr-2026-03-blocked", "period-2026-03", "Ce qui m'a bloqué", "", 1)?;
+    ins_r("pr-2026-03-stop", "period-2026-03", "Ce que je veux arrêter", "", 2)?;
+    ins_r("pr-2026-03-start", "period-2026-03", "Ce que je veux commencer", "", 3)?;
+
+    Ok(())
+}
+
+fn seed_goals(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let ins_goal = |id: &str, title: &str, target: &str, deadline: Option<&str>, pos: i32, period_id: &str| -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "INSERT INTO strategy_goals (id, title, target, deadline, position, period_id) VALUES (?1,?2,?3,?4,?5,?6)",
+            params![id, title, target, deadline, pos, period_id],
         )?;
         Ok(())
     };
@@ -590,7 +732,7 @@ fn seed_goals(conn: &Connection) -> Result<(), rusqlite::Error> {
     };
 
     // ── Goal 1: SaaS growth ──
-    ins_goal("g1", "Atteindre 1000 utilisateurs payants", "1000 utilisateurs payants en 12 mois", Some("2027-03-01"), 0)?;
+    ins_goal("g1", "Atteindre 1000 utilisateurs payants", "1000 utilisateurs payants en 12 mois", Some("2027-03-01"), 0, "period-2026-03")?;
 
     ins_strategy("s1", "g1", "Acquisition via SEO", "Se positionner sur des requêtes niche à forte intention", 0)?;
     ins_tactic("t1", "s1", "Blog expert", "Articles longs et ciblés sur des problèmes spécifiques", 0)?;
@@ -610,7 +752,7 @@ fn seed_goals(conn: &Connection) -> Result<(), rusqlite::Error> {
     ins_action("a9", "t4", "Ajouter un CTA personnalisé dans chaque email", false, 1)?;
 
     // ── Goal 2: Personal organization ──
-    ins_goal("g2", "Structurer mon organisation personnelle", "Routine stable et focus protégé chaque semaine", None, 1)?;
+    ins_goal("g2", "Structurer mon organisation personnelle", "Routine stable et focus protégé chaque semaine", None, 1, "period-2026-03")?;
 
     ins_strategy("s3", "g2", "Deep work systématique", "Protéger des blocs de concentration chaque jour", 0)?;
     ins_tactic("t5", "s3", "Blocs de focus", "Créneaux protégés sans interruption", 0)?;

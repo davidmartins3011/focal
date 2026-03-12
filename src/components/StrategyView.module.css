@@ -40,6 +40,13 @@
   margin-bottom: 12px;
 }
 
+.gstaEmptyBtns {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .gstaEmptyBtn {
   background: var(--accent);
   color: var(--bg);
@@ -57,6 +64,23 @@
   background: var(--accent-light);
 }
 
+.carryOverBtn {
+  background: none;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 7px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+}
+
+.carryOverBtn:hover {
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
 /* ── Goals list ── */
 .goalsList {
   display: flex;
@@ -65,8 +89,9 @@
   margin-bottom: 28px;
 }
 
-/* ── Goal card ── */
-.goalCard {
+/* ── North Star Goal card ── */
+.northStarCard {
+  position: relative;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -74,10 +99,298 @@
   animation: fadeUp 0.25s ease both;
 }
 
-.goalCard:nth-child(1) { animation-delay: 0.03s; }
-.goalCard:nth-child(2) { animation-delay: 0.08s; }
-.goalCard:nth-child(3) { animation-delay: 0.13s; }
+.northStarDeleteBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 16px;
+  color: var(--text3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s;
+  padding: 2px 6px;
+  line-height: 1;
+  z-index: 1;
+}
 
+.northStarCard:hover .northStarDeleteBtn {
+  opacity: 0.5;
+}
+
+.northStarDeleteBtn:hover {
+  opacity: 1 !important;
+  color: var(--red, #e74c3c);
+}
+
+.northStarCard:nth-child(1) { animation-delay: 0.03s; }
+.northStarCard:nth-child(2) { animation-delay: 0.08s; }
+.northStarCard:nth-child(3) { animation-delay: 0.13s; }
+
+.northStarHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px 14px;
+}
+
+.northStarIcon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.northStarContent {
+  flex: 1;
+  min-width: 0;
+  padding-right: 20px;
+}
+
+.northStarMetaRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.northStarMetaRow .goalTarget {
+  flex: 1;
+  min-width: 0;
+}
+
+.northStarDeadlineSep {
+  color: var(--text3);
+  opacity: 0.3;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.northStarDeadlineLabel {
+  font-size: 11px;
+  color: var(--text3);
+  opacity: 0.5;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.northStarDeadlineInput {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  color: var(--text2);
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 0;
+  outline: none;
+  transition: all 0.15s;
+  color-scheme: dark;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.northStarDeadlineInput:hover {
+  color: var(--text);
+  border-bottom-color: var(--border);
+}
+
+.northStarDeadlineInput:focus {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.northStarDeadlineInput::-webkit-calendar-picker-indicator {
+  opacity: 0.3;
+  cursor: pointer;
+  filter: invert(1);
+  transition: opacity 0.15s;
+  margin-left: 2px;
+}
+
+.northStarDeadlineInput:hover::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+}
+
+/* ── Objective card ── */
+.objectiveCard {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: visible;
+  animation: fadeUp 0.25s ease both;
+}
+
+.objectiveCard:nth-child(1) { animation-delay: 0.03s; }
+.objectiveCard:nth-child(2) { animation-delay: 0.08s; }
+.objectiveCard:nth-child(3) { animation-delay: 0.13s; }
+
+.objectiveHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 18px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.objectiveHeaderContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.objectiveTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: text;
+}
+
+.objectiveDesc {
+  font-size: 12px;
+  color: var(--text3);
+  cursor: text;
+  margin-top: 2px;
+}
+
+/* ── Linked goal tags ── */
+.linkedGoals {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  position: relative;
+}
+
+.linkedGoalTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-family: 'Outfit', sans-serif;
+  color: var(--text3);
+  background: rgba(var(--accent-rgb), 0.06);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  border-radius: 12px;
+  padding: 2px 10px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.linkedGoalTag:hover {
+  border-color: rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.linkedGoalRemove {
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  color: var(--text3);
+}
+
+.linkedGoalTag:hover .linkedGoalRemove {
+  opacity: 0.7;
+}
+
+.linkGoalBtn {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: 'Outfit', sans-serif;
+  color: var(--accent);
+  background: none;
+  border: 1px dashed rgba(var(--accent-rgb), 0.25);
+  border-radius: 12px;
+  padding: 2px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.linkGoalBtn:hover {
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: var(--accent);
+}
+
+.linkPicker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 10;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  min-width: 220px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.linkPickerItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: 'Outfit', sans-serif;
+  color: var(--text2);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.linkPickerItem:hover {
+  background: var(--bg3);
+}
+
+.linkPickerItem:active {
+  background: var(--bg4);
+}
+
+/* ── Sub-objectives ── */
+.subObjectivesBody {
+  padding: 0 18px 14px 38px;
+  border-top: 1px solid var(--border);
+}
+
+.subObjectiveItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.subObjectiveItem:hover .deleteBtnSm {
+  opacity: 0.5;
+}
+
+.subObjectiveDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text3);
+  opacity: 0.4;
+  flex-shrink: 0;
+}
+
+.subObjectiveText {
+  font-size: 12.5px;
+  color: var(--text2);
+  flex: 1;
+  cursor: text;
+}
+
+/* ── Legacy goalHeader (kept for compatibility) ── */
 .goalHeader {
   display: flex;
   align-items: flex-start;
@@ -491,6 +804,10 @@
   background: rgba(var(--accent-rgb), 0.05);
 }
 
+.noHoverBg.inlineText:hover {
+  background: none;
+}
+
 .inlineInput {
   font-family: 'Outfit', sans-serif;
   background: var(--bg);
@@ -544,6 +861,39 @@
 .monthChipActive:hover {
   background: var(--accent-light);
   border-color: var(--accent-light);
+}
+
+.monthChipClosed {
+  opacity: 0.7;
+}
+
+.monthChipCheck {
+  font-size: 9px;
+  color: var(--text3);
+  margin-left: 2px;
+}
+
+.monthChipActive .monthChipCheck {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.newPeriodChip {
+  display: flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px dashed var(--accent);
+  background: rgba(var(--accent-rgb), 0.06);
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  transition: all 0.15s;
+}
+
+.newPeriodChip:hover {
+  background: rgba(var(--accent-rgb), 0.12);
 }
 
 .monthChipLabel {
@@ -976,5 +1326,154 @@
 .bilanHighlightText {
   font-size: 12.5px;
   color: var(--text2);
+  line-height: 1.4;
+}
+
+.bilanEmpty {
+  font-size: 13px;
+  color: var(--text3);
+  padding: 16px 0;
+  margin-bottom: 12px;
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+/* CLOSED BANNER                                                  */
+/* ══════════════════════════════════════════════════════════════ */
+
+.closedBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  background: rgba(var(--accent-rgb), 0.04);
+  border: 1px solid rgba(var(--accent-rgb), 0.12);
+  border-radius: var(--radius);
+}
+
+.closedBannerIcon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.closedBannerTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.closedBannerMeta {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+/* COMMITMENTS FROM PREVIOUS PERIOD                               */
+/* ══════════════════════════════════════════════════════════════ */
+
+.commitments {
+  margin-bottom: 20px;
+}
+
+.commitmentCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  animation: fadeUp 0.25s ease both;
+}
+
+.commitmentIcon {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.commitmentLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text3);
+  margin-bottom: 4px;
+}
+
+.commitmentText {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+/* REFLECTION TEXTAREA                                            */
+/* ══════════════════════════════════════════════════════════════ */
+
+.reflectionTextarea {
+  width: 100%;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.65;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 4px 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.reflectionTextarea:focus {
+  border-bottom-color: var(--accent);
+}
+
+.reflectionTextarea::placeholder {
+  color: var(--text3);
+  opacity: 0.5;
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+/* CLOSE PERIOD                                                   */
+/* ══════════════════════════════════════════════════════════════ */
+
+.closePeriodSection {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 0 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+}
+
+.closePeriodBtn {
+  background: none;
+  color: var(--text3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.closePeriodBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.closePeriodHint {
+  font-size: 11px;
+  color: var(--text3);
+  opacity: 0.6;
   line-height: 1.4;
 }

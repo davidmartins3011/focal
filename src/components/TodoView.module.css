@@ -25,6 +25,52 @@
   font-size: 22px;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.viewToggle {
+  display: flex;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.viewToggleBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: var(--text3);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.viewToggleBtn:hover {
+  color: var(--text2);
+  background: var(--bg3);
+}
+
+.viewToggleBtn.viewToggleActive {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
 .subtitle {
   color: var(--text2);
   font-size: 13px;
@@ -243,6 +289,7 @@
   opacity: 0;
   transition: opacity 0.12s, color 0.12s;
   margin-top: 1px;
+  touch-action: none;
 }
 
 .todoItem:hover .dragHandle {
@@ -258,18 +305,14 @@
   cursor: grabbing;
 }
 
-/* ─── Drag states ─── */
+/* ─── Drag overlay ─── */
 
-.todoItem.dragging {
-  opacity: 0.25;
-}
-
-.todoItem.dragOverTop {
-  box-shadow: inset 0 2px 0 0 var(--accent);
-}
-
-.todoItem.dragOverBottom {
-  box-shadow: inset 0 -2px 0 0 var(--accent);
+.dragOverlay {
+  background: var(--bg2);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(var(--accent-rgb), 0.1);
+  opacity: 0.95;
 }
 
 .checkbox {
