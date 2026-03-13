@@ -350,6 +350,42 @@ const exe = release.assets.find(a => a.name.endsWith("-setup.exe"));
 
 ---
 
+## Signature et notarisation macOS (Apple Developer)
+
+### Situation actuelle
+
+L'app n'est **pas signée** avec un certificat Apple Developer. Conséquence : macOS Gatekeeper affiche le message « focal est endommagé et ne peut pas être ouvert » quand un utilisateur tente de l'ouvrir après téléchargement.
+
+**Contournement temporaire pour les utilisateurs :**
+
+1. Clic droit sur l'app → **Ouvrir** (au lieu de double-clic). Une alerte apparaît avec un bouton "Ouvrir" → cliquer dessus. Ne sera demandé qu'une fois.
+2. Ou via le terminal : `xattr -cr /Applications/focal.app`
+
+### Pour supprimer ce problème définitivement
+
+Il faut un **Apple Developer Program** (99$/an) : https://developer.apple.com/programs/
+
+Cela donne accès à :
+- **Code Signing** : un certificat `Developer ID Application` qui signe l'app pour que macOS la reconnaisse comme sûre
+- **Notarisation** : Apple scanne le binaire et délivre un "ticket" qui supprime totalement l'alerte Gatekeeper
+
+### Configuration dans le workflow GitHub Actions
+
+Le workflow `release.yml` peut être mis à jour pour signer et notariser automatiquement. Il faudra :
+
+1. Exporter le certificat Developer ID en `.p12` depuis Keychain Access
+2. Ajouter ces **Repository secrets** sur GitHub :
+   - `APPLE_CERTIFICATE` : certificat `.p12` encodé en base64
+   - `APPLE_CERTIFICATE_PASSWORD` : mot de passe du `.p12`
+   - `APPLE_ID` : email du compte Apple Developer
+   - `APPLE_PASSWORD` : mot de passe spécifique à l'app (généré sur appleid.apple.com)
+   - `APPLE_TEAM_ID` : identifiant de l'équipe Apple Developer
+3. `tauri-apps/tauri-action` supporte nativement ces variables d'environnement pour la signature et notarisation macOS
+
+**TODO :** souscrire à l'Apple Developer Program et configurer la signature quand le projet sera prêt pour une distribution grand public.
+
+---
+
 ## Arborescence des fichiers impliqués
 
 ```
