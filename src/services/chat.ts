@@ -23,6 +23,35 @@ export interface StepsAction {
   steps: string[];
 }
 
+export interface GoalAction {
+  id?: string;
+  title: string;
+  target?: string;
+  deadline?: string;
+}
+
+export interface StrategyActionItem {
+  id?: string;
+  title: string;
+  goalId?: string;
+}
+
+export interface TacticAction {
+  id?: string;
+  title: string;
+  strategyId?: string;
+}
+
+export interface ReflectionAction {
+  id: string;
+  answer: string;
+}
+
+export interface GoalStrategyLinkAction {
+  goalId: string;
+  strategyId: string;
+}
+
 export interface AiResponse {
   content: string;
   steps?: string[];
@@ -33,6 +62,17 @@ export interface AiResponse {
   tasksToReorder?: string[];
   tagsToSet?: TagAction[];
   stepsToSet?: StepsAction[];
+  goalsToAdd?: GoalAction[];
+  goalsToUpdate?: GoalAction[];
+  goalsToRemove?: string[];
+  strategiesToAdd?: StrategyActionItem[];
+  strategiesToUpdate?: StrategyActionItem[];
+  strategiesToRemove?: string[];
+  tacticsToAdd?: TacticAction[];
+  tacticsToUpdate?: TacticAction[];
+  tacticsToRemove?: string[];
+  reflectionsToUpdate?: ReflectionAction[];
+  goalStrategyLinksToToggle?: GoalStrategyLinkAction[];
 }
 
 export function getChatMessages(): Promise<ChatMessage[]> {
@@ -83,6 +123,17 @@ export interface DailyPrepResponse {
   tagsToSet?: TagAction[];
   stepsToSet?: StepsAction[];
   prepComplete: boolean;
+  goalsToAdd?: GoalAction[];
+  goalsToUpdate?: GoalAction[];
+  goalsToRemove?: string[];
+  strategiesToAdd?: StrategyActionItem[];
+  strategiesToUpdate?: StrategyActionItem[];
+  strategiesToRemove?: string[];
+  tacticsToAdd?: TacticAction[];
+  tacticsToUpdate?: TacticAction[];
+  tacticsToRemove?: string[];
+  reflectionsToUpdate?: ReflectionAction[];
+  goalStrategyLinksToToggle?: GoalStrategyLinkAction[];
 }
 
 export function sendDailyPrepMessage(

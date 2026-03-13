@@ -50,6 +50,49 @@ pub struct StepsAction {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GoalAction {
+    pub id: Option<String>,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadline: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyAction {
+    pub id: Option<String>,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub goal_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TacticAction {
+    pub id: Option<String>,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReflectionAction {
+    pub id: String,
+    pub answer: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalStrategyLinkAction {
+    pub goal_id: String,
+    pub strategy_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiResponse {
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,6 +111,28 @@ pub struct AiResponse {
     pub tags_to_set: Vec<TagAction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps_to_set: Vec<StepsAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goals_to_add: Vec<GoalAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goals_to_update: Vec<GoalAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goals_to_remove: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub strategies_to_add: Vec<StrategyAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub strategies_to_update: Vec<StrategyAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub strategies_to_remove: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tactics_to_add: Vec<TacticAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tactics_to_update: Vec<TacticAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tactics_to_remove: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reflections_to_update: Vec<ReflectionAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goal_strategy_links_to_toggle: Vec<GoalStrategyLinkAction>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -163,6 +228,149 @@ fn get_user_profile(db: &rusqlite::Connection) -> Option<serde_json::Value> {
     .and_then(|json| serde_json::from_str(&json).ok())
 }
 
+fn assign_period_short_id(prefix: &str, counter: &mut i32, real_id: &str, id_map: &mut HashMap<String, String>) -> String {
+    let short = format!("{}{}", prefix, counter);
+    *counter += 1;
+    id_map.insert(short.clone(), real_id.to_string());
+    short
+}
+
+fn append_active_period_data(
+    db: &rusqlite::Connection,
+    parts: &mut Vec<String>,
+    _task_counter: &mut i32,
+    id_map: &mut HashMap<String, String>,
+) {
+    let active_period = db.query_row(
+        "SELECT id, start_month, start_year, end_month, end_year, frequency FROM strategy_periods WHERE status = 'active' LIMIT 1",
+        [],
+        |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i32>(1)?,
+            row.get::<_, i32>(2)?,
+            row.get::<_, i32>(3)?,
+            row.get::<_, i32>(4)?,
+            row.get::<_, String>(5)?,
+        )),
+    );
+
+    let (period_id, start_m, start_y, end_m, end_y, freq) = match active_period {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+
+    parts.push(format!(
+        "PÉRIODE ACTIVE : {}/{} → {}/{} (fréquence : {}) [periodId={}]",
+        start_m, start_y, end_m, end_y, freq, period_id
+    ));
+    parts.push("Utilise les IDs courts entre crochets pour les actions sur les éléments de la période.".to_string());
+    parts.push(String::new());
+
+    let mut goal_counter = 1i32;
+    let mut strat_counter = 1i32;
+    let mut tactic_counter = 1i32;
+    let mut refl_counter = 1i32;
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, title, target, deadline FROM strategy_goals WHERE period_id = ?1 ORDER BY position",
+    ) {
+        if let Ok(goals) = stmt.query_map(params![period_id], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, Option<String>>(3)?,
+        ))) {
+            let goal_data: Vec<_> = goals.filter_map(|r| r.ok()).collect();
+            if !goal_data.is_empty() {
+                parts.push("CAPS À TENIR de la période active :".to_string());
+                for (id, title, target, deadline) in &goal_data {
+                    let short = assign_period_short_id("g", &mut goal_counter, id, id_map);
+                    let dl = deadline.as_deref().map(|d| format!(" | échéance: {d}")).unwrap_or_default();
+                    let tgt = if target.is_empty() { String::new() } else { format!(" — {target}") };
+                    parts.push(format!("[{short}] {title}{tgt}{dl}"));
+
+                    if let Ok(mut sstmt) = db.prepare(
+                        "SELECT s.id, s.title FROM strategy_strategies s JOIN goal_strategy_links l ON l.strategy_id = s.id WHERE l.goal_id = ?1 ORDER BY s.position",
+                    ) {
+                        if let Ok(strats) = sstmt.query_map(params![id], |row| Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                        ))) {
+                            for s in strats.filter_map(|r| r.ok()) {
+                                let s_short = id_map.iter().find(|(_, v)| **v == s.0).map(|(k, _)| k.clone())
+                                    .unwrap_or_else(|| assign_period_short_id("s", &mut strat_counter, &s.0, id_map));
+                                parts.push(format!("   ↳ objectif [{s_short}] {}", s.1));
+                            }
+                        }
+                    }
+                }
+                parts.push(String::new());
+            } else {
+                parts.push("Aucun cap à tenir défini pour la période active.".to_string());
+                parts.push(String::new());
+            }
+        }
+    }
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT s.id, s.title, s.description, s.goal_id FROM strategy_strategies s JOIN strategy_goals g ON s.goal_id = g.id WHERE g.period_id = ?1 ORDER BY s.position",
+    ) {
+        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+        ))) {
+            let strats: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+            if !strats.is_empty() {
+                parts.push("OBJECTIFS CONCRETS de la période active :".to_string());
+                for (sid, title, _desc, goal_id) in &strats {
+                    let s_short = id_map.iter().find(|(_, v)| *v == sid).map(|(k, _)| k.clone())
+                        .unwrap_or_else(|| assign_period_short_id("s", &mut strat_counter, sid, id_map));
+                    let g_short = id_map.iter().find(|(_, v)| *v == goal_id).map(|(k, _)| k.clone()).unwrap_or_default();
+                    let parent = if g_short.is_empty() { String::new() } else { format!(" (cap [{g_short}])") };
+                    parts.push(format!("[{s_short}] {title}{parent}"));
+
+                    if let Ok(mut tstmt) = db.prepare(
+                        "SELECT id, title FROM strategy_tactics WHERE strategy_id = ?1 ORDER BY position",
+                    ) {
+                        if let Ok(tactics) = tstmt.query_map(params![sid], |row| Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                        ))) {
+                            for t in tactics.filter_map(|r| r.ok()) {
+                                let tc_short = assign_period_short_id("tc", &mut tactic_counter, &t.0, id_map);
+                                parts.push(format!("   → stratégie [{tc_short}] {}", t.1));
+                            }
+                        }
+                    }
+                }
+                parts.push(String::new());
+            }
+        }
+    }
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, prompt, answer FROM period_reflections WHERE period_id = ?1 AND answer != '' ORDER BY position",
+    ) {
+        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))) {
+            let refls: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+            if !refls.is_empty() {
+                parts.push("RÉFLEXIONS de la période active :".to_string());
+                for (rid, prompt, answer) in &refls {
+                    let r_short = assign_period_short_id("r", &mut refl_counter, rid, id_map);
+                    parts.push(format!("[{r_short}] {prompt} → \"{answer}\""));
+                }
+                parts.push(String::new());
+            }
+        }
+    }
+}
+
 fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, String>) {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
@@ -182,6 +390,8 @@ fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, St
         "- Encourager et soutenir face aux difficultés liées au TDAH et à la productivité".to_string(),
         "- Proposer des stratégies de focus, de motivation et d'organisation".to_string(),
         "- CRÉER, MODIFIER, SUPPRIMER, COCHER et RÉORGANISER des tâches quand l'utilisateur le demande".to_string(),
+        "- CRÉER, MODIFIER, SUPPRIMER des caps à tenir, objectifs, stratégies et réflexions de la période active".to_string(),
+        "- LIER ou DÉLIER des objectifs à des caps à tenir".to_string(),
         String::new(),
         "QUAND L'UTILISATEUR DIT QU'IL BLOQUE SUR UNE TÂCHE :".to_string(),
         "- Commence par poser UNE question ouverte pour comprendre ce qui bloque exactement (est-ce le démarrage ? la peur du résultat ? le flou sur ce qu'il faut faire ? le manque de motivation ? la surcharge mentale ?)".to_string(),
@@ -224,19 +434,52 @@ fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, St
         r#"  Exemple : [{"taskId": "t1", "steps": ["Étape 1", "Étape 2", "Étape 3"]}]"#.to_string(),
         "  Utilise ce champ quand l'utilisateur demande de décomposer une tâche ou quand tu proposes une décomposition que l'utilisateur accepte.".to_string(),
         String::new(),
+        "ACTIONS SUR LA PÉRIODE ACTIVE (caps à tenir, objectifs, stratégies, réflexions) :".to_string(),
+        String::new(),
+        r#"- goalsToAdd : créer des caps à tenir. Champs : title (requis), target (description/cible), deadline (YYYY-MM-DD)."#.to_string(),
+        r#"  Exemple : [{"title": "Lancer le MVP", "target": "Avoir une version utilisable par 10 beta-testeurs", "deadline": "2026-06-01"}]"#.to_string(),
+        String::new(),
+        r#"- goalsToUpdate : modifier un cap existant par ID. Champs : id (requis), title, target, deadline."#.to_string(),
+        r#"  Exemple : [{"id": "g1", "title": "Nouveau titre", "target": "Nouvelle cible"}]"#.to_string(),
+        String::new(),
+        "- goalsToRemove : supprimer des caps par ID. Confirme toujours avant de supprimer.".to_string(),
+        "  Exemple : [\"g1\"]".to_string(),
+        String::new(),
+        r#"- strategiesToAdd : créer des objectifs concrets. Champs : title (requis), goalId (ID du cap parent, requis)."#.to_string(),
+        r#"  Exemple : [{"title": "Intégrer le paiement Stripe", "goalId": "g1"}]"#.to_string(),
+        String::new(),
+        r#"- strategiesToUpdate : modifier un objectif par ID. Champs : id (requis), title."#.to_string(),
+        r#"  Exemple : [{"id": "s1", "title": "Nouveau titre"}]"#.to_string(),
+        String::new(),
+        "- strategiesToRemove : supprimer des objectifs par ID.".to_string(),
+        "  Exemple : [\"s1\"]".to_string(),
+        String::new(),
+        r#"- tacticsToAdd : créer des stratégies/actions sous un objectif. Champs : title (requis), strategyId (ID de l'objectif parent, requis)."#.to_string(),
+        r#"  Exemple : [{"title": "Créer la page de paiement", "strategyId": "s1"}]"#.to_string(),
+        String::new(),
+        r#"- tacticsToUpdate : modifier une stratégie/action par ID. Champs : id (requis), title."#.to_string(),
+        r#"  Exemple : [{"id": "tc1", "title": "Nouveau titre"}]"#.to_string(),
+        String::new(),
+        "- tacticsToRemove : supprimer des stratégies/actions par ID.".to_string(),
+        "  Exemple : [\"tc1\"]".to_string(),
+        String::new(),
+        r#"- reflectionsToUpdate : modifier la réponse d'une réflexion de période. Champs : id (requis), answer (texte)."#.to_string(),
+        r#"  Exemple : [{"id": "r1", "answer": "J'ai appris à mieux prioriser"}]"#.to_string(),
+        String::new(),
+        r#"- goalStrategyLinksToToggle : lier/délier un objectif à un cap. Champs : goalId, strategyId."#.to_string(),
+        r#"  Exemple : [{"goalId": "g1", "strategyId": "s2"}]"#.to_string(),
+        String::new(),
         "RÈGLES D'UTILISATION DES ACTIONS :".to_string(),
         "- N'ajoute des actions que quand l'utilisateur le demande explicitement ou confirme ta proposition.".to_string(),
         "- Confirme toujours dans ton message (content) ce que tu fais : \"Je t'ajoute la tâche X\" / \"Je coche la tâche Y\".".to_string(),
-        "- Ne supprime JAMAIS une tâche sans confirmation de l'utilisateur.".to_string(),
+        "- Ne supprime JAMAIS une tâche ou un cap sans confirmation de l'utilisateur.".to_string(),
         "- Si tu n'as aucune action à faire, n'inclus pas les champs d'action (ou laisse-les vides).".to_string(),
-        "- Tu peux combiner plusieurs actions dans une même réponse.".to_string(),
+        "- Tu peux combiner plusieurs actions dans une même réponse (tâches + période).".to_string(),
         String::new(),
         "INSTRUCTIONS DE FORMAT :".to_string(),
-        "- Réponds en JSON valide avec cette structure :".to_string(),
-        r#"  {"content": "ton message texte", "steps": [...], "tasksToAdd": [...], "tasksToRemove": [...], "tasksToUpdate": [...], "tasksToToggle": [...], "tasksToReorder": [...], "tagsToSet": [...], "stepsToSet": [...]}"#.to_string(),
-        "- Le champ \"content\" est toujours présent et contient ton message textuel.".to_string(),
+        "- Réponds en JSON valide. Le champ \"content\" est toujours présent et contient ton message textuel.".to_string(),
         "- Le champ \"steps\" est optionnel. Inclus-le UNIQUEMENT quand tu décomposes une tâche en micro-étapes.".to_string(),
-        "- Les champs d'action (tasksTo*) sont tous optionnels. N'inclus que ceux nécessaires.".to_string(),
+        "- Tous les champs d'action (tasksTo*, goalsTo*, strategiesTo*, tacticsTo*, reflectionsToUpdate, goalStrategyLinksToToggle) sont optionnels. N'inclus que ceux nécessaires.".to_string(),
         "- N'utilise jamais de markdown dans content. Utilise des sauts de ligne (\\n) pour les paragraphes.".to_string(),
         String::new(),
     ];
@@ -393,6 +636,8 @@ fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, St
             }
         }
     }
+
+    append_active_period_data(db, &mut parts, &mut id_counter, &mut id_map);
 
     (parts.join("\n"), id_map)
 }
@@ -743,18 +988,136 @@ fn parse_steps_to_set(v: &serde_json::Value, id_map: &HashMap<String, String>) -
         .unwrap_or_default()
 }
 
+fn parse_goals_actions(v: &serde_json::Value, field: &str, snake: &str, id_map: &HashMap<String, String>) -> Vec<GoalAction> {
+    json_field(v, field, snake)
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|g| {
+                    let title = g.get("title").and_then(|v| v.as_str())?.to_string();
+                    let raw_id = g.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let id = raw_id.map(|rid| id_map.get(&rid).cloned().unwrap_or(rid));
+                    Some(GoalAction {
+                        id,
+                        title,
+                        target: g.get("target").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        deadline: g.get("deadline").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_strategies_actions(v: &serde_json::Value, field: &str, snake: &str, id_map: &HashMap<String, String>) -> Vec<StrategyAction> {
+    json_field(v, field, snake)
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|s| {
+                    let title = s.get("title").and_then(|v| v.as_str())?.to_string();
+                    let raw_id = s.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let id = raw_id.map(|rid| id_map.get(&rid).cloned().unwrap_or(rid));
+                    let raw_goal = s.get("goalId").or_else(|| s.get("goal_id")).and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let goal_id = raw_goal.map(|rid| id_map.get(&rid).cloned().unwrap_or(rid));
+                    Some(StrategyAction { id, title, goal_id })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_tactics_actions(v: &serde_json::Value, field: &str, snake: &str, id_map: &HashMap<String, String>) -> Vec<TacticAction> {
+    json_field(v, field, snake)
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| {
+                    let title = t.get("title").and_then(|v| v.as_str())?.to_string();
+                    let raw_id = t.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let id = raw_id.map(|rid| id_map.get(&rid).cloned().unwrap_or(rid));
+                    let raw_strat = t.get("strategyId").or_else(|| t.get("strategy_id")).and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let strategy_id = raw_strat.map(|rid| id_map.get(&rid).cloned().unwrap_or(rid));
+                    Some(TacticAction { id, title, strategy_id })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_reflections_actions(v: &serde_json::Value, id_map: &HashMap<String, String>) -> Vec<ReflectionAction> {
+    json_field(v, "reflectionsToUpdate", "reflections_to_update")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|r| {
+                    let raw_id = r.get("id").and_then(|v| v.as_str())?.to_string();
+                    let id = id_map.get(&raw_id).cloned().unwrap_or(raw_id);
+                    let answer = r.get("answer").and_then(|v| v.as_str())?.to_string();
+                    Some(ReflectionAction { id, answer })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_goal_strategy_links(v: &serde_json::Value, id_map: &HashMap<String, String>) -> Vec<GoalStrategyLinkAction> {
+    json_field(v, "goalStrategyLinksToToggle", "goal_strategy_links_to_toggle")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|l| {
+                    let raw_goal = l.get("goalId").or_else(|| l.get("goal_id")).and_then(|v| v.as_str())?.to_string();
+                    let raw_strat = l.get("strategyId").or_else(|| l.get("strategy_id")).and_then(|v| v.as_str())?.to_string();
+                    Some(GoalStrategyLinkAction {
+                        goal_id: id_map.get(&raw_goal).cloned().unwrap_or(raw_goal),
+                        strategy_id: id_map.get(&raw_strat).cloned().unwrap_or(raw_strat),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_period_actions(parsed: &serde_json::Value, id_map: &HashMap<String, String>) -> (
+    Vec<GoalAction>, Vec<GoalAction>, Vec<String>,
+    Vec<StrategyAction>, Vec<StrategyAction>, Vec<String>,
+    Vec<TacticAction>, Vec<TacticAction>, Vec<String>,
+    Vec<ReflectionAction>, Vec<GoalStrategyLinkAction>,
+) {
+    let resolve = |short: String| -> String { id_map.get(&short).cloned().unwrap_or(short) };
+
+    let goals_to_remove = parse_string_list(parsed, "goalsToRemove", "goals_to_remove").into_iter().map(resolve).collect();
+    let strategies_to_remove = parse_string_list(parsed, "strategiesToRemove", "strategies_to_remove").into_iter().map(|s| id_map.get(&s).cloned().unwrap_or(s)).collect();
+    let tactics_to_remove = parse_string_list(parsed, "tacticsToRemove", "tactics_to_remove").into_iter().map(|s| id_map.get(&s).cloned().unwrap_or(s)).collect();
+
+    (
+        parse_goals_actions(parsed, "goalsToAdd", "goals_to_add", id_map),
+        parse_goals_actions(parsed, "goalsToUpdate", "goals_to_update", id_map),
+        goals_to_remove,
+        parse_strategies_actions(parsed, "strategiesToAdd", "strategies_to_add", id_map),
+        parse_strategies_actions(parsed, "strategiesToUpdate", "strategies_to_update", id_map),
+        strategies_to_remove,
+        parse_tactics_actions(parsed, "tacticsToAdd", "tactics_to_add", id_map),
+        parse_tactics_actions(parsed, "tacticsToUpdate", "tactics_to_update", id_map),
+        tactics_to_remove,
+        parse_reflections_actions(parsed, id_map),
+        parse_goal_strategy_links(parsed, id_map),
+    )
+}
+
 fn parse_ai_text(raw: &str, id_map: &HashMap<String, String>) -> AiResponse {
     let Some(parsed) = clean_and_find_json(raw) else {
         return AiResponse {
             content: raw.to_string(),
             steps: None,
-            tasks_to_add: vec![],
-            tasks_to_remove: vec![],
-            tasks_to_update: vec![],
-            tasks_to_toggle: vec![],
-            tasks_to_reorder: None,
-            tags_to_set: vec![],
-            steps_to_set: vec![],
+            tasks_to_add: vec![], tasks_to_remove: vec![], tasks_to_update: vec![],
+            tasks_to_toggle: vec![], tasks_to_reorder: None,
+            tags_to_set: vec![], steps_to_set: vec![],
+            goals_to_add: vec![], goals_to_update: vec![], goals_to_remove: vec![],
+            strategies_to_add: vec![], strategies_to_update: vec![], strategies_to_remove: vec![],
+            tactics_to_add: vec![], tactics_to_update: vec![], tactics_to_remove: vec![],
+            reflections_to_update: vec![], goal_strategy_links_to_toggle: vec![],
         };
     };
 
@@ -799,6 +1162,13 @@ fn parse_ai_text(raw: &str, id_map: &HashMap<String, String>) -> AiResponse {
         })
         .collect();
 
+    let (
+        goals_to_add, goals_to_update, goals_to_remove,
+        strategies_to_add, strategies_to_update, strategies_to_remove,
+        tactics_to_add, tactics_to_update, tactics_to_remove,
+        reflections_to_update, goal_strategy_links_to_toggle,
+    ) = parse_period_actions(&parsed, id_map);
+
     AiResponse {
         content,
         steps,
@@ -809,6 +1179,10 @@ fn parse_ai_text(raw: &str, id_map: &HashMap<String, String>) -> AiResponse {
         tasks_to_reorder,
         tags_to_set: parse_tags_to_set(&parsed, id_map),
         steps_to_set: parse_steps_to_set(&parsed, id_map),
+        goals_to_add, goals_to_update, goals_to_remove,
+        strategies_to_add, strategies_to_update, strategies_to_remove,
+        tactics_to_add, tactics_to_update, tactics_to_remove,
+        reflections_to_update, goal_strategy_links_to_toggle,
     }
 }
 
@@ -1238,6 +1612,28 @@ pub struct DailyPrepResponse {
     pub tags_to_set: Vec<TagAction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps_to_set: Vec<StepsAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goals_to_add: Vec<GoalAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goals_to_update: Vec<GoalAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goals_to_remove: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub strategies_to_add: Vec<StrategyAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub strategies_to_update: Vec<StrategyAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub strategies_to_remove: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tactics_to_add: Vec<TacticAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tactics_to_update: Vec<TacticAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tactics_to_remove: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reflections_to_update: Vec<ReflectionAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goal_strategy_links_to_toggle: Vec<GoalStrategyLinkAction>,
 }
 
 fn get_daily_priority_limit(db: &rusqlite::Connection) -> i32 {
@@ -1546,14 +1942,13 @@ fn parse_daily_prep_response(raw: &str, id_map: &HashMap<String, String>) -> Res
         eprintln!("[daily_prep] WARN: no JSON found in response");
         return Ok(DailyPrepResponse {
             content: raw.to_string(),
-            tasks_to_add: vec![],
-            tasks_to_remove: vec![],
-            tasks_to_update: vec![],
-            tasks_to_toggle: vec![],
-            tasks_to_reorder: None,
-            prep_complete: false,
-            tags_to_set: vec![],
-            steps_to_set: vec![],
+            tasks_to_add: vec![], tasks_to_remove: vec![], tasks_to_update: vec![],
+            tasks_to_toggle: vec![], tasks_to_reorder: None, prep_complete: false,
+            tags_to_set: vec![], steps_to_set: vec![],
+            goals_to_add: vec![], goals_to_update: vec![], goals_to_remove: vec![],
+            strategies_to_add: vec![], strategies_to_update: vec![], strategies_to_remove: vec![],
+            tactics_to_add: vec![], tactics_to_update: vec![], tactics_to_remove: vec![],
+            reflections_to_update: vec![], goal_strategy_links_to_toggle: vec![],
         });
     };
 
@@ -1608,14 +2003,13 @@ fn parse_daily_prep_response(raw: &str, id_map: &HashMap<String, String>) -> Res
 
     Ok(DailyPrepResponse {
         content,
-        tasks_to_add,
-        tasks_to_remove,
-        tasks_to_update,
-        tasks_to_toggle,
-        tasks_to_reorder,
-        prep_complete,
-        tags_to_set,
-        steps_to_set,
+        tasks_to_add, tasks_to_remove, tasks_to_update,
+        tasks_to_toggle, tasks_to_reorder, prep_complete,
+        tags_to_set, steps_to_set,
+        goals_to_add: vec![], goals_to_update: vec![], goals_to_remove: vec![],
+        strategies_to_add: vec![], strategies_to_update: vec![], strategies_to_remove: vec![],
+        tactics_to_add: vec![], tactics_to_update: vec![], tactics_to_remove: vec![],
+        reflections_to_update: vec![], goal_strategy_links_to_toggle: vec![],
     })
 }
 
@@ -1938,9 +2332,11 @@ pub async fn send_weekly_prep_message(
 
 // ── Period Prep ──
 
-fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> String {
+fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> (String, HashMap<String, String>) {
     let now = chrono::Local::now();
     let today = now.format("%Y-%m-%d").to_string();
+
+    let mut id_map: HashMap<String, String> = HashMap::new();
 
     let mut parts = vec![
         "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
@@ -1949,7 +2345,6 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> Strin
         String::new(),
     ];
 
-    // Load period info
     if let Ok(row) = db.query_row(
         "SELECT start_month, start_year, end_month, end_year, frequency FROM strategy_periods WHERE id = ?1",
         params![period_id],
@@ -1975,7 +2370,11 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> Strin
         parts.push(String::new());
     }
 
-    // Load current goals (North Star / Caps à tenir)
+    let mut goal_counter = 1i32;
+    let mut strat_counter = 1i32;
+    let mut tactic_counter = 1i32;
+    let mut refl_counter = 1i32;
+
     if let Ok(mut stmt) = db.prepare(
         "SELECT id, title, target, deadline FROM strategy_goals WHERE period_id = ?1 ORDER BY position",
     ) {
@@ -1987,28 +2386,25 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> Strin
         ))) {
             let goals: Vec<_> = rows.filter_map(|r| r.ok()).collect();
             if !goals.is_empty() {
-                parts.push("CAPS À TENIR (North Star Goals) de cette période :".to_string());
-                for (i, (id, title, target, deadline)) in goals.iter().enumerate() {
-                    let mut line = format!("{}. **{}**", i + 1, title);
-                    if !target.is_empty() {
-                        line.push_str(&format!(" — {}", target));
-                    }
-                    if let Some(d) = deadline {
-                        line.push_str(&format!(" (échéance: {})", d));
-                    }
+                parts.push("CAPS À TENIR (utilise les IDs courts pour les actions) :".to_string());
+                for (id, title, target, deadline) in &goals {
+                    let short = assign_period_short_id("g", &mut goal_counter, id, &mut id_map);
+                    let mut line = format!("[{short}] **{title}**");
+                    if !target.is_empty() { line.push_str(&format!(" — {target}")); }
+                    if let Some(d) = deadline { line.push_str(&format!(" (échéance: {d})")); }
                     parts.push(line);
 
-                    // Load strategies linked to this goal
                     if let Ok(mut sstmt) = db.prepare(
-                        "SELECT s.title, s.description FROM strategy_strategies s JOIN goal_strategy_links l ON l.strategy_id = s.id WHERE l.goal_id = ?1 ORDER BY s.position",
+                        "SELECT s.id, s.title FROM strategy_strategies s JOIN goal_strategy_links l ON l.strategy_id = s.id WHERE l.goal_id = ?1 ORDER BY s.position",
                     ) {
                         if let Ok(strats) = sstmt.query_map(params![id], |row| Ok((
                             row.get::<_, String>(0)?,
                             row.get::<_, String>(1)?,
                         ))) {
                             for s in strats.filter_map(|r| r.ok()) {
-                                let desc = if s.1.is_empty() { String::new() } else { format!(" — {}", s.1) };
-                                parts.push(format!("   • Objectif : {}{}", s.0, desc));
+                                let s_short = id_map.iter().find(|(_, v)| **v == s.0).map(|(k, _)| k.clone())
+                                    .unwrap_or_else(|| assign_period_short_id("s", &mut strat_counter, &s.0, &mut id_map));
+                                parts.push(format!("   ↳ objectif [{s_short}] {}", s.1));
                             }
                         }
                     }
@@ -2021,28 +2417,35 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> Strin
         }
     }
 
-    // Load all objectives (strategies) and their tactics
     if let Ok(mut stmt) = db.prepare(
-        "SELECT s.id, s.title, s.description FROM strategy_strategies s JOIN strategy_goals g ON s.goal_id = g.id WHERE g.period_id = ?1 ORDER BY s.position",
+        "SELECT s.id, s.title, s.description, s.goal_id FROM strategy_strategies s JOIN strategy_goals g ON s.goal_id = g.id WHERE g.period_id = ?1 ORDER BY s.position",
     ) {
         if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
             row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
         ))) {
             let strats: Vec<_> = rows.filter_map(|r| r.ok()).collect();
             if !strats.is_empty() {
-                parts.push("OBJECTIFS CONCRETS de cette période :".to_string());
-                for (i, (sid, title, desc)) in strats.iter().enumerate() {
-                    let d = if desc.is_empty() { String::new() } else { format!(" — {}", desc) };
-                    parts.push(format!("{}. **{}**{}", i + 1, title, d));
+                parts.push("OBJECTIFS CONCRETS :".to_string());
+                for (sid, title, _desc, goal_id) in &strats {
+                    let s_short = id_map.iter().find(|(_, v)| *v == sid).map(|(k, _)| k.clone())
+                        .unwrap_or_else(|| assign_period_short_id("s", &mut strat_counter, sid, &mut id_map));
+                    let g_short = id_map.iter().find(|(_, v)| *v == goal_id).map(|(k, _)| k.clone()).unwrap_or_default();
+                    let parent = if g_short.is_empty() { String::new() } else { format!(" (cap [{g_short}])") };
+                    parts.push(format!("[{s_short}] {title}{parent}"));
 
                     if let Ok(mut tstmt) = db.prepare(
-                        "SELECT title FROM strategy_tactics WHERE strategy_id = ?1 ORDER BY position",
+                        "SELECT id, title FROM strategy_tactics WHERE strategy_id = ?1 ORDER BY position",
                     ) {
-                        if let Ok(tactics) = tstmt.query_map(params![sid], |row| row.get::<_, String>(0)) {
+                        if let Ok(tactics) = tstmt.query_map(params![sid], |row| Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                        ))) {
                             for t in tactics.filter_map(|r| r.ok()) {
-                                parts.push(format!("   → Stratégie : {}", t));
+                                let tc_short = assign_period_short_id("tc", &mut tactic_counter, &t.0, &mut id_map);
+                                parts.push(format!("   → stratégie [{tc_short}] {}", t.1));
                             }
                         }
                     }
@@ -2052,7 +2455,27 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> Strin
         }
     }
 
-    // Load previous period reflections (commitments)
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, prompt, answer FROM period_reflections WHERE period_id = ?1 ORDER BY position",
+    ) {
+        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))) {
+            let refls: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+            if !refls.is_empty() {
+                parts.push("RÉFLEXIONS de cette période :".to_string());
+                for (rid, prompt, answer) in &refls {
+                    let r_short = assign_period_short_id("r", &mut refl_counter, rid, &mut id_map);
+                    let ans = if answer.is_empty() { "(vide)".to_string() } else { format!("\"{}\"", answer) };
+                    parts.push(format!("[{r_short}] {prompt} → {ans}"));
+                }
+                parts.push(String::new());
+            }
+        }
+    }
+
     if let Ok(prev_id) = db.query_row(
         "SELECT id FROM strategy_periods WHERE status = 'closed' ORDER BY end_year DESC, end_month DESC LIMIT 1",
         [],
@@ -2098,18 +2521,34 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> Strin
     parts.push(String::new());
 
     parts.push("DÉROULEMENT NATUREL (adapte-toi, ce n'est pas un script rigide) :".to_string());
-    parts.push("1. Commence par un résumé de la situation : les caps à tenir actuels, les objectifs, et si disponible les réflexions de la période précédente (engagements à arrêter/commencer).".to_string());
+    parts.push("1. Commence par un résumé de la situation : les caps à tenir actuels, les objectifs, et si disponible les réflexions de la période précédente.".to_string());
     parts.push("2. Demande si les caps à tenir sont toujours d'actualité ou s'il y a des changements.".to_string());
     parts.push("3. Aide à affiner ou ajouter des objectifs concrets pour cette période.".to_string());
     parts.push("4. Explore les priorités : qu'est-ce qui est le plus important cette période ?".to_string());
-    parts.push("5. Si des engagements de la période précédente existent (ce que l'utilisateur voulait arrêter/commencer), rappelle-les et demande comment les intégrer.".to_string());
+    parts.push("5. Si des engagements de la période précédente existent, rappelle-les et demande comment les intégrer.".to_string());
     parts.push("6. Confirme le plan et lance la période (prepComplete: true).".to_string());
     parts.push(String::new());
 
     parts.push("IMPORTANT :".to_string());
-    parts.push("- Tu ne peux PAS modifier directement les caps, objectifs ou stratégies. L'utilisateur le fera dans l'interface.".to_string());
-    parts.push("- Ton rôle est de l'aider à RÉFLÉCHIR : clarifier ses priorités, challenger ses choix, proposer des formulations.".to_string());
+    parts.push("- Tu PEUX modifier directement les caps, objectifs, stratégies et réflexions via les champs d'action JSON.".to_string());
+    parts.push("- Quand l'utilisateur demande d'ajouter, modifier ou supprimer un cap/objectif/stratégie, fais-le directement.".to_string());
+    parts.push("- Confirme toujours dans ton message ce que tu fais.".to_string());
+    parts.push("- Ne supprime JAMAIS un cap ou objectif sans confirmation de l'utilisateur.".to_string());
     parts.push("- Si l'utilisateur dit \"c'est bon\" ou \"on est bons\", mets prepComplete à true.".to_string());
+    parts.push(String::new());
+
+    parts.push("ACTIONS DISPONIBLES (caps, objectifs, stratégies, réflexions) :".to_string());
+    parts.push(r#"- goalsToAdd : [{"title": "...", "target": "...", "deadline": "YYYY-MM-DD"}]"#.to_string());
+    parts.push(r#"- goalsToUpdate : [{"id": "g1", "title": "...", "target": "...", "deadline": "..."}]"#.to_string());
+    parts.push(r#"- goalsToRemove : ["g1"]"#.to_string());
+    parts.push(r#"- strategiesToAdd : [{"title": "...", "goalId": "g1"}]"#.to_string());
+    parts.push(r#"- strategiesToUpdate : [{"id": "s1", "title": "..."}]"#.to_string());
+    parts.push(r#"- strategiesToRemove : ["s1"]"#.to_string());
+    parts.push(r#"- tacticsToAdd : [{"title": "...", "strategyId": "s1"}]"#.to_string());
+    parts.push(r#"- tacticsToUpdate : [{"id": "tc1", "title": "..."}]"#.to_string());
+    parts.push(r#"- tacticsToRemove : ["tc1"]"#.to_string());
+    parts.push(r#"- reflectionsToUpdate : [{"id": "r1", "answer": "..."}]"#.to_string());
+    parts.push(r#"- goalStrategyLinksToToggle : [{"goalId": "g1", "strategyId": "s1"}]"#.to_string());
     parts.push(String::new());
 
     parts.push("STYLE DU CONTENU (content) — RESPECTE STRICTEMENT CE FORMAT :".to_string());
@@ -2120,28 +2559,30 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> Strin
     parts.push(String::new());
 
     parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
-    parts.push(r#"{"content": "...", "prepComplete": false}"#.to_string());
+    parts.push(r#"{"content": "...", "prepComplete": false, "goalsToAdd": [], ...}"#.to_string());
     parts.push("- content : ton message texte.".to_string());
     parts.push("- prepComplete : true UNIQUEMENT quand l'utilisateur confirme que la préparation est terminée.".to_string());
+    parts.push("- Tous les champs d'action sont optionnels. N'inclus que ceux nécessaires.".to_string());
 
-    parts.join("\n")
+    (parts.join("\n"), id_map)
 }
 
-fn parse_period_prep_response(raw: &str) -> Result<DailyPrepResponse, String> {
+fn parse_period_prep_response(raw: &str, id_map: &HashMap<String, String>) -> Result<DailyPrepResponse, String> {
     eprintln!("[period_prep] raw LLM response (first 500 chars): {}", &raw[..raw.len().min(500)]);
 
+    let empty = || DailyPrepResponse {
+        content: raw.to_string(),
+        tasks_to_add: vec![], tasks_to_remove: vec![], tasks_to_update: vec![],
+        tasks_to_toggle: vec![], tasks_to_reorder: None, prep_complete: false,
+        tags_to_set: vec![], steps_to_set: vec![],
+        goals_to_add: vec![], goals_to_update: vec![], goals_to_remove: vec![],
+        strategies_to_add: vec![], strategies_to_update: vec![], strategies_to_remove: vec![],
+        tactics_to_add: vec![], tactics_to_update: vec![], tactics_to_remove: vec![],
+        reflections_to_update: vec![], goal_strategy_links_to_toggle: vec![],
+    };
+
     let Some(parsed) = clean_and_find_json(raw) else {
-        return Ok(DailyPrepResponse {
-            content: raw.to_string(),
-            tasks_to_add: vec![],
-            tasks_to_remove: vec![],
-            tasks_to_update: vec![],
-            tasks_to_toggle: vec![],
-            tasks_to_reorder: None,
-            prep_complete: false,
-            tags_to_set: vec![],
-            steps_to_set: vec![],
-        });
+        return Ok(empty());
     };
 
     let content = parsed.get("content").and_then(|v| v.as_str()).unwrap_or(raw).to_string();
@@ -2151,16 +2592,22 @@ fn parse_period_prep_response(raw: &str) -> Result<DailyPrepResponse, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let (
+        goals_to_add, goals_to_update, goals_to_remove,
+        strategies_to_add, strategies_to_update, strategies_to_remove,
+        tactics_to_add, tactics_to_update, tactics_to_remove,
+        reflections_to_update, goal_strategy_links_to_toggle,
+    ) = parse_period_actions(&parsed, id_map);
+
     Ok(DailyPrepResponse {
         content,
-        tasks_to_add: vec![],
-        tasks_to_remove: vec![],
-        tasks_to_update: vec![],
-        tasks_to_toggle: vec![],
-        tasks_to_reorder: None,
-        prep_complete,
-        tags_to_set: vec![],
-        steps_to_set: vec![],
+        tasks_to_add: vec![], tasks_to_remove: vec![], tasks_to_update: vec![],
+        tasks_to_toggle: vec![], tasks_to_reorder: None, prep_complete,
+        tags_to_set: vec![], steps_to_set: vec![],
+        goals_to_add, goals_to_update, goals_to_remove,
+        strategies_to_add, strategies_to_update, strategies_to_remove,
+        tactics_to_add, tactics_to_update, tactics_to_remove,
+        reflections_to_update, goal_strategy_links_to_toggle,
     })
 }
 
@@ -2171,11 +2618,11 @@ pub async fn send_period_prep_message(
     history: String,
     period_id: String,
 ) -> Result<DailyPrepResponse, String> {
-    let (provider_id, api_key, model, system_prompt) = {
+    let (provider_id, api_key, model, system_prompt, id_map) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let (provider, model) = get_active_provider(&db)?;
-        let system = build_period_prep_prompt(&db, &period_id);
-        (provider.id, provider.api_key, model, system)
+        let (system, id_map) = build_period_prep_prompt(&db, &period_id);
+        (provider.id, provider.api_key, model, system, id_map)
     };
 
     let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
@@ -2183,7 +2630,7 @@ pub async fn send_period_prep_message(
     msgs.push(("user".to_string(), user_message));
 
     let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs, true).await?;
-    parse_period_prep_response(&raw)
+    parse_period_prep_response(&raw, &id_map)
 }
 
 // ── Onboarding ──

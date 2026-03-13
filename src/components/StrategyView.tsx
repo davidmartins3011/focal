@@ -177,9 +177,10 @@ interface StrategyViewProps {
   frequency: StrategyFrequency;
   cycleStart: number;
   onLaunchPeriodPrep?: (periodId: string) => void;
+  refreshKey?: number;
 }
 
-export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep }: StrategyViewProps) {
+export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep, refreshKey }: StrategyViewProps) {
   // ── Periods state ──
   const [periods, setPeriods] = useState<StrategyPeriod[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
@@ -289,6 +290,13 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
   }, [selectedPeriodId]);
 
   useEffect(() => { reloadGoals(); }, [reloadGoals]);
+
+  useEffect(() => {
+    if (refreshKey !== undefined && refreshKey > 0) {
+      loadPeriods();
+      reloadGoals();
+    }
+  }, [refreshKey]);
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {

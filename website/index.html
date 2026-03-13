@@ -1,0 +1,2178 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>focal. — L'assistant IA pour les cerveaux TDAH</title>
+  <meta name="description" content="focal. est un assistant IA de productivité conçu pour les personnes avec TDAH. Il transforme vos tâches écrasantes en micro-étapes actionnables, structure vos journées et apprend votre façon de fonctionner.">
+  <meta name="theme-color" content="#131316">
+
+  <meta property="og:title" content="focal. — L'assistant IA pour les cerveaux TDAH">
+  <meta property="og:description" content="L'IA qui transforme vos tâches écrasantes en micro-étapes actionnables. Conçu pour les cerveaux TDAH.">
+  <meta property="og:type" content="website">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #131316;
+      --bg-elevated: #1a1a1f;
+      --bg-card: #1e1e24;
+      --accent: #a78bfa;
+      --accent-glow: rgba(167, 139, 250, 0.15);
+      --accent-dim: rgba(167, 139, 250, 0.6);
+      --text: #e8e4ee;
+      --text-secondary: #9e99a7;
+      --text-muted: #6b6575;
+      --border: rgba(255, 255, 255, 0.06);
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ─── Nav ─── */
+
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 0;
+      transition: background 0.3s, backdrop-filter 0.3s;
+    }
+
+    nav.scrolled {
+      background: rgba(19, 19, 22, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-family: 'Lora', serif;
+      font-style: italic;
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .logo span {
+      color: var(--accent);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 400;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+    }
+
+    .nav-links a.btn-primary {
+      color: #131316;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      border-radius: 50px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.25s ease;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #131316;
+    }
+
+    .btn-primary:hover {
+      background: #b99dff;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 30px rgba(167, 139, 250, 0.3);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .btn-large {
+      padding: 14px 36px;
+      font-size: 1rem;
+    }
+
+    /* ─── Hero ─── */
+
+    .hero {
+      padding: 160px 0 100px;
+      text-align: center;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 700px;
+      height: 700px;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: var(--accent-glow);
+      border: 1px solid rgba(167, 139, 250, 0.2);
+      border-radius: 50px;
+      font-size: 0.8rem;
+      color: var(--accent);
+      font-weight: 500;
+      margin-bottom: 32px;
+    }
+
+    .hero-badge svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .hero h1 {
+      font-family: 'Lora', serif;
+      font-size: clamp(2.8rem, 6vw, 4.5rem);
+      font-weight: 600;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero h1 em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .hero p {
+      font-size: clamp(1.05rem, 2vw, 1.25rem);
+      color: var(--text-secondary);
+      max-width: 580px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .hero-visual {
+      margin-top: 80px;
+      position: relative;
+    }
+
+    .hero-visual .window {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.03),
+        0 20px 60px rgba(0,0,0,0.5),
+        0 0 120px var(--accent-glow);
+    }
+
+    .window-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 18px;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .window-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .window-dot:nth-child(1) { background: #ff5f57; }
+    .window-dot:nth-child(2) { background: #febc2e; }
+    .window-dot:nth-child(3) { background: #28c840; }
+
+    .window-content {
+      padding: 0;
+      min-height: 480px;
+      display: flex;
+    }
+
+    /* ── Icon sidebar (narrow, like the real app) ── */
+    .w-sidebar {
+      width: 42px;
+      flex-shrink: 0;
+      background: rgba(255,255,255,0.015);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14px 0;
+    }
+
+    .w-sidebar-logo {
+      font-family: 'Lora', serif;
+      font-style: italic;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 20px;
+    }
+
+    .w-sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .w-sidebar-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+    }
+
+    .w-sidebar-icon.active {
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .w-sidebar-icon svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .w-sidebar-spacer { flex: 1; }
+
+    .w-sidebar-bottom {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    /* ── Main panel ── */
+    .w-main {
+      flex: 1;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+      min-width: 0;
+      text-align: left;
+    }
+
+    .w-date {
+      font-size: 1.1rem;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .w-week {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .w-tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .w-tab {
+      padding: 5px 14px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      border-radius: 6px;
+      border: 1px solid transparent;
+    }
+
+    .w-tab.active {
+      color: var(--text);
+      background: rgba(255,255,255,0.06);
+      border-color: var(--border);
+    }
+
+    .w-prep {
+      background: linear-gradient(135deg, rgba(167,139,250,0.1), rgba(139,92,246,0.04));
+      border: 1px solid rgba(167,139,250,0.12);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .w-prep-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+
+    .w-prep-text h4 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+
+    .w-prep-text p {
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      margin-bottom: 8px;
+    }
+
+    .w-prep-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .w-prep-btn {
+      padding: 5px 14px;
+      background: var(--accent);
+      color: #131316;
+      border-radius: 8px;
+      font-size: 0.65rem;
+      font-weight: 600;
+    }
+
+    .w-prep-skip {
+      font-size: 0.6rem;
+      color: var(--text-muted);
+    }
+
+    .w-progress {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .w-progress .streak {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .w-section-hdr {
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .w-section-hdr .cnt {
+      margin-left: auto;
+    }
+
+    .w-task {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .w-task-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .w-task-check {
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      border: 1.5px solid var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .w-task-name {
+      font-size: 0.78rem;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .w-task-tags {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .w-tag {
+      font-size: 0.55rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    .w-tag.red { background: rgba(239,68,68,0.15); color: #f87171; }
+    .w-tag.orange { background: rgba(251,146,60,0.15); color: #fb923c; }
+    .w-tag.purple { background: rgba(167,139,250,0.15); color: #a78bfa; }
+    .w-tag.blue { background: rgba(56,189,248,0.15); color: #38bdf8; }
+    .w-tag.green { background: rgba(52,211,153,0.15); color: #34d399; }
+
+    .w-task-meta {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding-left: 27px;
+      font-size: 0.6rem;
+      color: var(--text-muted);
+    }
+
+    .w-task-meta span {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      cursor: default;
+    }
+
+    .w-task-plus {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .w-task-arrows {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      flex-shrink: 0;
+      color: var(--text-muted);
+      font-size: 0.5rem;
+      line-height: 0.7;
+    }
+
+    .w-task-priority {
+      display: flex;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .w-priority-dash {
+      width: 6px;
+      height: 2px;
+      border-radius: 1px;
+    }
+
+    .w-priority-dash.high { background: #f87171; }
+    .w-priority-dash.med { background: #fb923c; }
+    .w-priority-dash.low { background: var(--text-muted); }
+
+    /* ── Chat panel ── */
+    .w-chat {
+      width: 340px;
+      text-align: left;
+      flex-shrink: 0;
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .w-chat-hdr {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .w-chat-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Lora', serif;
+      font-style: italic;
+      font-size: 0.7rem;
+      color: #131316;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .w-chat-hdr-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .w-chat-hdr-name {
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .w-chat-hdr-status {
+      font-size: 0.6rem;
+      color: #34d399;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .w-chat-hdr-status::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #34d399;
+    }
+
+    .w-chat-model {
+      font-size: 0.58rem;
+      padding: 3px 8px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .w-chat-body {
+      flex: 1;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow: hidden;
+    }
+
+    .w-msg-user {
+      padding: 9px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      font-size: 0.72rem;
+      color: var(--text);
+      align-self: stretch;
+    }
+
+    .w-msg-ai {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .w-msg-ai-label {
+      font-size: 0.55rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .w-msg-ai-text {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .w-msg-ai-text strong {
+      color: var(--text);
+    }
+
+    .w-msg-ai-section {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .w-msg-ai-list {
+      list-style: none;
+      margin: 2px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .w-msg-ai-list li {
+      font-size: 0.66rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .w-msg-ai-list li strong {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .w-msg-ai-note {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-top: 4px;
+      font-style: italic;
+    }
+
+    .w-chat-action {
+      margin-top: 6px;
+      padding: 8px 0;
+      background: rgba(52,211,153,0.08);
+      border: 1px solid rgba(52,211,153,0.18);
+      border-radius: 8px;
+      text-align: center;
+      font-size: 0.65rem;
+      color: #34d399;
+      font-weight: 500;
+    }
+
+    .w-chat-footer {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .w-chat-input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .w-chat-input {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+    }
+
+    .w-chat-send {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .w-chat-send svg {
+      width: 13px;
+      height: 13px;
+      color: #131316;
+    }
+
+    .w-chat-pills {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .w-chat-pill {
+      font-size: 0.55rem;
+      padding: 3px 9px;
+      border-radius: 50px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* ─── Section commons ─── */
+
+    section {
+      padding: 120px 0;
+    }
+
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: var(--accent);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-family: 'Lora', serif;
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 600;
+      line-height: 1.15;
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    .section-subtitle {
+      font-size: 1.1rem;
+      color: var(--text-secondary);
+      max-width: 560px;
+      line-height: 1.7;
+    }
+
+    .section-header {
+      margin-bottom: 64px;
+    }
+
+    .section-header.center {
+      text-align: center;
+    }
+
+    .section-header.center .section-subtitle {
+      margin: 0 auto;
+    }
+
+    /* ─── Problem ─── */
+
+    .problem {
+      background: var(--bg-elevated);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+
+    .problem-card {
+      padding: 32px;
+      border-radius: var(--radius);
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+
+    .problem-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(255, 107, 107, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 1.4rem;
+    }
+
+    .problem-card h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .problem-card p {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ─── Magic moment ─── */
+
+    .magic {
+      position: relative;
+    }
+
+    .magic-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    .magic-quote {
+      font-family: 'Lora', serif;
+      font-style: italic;
+      font-size: 1.5rem;
+      line-height: 1.5;
+      color: var(--text);
+      margin-bottom: 24px;
+      padding-left: 20px;
+      border-left: 3px solid var(--accent);
+    }
+
+    .magic-text {
+      font-size: 1rem;
+      color: var(--text-secondary);
+      line-height: 1.8;
+    }
+
+    .magic-demo {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .magic-demo-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .magic-demo-header svg {
+      width: 14px;
+      height: 14px;
+      color: var(--accent);
+    }
+
+    .magic-demo-body {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .magic-task-input {
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .magic-task-input .decompose-btn {
+      font-size: 0.7rem;
+      padding: 4px 12px;
+      background: var(--accent);
+      color: #131316;
+      border-radius: 50px;
+      font-weight: 500;
+    }
+
+    .magic-arrow {
+      text-align: center;
+      color: var(--accent);
+    }
+
+    .magic-arrow svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .magic-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .magic-step-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, rgba(167,139,250,0.06), rgba(167,139,250,0.02));
+      border: 1px solid rgba(167,139,250,0.1);
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+
+    .magic-step-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent-glow);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .magic-step-time {
+      margin-left: auto;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .magic-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.7rem;
+      color: var(--accent);
+      margin-top: 4px;
+    }
+
+    .magic-badge svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    /* ─── Pillar features ─── */
+
+    .pillars-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .pillar-card {
+      padding: 36px 32px;
+      border-radius: var(--radius);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      transition: border-color 0.3s, transform 0.3s;
+    }
+
+    .pillar-card:hover {
+      border-color: rgba(167, 139, 250, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .pillar-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--accent-glow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      color: var(--accent);
+    }
+
+    .pillar-icon svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .pillar-card h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .pillar-card p {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .pillar-detail {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .pillar-detail strong {
+      color: var(--text-secondary);
+    }
+
+    /* ─── How it works ─── */
+
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      position: relative;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .step {
+      display: flex;
+      gap: 32px;
+      padding: 40px 0;
+      position: relative;
+    }
+
+    .step:not(:last-child) {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .step-number {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--accent-glow);
+      border: 1px solid rgba(167,139,250,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Lora', serif;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .step-content h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .step-content p {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    /* ─── Toolbox ─── */
+
+    .toolbox-categories {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .toolbox-cat {
+      border-radius: var(--radius);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+
+    .toolbox-cat:hover {
+      border-color: rgba(167, 139, 250, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .toolbox-cat-header {
+      padding: 24px 24px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toolbox-cat-emoji {
+      font-size: 1.3rem;
+    }
+
+    .toolbox-cat-header h3 {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .toolbox-cat-list {
+      padding: 0 24px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toolbox-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.02);
+      font-size: 0.8rem;
+    }
+
+    .toolbox-item-icon {
+      font-size: 0.9rem;
+      width: 24px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .toolbox-item-name {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    /* ─── Integrations ─── */
+
+    .integrations-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    .integrations-text .section-subtitle {
+      margin-bottom: 28px;
+    }
+
+    .integrations-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .integration-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      transition: border-color 0.3s;
+    }
+
+    .integration-item:hover {
+      border-color: rgba(167, 139, 250, 0.15);
+    }
+
+    .integration-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+
+    .integration-icon.cal { background: rgba(56, 189, 248, 0.1); }
+    .integration-icon.mail { background: rgba(251, 146, 60, 0.1); }
+    .integration-icon.crm { background: rgba(167, 139, 250, 0.1); }
+    .integration-icon.msg { background: rgba(52, 211, 153, 0.1); }
+    .integration-icon.storage { background: rgba(244, 114, 182, 0.1); }
+
+    .integration-info h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .integration-info p {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .integration-badge {
+      margin-left: auto;
+      font-size: 0.6rem;
+      padding: 3px 8px;
+      border-radius: 50px;
+      background: rgba(52, 211, 153, 0.1);
+      color: #34d399;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .integration-badge.soon {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-muted);
+    }
+
+    /* ─── Differentiator ─── */
+
+    .diff-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: start;
+    }
+
+    .diff-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .diff-item {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .diff-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 1rem;
+    }
+
+    .diff-icon.no {
+      background: rgba(255, 107, 107, 0.1);
+    }
+
+    .diff-icon.yes {
+      background: rgba(52, 211, 153, 0.1);
+    }
+
+    .diff-item h4 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .diff-item p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .diff-col-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      font-weight: 500;
+    }
+
+    /* ─── CTA ─── */
+
+    .cta {
+      text-align: center;
+      position: relative;
+    }
+
+    .cta::before {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .cta .section-subtitle {
+      margin: 0 auto 40px;
+    }
+
+    .cta-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ─── Footer ─── */
+
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    footer .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .footer-text {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .footer-links a {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--text-secondary);
+    }
+
+    /* ─── Animations ─── */
+
+    .fade-up {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+
+    .fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ─── Responsive ─── */
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+
+      .hero { padding: 120px 0 60px; }
+
+      .problem-grid,
+      .pillars-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbox-categories {
+        grid-template-columns: 1fr;
+      }
+
+      .magic-layout,
+      .integrations-layout,
+      .diff-layout {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+
+      .w-sidebar,
+      .w-chat { display: none; }
+
+      .w-main { padding: 16px; }
+
+      .step { gap: 20px; }
+
+      footer .container {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+      }
+
+      .footer-left {
+        flex-direction: column;
+        gap: 12px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hero-cta {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav id="nav">
+    <div class="container">
+      <a href="#" class="logo"><span>f</span>ocal.</a>
+      <ul class="nav-links">
+        <li><a href="#probleme">Le problème</a></li>
+        <li><a href="#ia">L'IA</a></li>
+        <li><a href="#comment">Comment ça marche</a></li>
+        <li><a href="#telecharger" class="btn btn-primary">Télécharger</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <h1 class="fade-up">
+        L'IA qui comprend<br>votre <em>cerveau et son fonctionnement</em>
+      </h1>
+
+      <p class="fade-up">
+        focal. n'est pas une app de productivité générique avec un « mode TDAH ».
+        C'est un assistant IA pensé de bout en bout pour les cerveaux qui fonctionnent différemment.
+      </p>
+
+      <div class="hero-cta fade-up">
+        <a href="#telecharger" class="btn btn-primary btn-large">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Télécharger pour macOS
+        </a>
+        <a href="#ia" class="btn btn-secondary btn-large">Découvrir</a>
+      </div>
+
+      <!-- App mockup with split layout: tasks + AI chat -->
+      <div class="hero-visual fade-up">
+        <div class="window">
+          <div class="window-bar">
+            <div class="window-dot"></div>
+            <div class="window-dot"></div>
+            <div class="window-dot"></div>
+            <span style="flex:1; text-align:center; font-size:0.7rem; color:var(--text-muted); font-weight:500;">focal.</span>
+          </div>
+          <div class="window-content">
+            <!-- Sidebar icônes -->
+            <div class="w-sidebar">
+              <div class="w-sidebar-logo">f.</div>
+              <div class="w-sidebar-nav">
+                <div class="w-sidebar-icon active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+                <div class="w-sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></div>
+                <div class="w-sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="m9 12 2 2 4-4"/></svg></div>
+                <div class="w-sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+                <div class="w-sidebar-spacer"></div>
+                <div class="w-sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+                <div class="w-sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M9 17H7a5 5 0 0 1 0-10h2"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+                <div class="w-sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09"/></svg></div>
+              </div>
+            </div>
+
+            <!-- Panneau principal -->
+            <div class="w-main">
+              <div>
+                <div class="w-date">Vendredi 14 mars</div>
+                <div class="w-week">Semaine 11</div>
+              </div>
+
+              <div class="w-tabs">
+                <div class="w-tab active">Aujourd'hui</div>
+                <div class="w-tab">Cette semaine</div>
+                <div class="w-tab">Prise de recul</div>
+              </div>
+
+              <div class="w-prep">
+                <div class="w-prep-icon">📋</div>
+                <div class="w-prep-text">
+                  <h4>Prépare ta journée</h4>
+                  <p>Définis tes priorités du jour, estime tes tâches et identifie ta première action. 5 minutes pour une journée plus fluide.</p>
+                  <div class="w-prep-actions">
+                    <div class="w-prep-btn">Lancer la préparation</div>
+                    <span class="w-prep-skip">C'est bon pour aujourd'hui</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="w-progress">
+                <span>Progression du jour</span>
+                <span class="streak">🔥 0 / 2 tâches</span>
+              </div>
+
+              <div class="w-section-hdr">
+                <span>⚡ Priorités du jour</span>
+                <span class="cnt">0/2</span>
+              </div>
+
+              <div class="w-task">
+                <div class="w-task-row">
+                  <div class="w-task-check"></div>
+                  <span class="w-task-name">Finaliser les slides pour Leroy Merlin</span>
+                  <div class="w-task-priority">
+                    <div class="w-priority-dash high"></div>
+                    <div class="w-priority-dash high"></div>
+                  </div>
+                  <div class="w-task-tags">
+                    <span class="w-tag orange">PROJET ×</span>
+                    <span class="w-tag red">URGENT ×</span>
+                  </div>
+                  <div class="w-task-plus">+</div>
+                </div>
+                <div class="w-task-meta">
+                  <span>+ Décomposer</span>
+                  <span>Je bloque</span>
+                </div>
+              </div>
+
+              <div class="w-task">
+                <div class="w-task-row">
+                  <div class="w-task-check"></div>
+                  <span class="w-task-name">Répondre à la demande de Romain</span>
+                  <div class="w-task-arrows"><span>▲</span><span>▼</span></div>
+                  <div class="w-task-priority">
+                    <div class="w-priority-dash med"></div>
+                    <div class="w-priority-dash low"></div>
+                  </div>
+                  <div class="w-task-tags">
+                    <span class="w-tag purple">AI ×</span>
+                  </div>
+                  <div class="w-task-plus">+</div>
+                </div>
+                <div class="w-task-meta">
+                  <span>+ Décomposer</span>
+                  <span>Je bloque</span>
+                </div>
+              </div>
+
+              <div class="w-section-hdr" style="margin-top: 8px;">
+                <span>📋 Reliquat des jours précédents</span>
+                <span class="cnt">8</span>
+              </div>
+
+              <div class="w-task">
+                <div class="w-task-row">
+                  <div class="w-task-check"></div>
+                  <span class="w-task-name">Envoyer le devis à Marine — logo + charte</span>
+                  <div class="w-task-tags">
+                    <span class="w-tag blue">ADMIN ×</span>
+                  </div>
+                  <div class="w-task-plus">+</div>
+                </div>
+                <div class="w-task-meta">
+                  <span>+ Décomposer</span>
+                  <span>Je bloque</span>
+                  <span style="margin-left: auto;">~25 min</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chat IA -->
+            <div class="w-chat">
+              <div class="w-chat-hdr">
+                <div class="w-chat-avatar">f.</div>
+                <div class="w-chat-hdr-info">
+                  <div class="w-chat-hdr-name">focal. assistant</div>
+                  <div class="w-chat-hdr-status">En ligne</div>
+                </div>
+                <span class="w-chat-model">GPT-4o</span>
+              </div>
+
+              <div class="w-chat-body">
+                <div class="w-msg-user">Salut ! On organise la journée ?</div>
+
+                <div class="w-msg-ai">
+                  <div class="w-msg-ai-label">focal.</div>
+                  <div class="w-msg-ai-text">Salut ! Pour aujourd'hui, on peut structurer ta journée comme suit :</div>
+
+                  <div class="w-msg-ai-section">⚡ Priorités du jour :</div>
+                  <ul class="w-msg-ai-list">
+                    <li><strong>1.</strong> <strong>Finaliser les slides Leroy Merlin</strong> [principal] [Urgence: 3/5]</li>
+                    <li><strong>2.</strong> <strong>Répondre à la demande de Romain</strong> [principal] [Urgence: 5/5]</li>
+                  </ul>
+
+                  <div class="w-msg-ai-section">📋 En reliquat des jours précédents :</div>
+                  <ul class="w-msg-ai-list">
+                    <li><strong>1.</strong> Envoyer le devis à Marine (~25 min)</li>
+                    <li><strong>2.</strong> Rappeler le cabinet comptable pour la TVA</li>
+                    <li><strong>3.</strong> Relire le contrat Dupont & Fils (~30 min)</li>
+                    <li><strong>4.</strong> Réserver le resto pour vendredi midi</li>
+                  </ul>
+
+                  <div class="w-msg-ai-note">Tu n'as que deux priorités aujourd'hui. On pourrait déplacer certaines tâches du reliquat.</div>
+
+                  <div class="w-chat-action">✓ Finir le planning du jour</div>
+                </div>
+              </div>
+
+              <div class="w-chat-footer">
+                <div class="w-chat-input-row">
+                  <div class="w-chat-input">Parle-moi d'une tâche bloquante, de ta journée...</div>
+                  <div class="w-chat-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+                </div>
+                <div class="w-chat-pills">
+                  <span class="w-chat-pill">Décomposer une tâche</span>
+                  <span class="w-chat-pill">Plan du jour</span>
+                  <span class="w-chat-pill">Préparer la semaine</span>
+                  <span class="w-chat-pill">Je suis bloqué</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem -->
+  <section class="problem" id="probleme">
+    <div class="container">
+      <div class="section-header center">
+        <div class="section-label fade-up">Le problème</div>
+        <h2 class="section-title fade-up">Les outils classiques ne sont pas<br>pensés pour vous</h2>
+        <p class="section-subtitle fade-up">
+          Les apps de productivité classiques sont conçues pour des cerveaux neurotypiques.
+          Elles partent du principe que vous pouvez simplement « vous organiser ».
+          Avec un TDAH, ça ne marche pas comme ça.
+        </p>
+      </div>
+
+      <div class="problem-grid">
+        <div class="problem-card fade-up">
+          <div class="problem-icon">😵‍💫</div>
+          <h3>La paralysie face à la tâche</h3>
+          <p>« Faire le dossier de financement » — mais par où commencer ? Le cerveau se fige. Plus la tâche est vague, plus elle est écrasante.</p>
+        </div>
+        <div class="problem-card fade-up">
+          <div class="problem-icon">🌀</div>
+          <h3>La spirale de la surcharge</h3>
+          <p>Les todo-lists s'accumulent, deviennent anxiogènes, et finissent abandonnées. La culpabilité s'installe. Le cycle recommence.</p>
+        </div>
+        <div class="problem-card fade-up">
+          <div class="problem-icon">🔇</div>
+          <h3>Aucune structure qui tient</h3>
+          <p>Sans cadre adapté, l'attention dérive. La journée se termine avec l'impression de n'avoir rien accompli, malgré l'effort.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Magic moment: AI decomposition -->
+  <section class="magic" id="ia">
+    <div class="container">
+      <div class="section-header center">
+        <div class="section-label fade-up">Le moment magique</div>
+        <h2 class="section-title fade-up">Une tâche écrasante.<br>3 micro-étapes. <em style="font-style: italic; color: var(--accent);">10 secondes.</em></h2>
+      </div>
+
+      <div class="magic-layout">
+        <div class="fade-up">
+          <blockquote class="magic-quote">
+            Transformer une tâche floue et écrasante en micro-étapes actionnables 
+            — sans que vous ayez à réfléchir au « comment ».
+          </blockquote>
+          <p class="magic-text">
+            C'est le coeur de focal. Vous écrivez une tâche qui vous bloque. 
+            L'IA la décompose instantanément en 3 à 5 micro-étapes assez petites 
+            pour être commencées immédiatement.
+            <br><br>
+            Plus de paralysie. Plus de « je ne sais pas par où commencer ». 
+            Juste la prochaine action concrète, devant vous.
+          </p>
+        </div>
+        <div class="magic-demo fade-up">
+          <div class="magic-demo-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            Décomposition IA
+          </div>
+          <div class="magic-demo-body">
+            <div class="magic-task-input">
+              Préparer le déménagement
+              <span class="decompose-btn">Décomposer</span>
+            </div>
+            <div class="magic-arrow">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+            </div>
+            <div class="magic-steps">
+              <div class="magic-step-item">
+                <div class="magic-step-num">1</div>
+                Lister les cartons nécessaires par pièce
+                <span class="magic-step-time">10 min</span>
+              </div>
+              <div class="magic-step-item">
+                <div class="magic-step-num">2</div>
+                Appeler 2 entreprises de déménagement pour devis
+                <span class="magic-step-time">15 min</span>
+              </div>
+              <div class="magic-step-item">
+                <div class="magic-step-num">3</div>
+                Commencer par emballer le bureau — la pièce la plus simple
+                <span class="magic-step-time">20 min</span>
+              </div>
+            </div>
+            <div class="magic-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              Décomposé par l'IA en 3 secondes
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Three pillars -->
+  <section style="background: var(--bg-elevated); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="container">
+      <div class="section-header center">
+        <div class="section-label fade-up">Bien plus qu'un to-do</div>
+        <h2 class="section-title fade-up">Un assistant IA qui structure<br>chaque niveau de votre organisation</h2>
+        <p class="section-subtitle fade-up">
+          focal. ne se contente pas de lister vos tâches. L'IA vous accompagne 
+          du matin au soir, de la semaine au trimestre.
+        </p>
+      </div>
+
+      <div class="pillars-grid">
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <h3>Votre journée</h3>
+          <p>
+            Chaque matin, l'IA vous aide à préparer votre journée. Elle connaît vos tâches, 
+            vos priorités et vos blocages. Elle propose un plan adapté à votre énergie du moment.
+          </p>
+          <div class="pillar-detail">
+            <strong>Focus Now</strong> — une seule tâche mise en avant, 
+            avec ses micro-étapes. Barre de progression et streak pour garder le momentum.
+          </div>
+        </div>
+
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </div>
+          <h3>Votre semaine</h3>
+          <p>
+            En début de semaine, l'IA vous guide pour définir vos priorités. 
+            Grille 5 jours, vue d'ensemble, progression globale — 
+            la structure dont votre cerveau a besoin.
+          </p>
+          <div class="pillar-detail">
+            <strong>Préparation hebdo</strong> — l'IA analyse vos tâches en attente 
+            et vous aide à distribuer l'effort sur la semaine.
+          </div>
+        </div>
+
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          </div>
+          <h3>Votre trajectoire</h3>
+          <p>
+            Régulièrement, l'IA vous aide à prendre du recul. 
+            Quels sont vos objectifs ? Vos stratégies ? 
+            Des revues guidées pour garder le cap sans se noyer dans le quotidien.
+          </p>
+          <div class="pillar-detail">
+            <strong>Prise de recul</strong> — objectifs, stratégies, tactiques. 
+            Des réflexions guidées par période, du mensuel au semestriel.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI that knows you -->
+  <section>
+    <div class="container">
+      <div class="section-header center">
+        <div class="section-label fade-up">L'assistant</div>
+        <h2 class="section-title fade-up">Une IA qui vous<br>connaît vraiment</h2>
+        <p class="section-subtitle fade-up">
+          L'assistant IA de focal. n'est pas un chatbot générique. Il connaît vos tâches, 
+          votre profil, vos blocages — et il apprend de vous au fil du temps.
+        </p>
+      </div>
+
+      <div class="pillars-grid">
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>Contextuel</h3>
+          <p>
+            L'IA voit vos tâches du jour, de la semaine, votre inbox. 
+            Quand vous dites « je suis bloqué », elle sait sur quoi — 
+            et peut agir directement sur vos tâches.
+          </p>
+        </div>
+
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <h3>Qui agit</h3>
+          <p>
+            L'IA ne se contente pas de répondre. Elle peut ajouter des tâches, 
+            réorganiser vos priorités, décomposer en étapes — directement depuis le chat.
+          </p>
+        </div>
+
+        <div class="pillar-card fade-up">
+          <div class="pillar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
+          </div>
+          <h3>Qui apprend</h3>
+          <p>
+            Avec le temps, l'IA construit une mémoire de vos habitudes : 
+            rythme de travail, blocages récurrents, moments de productivité. 
+            Ses conseils deviennent de plus en plus pertinents.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Toolbox -->
+  <section style="background: var(--bg-elevated); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="container">
+      <div class="section-header center">
+        <div class="section-label fade-up">Boîte à outils</div>
+        <h2 class="section-title fade-up">Des outils pour se débloquer,<br>se concentrer et souffler</h2>
+        <p class="section-subtitle fade-up">
+          Quand la journée déraille, vous n'avez pas besoin d'un conseil — 
+          vous avez besoin d'un outil concret, tout de suite.
+        </p>
+      </div>
+
+      <div class="toolbox-categories">
+        <div class="toolbox-cat fade-up">
+          <div class="toolbox-cat-header">
+            <span class="toolbox-cat-emoji">🎯</span>
+            <h3>Focus</h3>
+          </div>
+          <div class="toolbox-cat-list">
+            <div class="toolbox-item"><span class="toolbox-item-icon">🍅</span><span class="toolbox-item-name">Timer Pomodoro</span></div>
+            <div class="toolbox-item"><span class="toolbox-item-icon">👁️</span><span class="toolbox-item-name">Someone is watching</span></div>
+            <div class="toolbox-item"><span class="toolbox-item-icon">🔄</span><span class="toolbox-item-name">Séquence de redémarrage</span></div>
+            <div class="toolbox-item"><span class="toolbox-item-icon">⚖️</span><span class="toolbox-item-name">Comparateur de tâches</span></div>
+          </div>
+        </div>
+
+        <div class="toolbox-cat fade-up">
+          <div class="toolbox-cat-header">
+            <span class="toolbox-cat-emoji">📋</span>
+            <h3>Organisation</h3>
+          </div>
+          <div class="toolbox-cat-list">
+            <div class="toolbox-item"><span class="toolbox-item-icon">🎯</span><span class="toolbox-item-name">Méthode 25/5</span></div>
+            <div class="toolbox-item"><span class="toolbox-item-icon">🧠</span><span class="toolbox-item-name">Vidage de tête</span></div>
+            <div class="toolbox-item"><span class="toolbox-item-icon">🎲</span><span class="toolbox-item-name">Décision rapide</span></div>
+            <div class="toolbox-item"><span class="toolbox-item-icon">💭</span><span class="toolbox-item-name">Méthode WOOP</span></div>
+          </div>
+        </div>
+
+        <div class="toolbox-cat fade-up">
+          <div class="toolbox-cat-header">
+            <span class="toolbox-cat-emoji">🧘</span>
+            <h3>Conscience & Relaxation</h3>
+          </div>
+          <div class="toolbox-cat-list">
+            <div class="toolbox-item"><span class="toolbox-item-icon">🌬️</span><span class="toolbox-item-name">Respiration guidée</span></div>
+            <div class="toolbox-item"><span class="toolbox-item-icon">🫁</span><span class="toolbox-item-name">Scan corporel express</span></div>
+            <div class="toolbox-item"><span class="toolbox-item-icon">🧘</span><span class="toolbox-item-name">Ancrage 5-4-3-2-1</span></div>
+            <div class="toolbox-item"><span class="toolbox-item-icon">🤸</span><span class="toolbox-item-name">Micro-mouvement</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Integrations -->
+  <section>
+    <div class="container">
+      <div class="integrations-layout">
+        <div class="integrations-text fade-up">
+          <div class="section-label">Intégrations</div>
+          <h2 class="section-title">Connecté à vos outils<br>du quotidien</h2>
+          <p class="section-subtitle">
+            focal. se connecte à votre agenda, vos emails et vos outils pour avoir 
+            une vision complète de votre journée. L'IA utilise ce contexte 
+            pour mieux organiser vos tâches et vos priorités.
+          </p>
+        </div>
+
+        <div class="integrations-list fade-up">
+          <div class="integration-item">
+            <div class="integration-icon cal">📅</div>
+            <div class="integration-info">
+              <h4>Google Calendar</h4>
+              <p>Synchronise vos événements et bloque du temps pour vos tâches</p>
+            </div>
+            <span class="integration-badge">Disponible</span>
+          </div>
+          <div class="integration-item">
+            <div class="integration-icon mail">✉️</div>
+            <div class="integration-info">
+              <h4>Gmail</h4>
+              <p>Transforme vos emails importants en tâches actionnables</p>
+            </div>
+            <span class="integration-badge">Disponible</span>
+          </div>
+          <div class="integration-item">
+            <div class="integration-icon cal">📆</div>
+            <div class="integration-info">
+              <h4>Outlook Calendar & Mail</h4>
+              <p>Connectez votre environnement Microsoft professionnel</p>
+            </div>
+            <span class="integration-badge soon">Bientôt</span>
+          </div>
+          <div class="integration-item">
+            <div class="integration-icon msg">💬</div>
+            <div class="integration-info">
+              <h4>Slack, Notion, Linear...</h4>
+              <p>Centralisez vos messages, documents et projets</p>
+            </div>
+            <span class="integration-badge soon">Bientôt</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section id="comment" style="background: var(--bg-elevated); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="container">
+      <div class="section-header center">
+        <div class="section-label fade-up">Comment ça marche</div>
+        <h2 class="section-title fade-up">Commencer prend<br>moins de 2 minutes</h2>
+      </div>
+
+      <div class="steps">
+        <div class="step fade-up">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Présentez-vous à l'IA</h3>
+            <p>
+              Un onboarding conversationnel, pas un formulaire. 
+              L'IA vous pose quelques questions pour comprendre votre contexte, 
+              votre activité et votre fonctionnement.
+            </p>
+          </div>
+        </div>
+
+        <div class="step fade-up">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Videz votre tête</h3>
+            <p>
+              Écrivez toutes les tâches qui vous encombrent — en vrac, sans structure. 
+              L'IA les décompose en micro-étapes et vous aide à prioriser.
+            </p>
+          </div>
+        </div>
+
+        <div class="step fade-up">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Laissez-vous guider</h3>
+            <p>
+              Chaque matin, l'IA prépare votre journée. Pendant la journée, 
+              elle vous montre une seule chose à la fois. Quand vous êtes bloqué, 
+              elle est là pour débloquer.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Differentiator -->
+  <section>
+    <div class="container">
+      <div class="section-header center">
+        <div class="section-label fade-up">Pourquoi focal.</div>
+        <h2 class="section-title fade-up">Pas une app générique<br>avec un « mode TDAH »</h2>
+      </div>
+
+      <div class="diff-layout fade-up">
+        <div>
+          <div class="diff-col-title">Les apps classiques</div>
+          <div class="diff-list">
+            <div class="diff-item">
+              <div class="diff-icon no">✕</div>
+              <div>
+                <h4>Listes de tâches plates</h4>
+                <p>Aucune aide pour décomposer ou prioriser. La charge mentale reste entière.</p>
+              </div>
+            </div>
+            <div class="diff-item">
+              <div class="diff-icon no">✕</div>
+              <div>
+                <h4>Pas de contexte</h4>
+                <p>L'outil ne connaît pas votre situation, vos blocages, votre énergie du moment.</p>
+              </div>
+            </div>
+            <div class="diff-item">
+              <div class="diff-icon no">✕</div>
+              <div>
+                <h4>Vous laissent seul</h4>
+                <p>Aucune structure pour la journée, la semaine, ou le long terme. Vous devez tout organiser.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="diff-col-title">focal.</div>
+          <div class="diff-list">
+            <div class="diff-item">
+              <div class="diff-icon yes">✓</div>
+              <div>
+                <h4>L'IA décompose pour vous</h4>
+                <p>Chaque tâche peut être transformée en micro-étapes claires en un clic.</p>
+              </div>
+            </div>
+            <div class="diff-item">
+              <div class="diff-icon yes">✓</div>
+              <div>
+                <h4>Un assistant qui vous connaît</h4>
+                <p>L'IA connaît vos tâches, votre profil, vos blocages — et s'en souvient.</p>
+              </div>
+            </div>
+            <div class="diff-item">
+              <div class="diff-icon yes">✓</div>
+              <div>
+                <h4>Routines guidées par l'IA</h4>
+                <p>Préparation du matin, planification de la semaine, prises de recul stratégiques — tout est accompagné.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta" id="telecharger" style="border-top: 1px solid var(--border);">
+    <div class="container">
+      <div class="section-label fade-up">Prêt à essayer ?</div>
+      <h2 class="section-title fade-up">Votre cerveau fonctionne<br>différemment. Votre app aussi.</h2>
+      <p class="section-subtitle fade-up">
+        Téléchargez focal. et découvrez un assistant IA 
+        qui comprend comment vous fonctionnez.
+      </p>
+
+      <div class="cta-buttons fade-up">
+        <a href="#" class="btn btn-primary btn-large">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Télécharger pour macOS
+        </a>
+        <a href="https://github.com" class="btn btn-secondary btn-large" target="_blank" rel="noopener">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          Voir sur GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-left">
+        <a href="#" class="logo"><span>f</span>ocal.</a>
+        <span class="footer-text">L'assistant IA qui comprend votre fonctionnement</span>
+      </div>
+      <ul class="footer-links">
+        <li><a href="https://github.com" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="#">Confidentialité</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <script>
+    const nav = document.getElementById('nav');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 40);
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+  </script>
+
+</body>
+</html>

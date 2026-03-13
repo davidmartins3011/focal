@@ -28,7 +28,7 @@ focal/
 ├── src/                     # Frontend React
 │   ├── App.tsx              # Composant racine, état global, routing
 │   ├── main.tsx             # Point d'entrée React
-│   ├── components/          # 26+ composants React (.tsx + .module.css)
+│   ├── components/          # 34 composants React (.tsx + .module.css)
 │   ├── services/            # Couche d'accès aux commandes Tauri
 │   ├── hooks/               # Hooks React réutilisables
 │   ├── types/               # Interfaces TypeScript centralisées
@@ -46,17 +46,17 @@ focal/
 │       ├── models.rs        # Structures de données sérialisables
 │       ├── commands/        # Commandes Tauri (API backend)
 │       │   ├── mod.rs
-│       │   ├── tasks.rs     # Tâches prioritaires (today/week/calendar)
-│       │   ├── todos.rs     # Capture rapide (inbox)
+│       │   ├── tasks.rs     # Tâches (today/week/calendar/inbox)
 │       │   ├── settings.rs  # Paramètres clé-valeur
-│       │   ├── reviews.rs   # Revues stratégiques
+│       │   ├── reviews.rs   # Périodes stratégiques, objectifs, stratégies, tactiques, actions
 │       │   ├── chat.rs      # Historique du chat
-│       │   ├── ai.rs        # Intégration LLM (send_message, decompose_task)
+│       │   ├── ai.rs        # Intégration LLM (chat, décomposition, préparations, onboarding)
 │       │   ├── integrations.rs # Intégrations + OAuth + data fetching
 │       │   ├── profile.rs   # Profil utilisateur
-│       │   └── notifications.rs # Historique des notifications
+│       │   ├── notifications.rs # Notifications (historique, badge, envoi natif)
+│       │   └── memory.rs    # Mémoire IA (analyse comportementale des conversations)
 │       └── providers/       # Connecteurs APIs externes (OAuth, Google)
-│           ├── mod.rs       # Types partagés, mapping intégrations ↔ providers
+│           ├── mod.rs       # Types partagés, mapping intégrations ↔ providers, scopes
 │           ├── oauth.rs     # Flux OAuth complet (auth code, tokens, refresh)
 │           └── google.rs    # Google Calendar API + Gmail API
 ├── index.html               # HTML racine
@@ -102,9 +102,10 @@ focal/
 |----------|---------|
 | [BACKEND.md](./BACKEND.md) | Backend Rust : modèles, commandes, base de données |
 | [FRONTEND.md](./FRONTEND.md) | Frontend React : composants, services, types, hooks |
-| [AI.md](./AI.md) | Intégration IA : providers, system prompt, décomposition |
+| [AI.md](./AI.md) | Intégration IA : providers, system prompt, décomposition, préparations |
 | [INTEGRATIONS.md](./INTEGRATIONS.md) | Intégrations externes : OAuth, Google Calendar, Gmail |
 | [DATA-MODEL.md](./DATA-MODEL.md) | Schéma SQLite complet et relations entre tables |
+| [RELEASES_ARCHITECTURE.md](./RELEASES_ARCHITECTURE.md) | Architecture des releases et mises à jour |
 
 ---
 

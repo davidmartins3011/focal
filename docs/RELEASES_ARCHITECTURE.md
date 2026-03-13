@@ -84,11 +84,17 @@ Fichier : `src-tauri/capabilities/default.json`
 
 ```json
 "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "notification:default",
     "updater:default",
     "process:allow-restart"
 ]
 ```
 
+- `core:default` autorise les fonctionnalités de base Tauri.
+- `shell:allow-open` autorise l'ouverture de liens dans le navigateur.
+- `notification:default` autorise l'envoi de notifications natives OS.
 - `updater:default` autorise le frontend à vérifier et télécharger les mises à jour.
 - `process:allow-restart` autorise le frontend à redémarrer l'application.
 

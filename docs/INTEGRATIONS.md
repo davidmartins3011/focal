@@ -1,7 +1,7 @@
 # Intégrations et OAuth
 
 > Le système d'intégrations permet de connecter des services externes (Google Calendar, Gmail, etc.)
-> via OAuth 2.0. Les tokens sont stockés localement en SQLite.
+> via OAuth 2.0. Les tokens sont stockés localement en SQLite, par intégration.
 
 ---
 
@@ -11,7 +11,7 @@
 src-tauri/src/
 ├── commands/integrations.rs   # Commandes Tauri (CRUD + OAuth + data fetching)
 └── providers/
-    ├── mod.rs                 # Types partagés, mapping intégrations ↔ providers
+    ├── mod.rs                 # Types partagés, mapping intégrations ↔ providers, scopes
     ├── oauth.rs               # Flux OAuth générique (auth code flow)
     └── google.rs              # Connecteur Google (Calendar + Gmail)
 ```
@@ -30,11 +30,25 @@ src-tauri/src/
 Le module `providers/mod.rs` expose deux fonctions clés :
 
 - `provider_for_integration(id)` — Retourne le provider OAuth associé à une intégration (ex: `"google-calendar"` → `"google"`)
-- `sibling_integrations(provider)` — Retourne toutes les intégrations qui partagent le même provider (ex: `"google"` → `["google-calendar", "gmail", "google-drive"]`)
+- `scopes_for_integration(id)` — Retourne les scopes OAuth nécessaires pour une intégration spécifique
 
-Cela permet de :
-- Partager les tokens OAuth entre intégrations d'un même provider
-- Ne révoquer les tokens que quand **toutes** les intégrations d'un provider sont déconnectées
+### Scopes par intégration
+
+| Intégration | Scopes |
+|-------------|--------|
+| `google-calendar` | `calendar.readonly`, `userinfo.email` |
+| `gmail` | `gmail.readonly`, `userinfo.email` |
+| `google-drive` | `drive.readonly`, `userinfo.email` |
+
+Chaque intégration demande ses propres scopes. Le scope `userinfo.email` est systématiquement ajouté pour récupérer l'email du compte connecté.
+
+---
+
+## Stockage des tokens OAuth
+
+Les tokens sont stockés **par intégration** (pas par provider). Chaque intégration connectée possède sa propre entrée dans `oauth_tokens` avec `integration_id` comme clé primaire.
+
+Quand une intégration est déconnectée via `disconnect_integration()`, ses tokens sont immédiatement supprimés.
 
 ---
 
@@ -51,7 +65,7 @@ Clique "Connecter" ──────────►  start_oauth()
                                   ├─ Vérifie les credentials OAuth en DB
                                   ├─ Si tokens existants → marque connecté, terminé
                                   ├─ Démarre un serveur TCP local (port aléatoire)
-                                  ├─ Construit l'URL d'autorisation
+                                  ├─ Construit l'URL d'autorisation (avec les scopes de l'intégration)
                                   └─ Ouvre le navigateur ──────────────────────────►
                                                                 │
                                                                 ├─ L'utilisateur s'authentifie
@@ -63,8 +77,9 @@ Clique "Connecter" ──────────►  start_oauth()
                                   ├─ Échange le code contre des tokens ──────────►
                                   │                              │
                                   │ ◄──── access_token + refresh_token ──────────┘
-                                  ├─ Stocke les tokens en DB (oauth_tokens)
-                                  ├─ Marque l'intégration comme connectée
+                                  ├─ Stocke les tokens en DB (oauth_tokens, clé = integration_id)
+                                  ├─ Récupère l'email du compte via userinfo
+                                  ├─ Marque l'intégration comme connectée (+ account_email)
                                   └─ Affiche une page HTML de succès dans le navigateur
 ```
 
@@ -76,8 +91,7 @@ Clique "Connecter" ──────────►  start_oauth()
 
 `disconnect_integration()` :
 1. Marque l'intégration comme déconnectée
-2. Vérifie si d'autres intégrations du même provider sont encore connectées
-3. Si aucune : supprime les tokens OAuth de la DB
+2. Supprime les tokens OAuth de la DB pour cette intégration
 
 ---
 
@@ -88,13 +102,6 @@ Clique "Connecter" ──────────►  start_oauth()
 ```
 AUTH:  https://accounts.google.com/o/oauth2/v2/auth
 TOKEN: https://oauth2.googleapis.com/token
-```
-
-### Scopes demandés
-
-```
-https://www.googleapis.com/auth/calendar.readonly
-https://www.googleapis.com/auth/gmail.readonly
 ```
 
 ### Google Calendar API
@@ -185,7 +192,8 @@ pub struct OAuthCredentialsInfo {
 
 | Colonne | Type | Description |
 |---------|------|-------------|
-| provider | TEXT PK | "google", "microsoft", etc. |
+| integration_id | TEXT PK | ID de l'intégration (ex: "google-calendar") |
+| account_email | TEXT | Email du compte connecté |
 | access_token | TEXT | Token d'accès courant |
 | refresh_token | TEXT | Token de rafraîchissement (nullable) |
 | token_type | TEXT | "Bearer" |
@@ -195,6 +203,10 @@ pub struct OAuthCredentialsInfo {
 ### Colonne `oauth_provider` dans `integrations`
 
 Chaque intégration peut avoir un champ `oauth_provider` (nullable) qui indique quel provider OAuth utiliser (ex: `"google"`). Les intégrations sans OAuth ont ce champ à `NULL`.
+
+### Colonne `account_email` dans `integrations`
+
+Stocke l'email du compte connecté pour affichage dans l'UI.
 
 ---
 
@@ -216,10 +228,10 @@ Chaque intégration peut avoir un champ `oauth_provider` (nullable) qui indique 
 
 ## Points d'attention pour l'IA qui code
 
-1. **Un provider = plusieurs intégrations** : Google partage ses tokens entre Calendar, Gmail et Drive
+1. **Tokens par intégration** : chaque intégration a ses propres tokens dans `oauth_tokens` (clé = `integration_id`)
 2. **Credentials = config utilisateur** : Le `client_id` / `client_secret` est saisi par l'utilisateur dans l'UI (il doit créer son propre projet Google Cloud)
 3. **Refresh automatique** : Chaque appel API vérifie l'expiration et rafraîchit si nécessaire (5 min de marge)
 4. **Serveur local temporaire** : Le flux OAuth démarre un serveur TCP sur un port aléatoire, qui s'arrête après le callback
 5. **Timeout 5 minutes** : Si l'utilisateur n'autorise pas dans les 5 minutes, le flux échoue
-6. **Déconnexion intelligente** : Les tokens ne sont supprimés que quand toutes les intégrations "siblings" sont déconnectées
+6. **Scopes par intégration** : chaque intégration demande ses propres scopes (incluant toujours `userinfo.email`)
 7. **Microsoft non implémenté** : Le mapping existe (`outlook-calendar`, `outlook-mail`) mais le connecteur n'est pas encore codé

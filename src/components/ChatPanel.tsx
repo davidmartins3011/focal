@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, Task, Tag } from "../types";
-import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, sendPeriodPrepMessage, clearChat, type AiResponse, type DailyPrepResponse, type TagAction, type StepsAction } from "../services/chat";
+import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, sendPeriodPrepMessage, clearChat, type AiResponse, type DailyPrepResponse, type TagAction, type StepsAction, type GoalAction, type StrategyActionItem, type TacticAction, type ReflectionAction, type GoalStrategyLinkAction } from "../services/chat";
 import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps, setTaskTags, clearAllTasks, clearTodayTasks } from "../services/tasks";
+import { upsertStrategyGoal, deleteStrategyGoal, upsertStrategy, deleteStrategy, upsertTactic, deleteTactic, upsertPeriodReflection, toggleGoalStrategyLink, getStrategyGoals, getStrategyPeriods } from "../services/reviews";
 import { getSetting, setSetting } from "../services/settings";
 import { runAnalysisNow } from "../services/memory";
 import { chatHints, slashCommands } from "../data/chatConstants";
@@ -191,10 +192,11 @@ interface ChatPanelProps {
   stuckTask?: StuckTaskInfo | null;
   onStuckConsumed?: () => void;
   onTasksChanged?: () => void;
+  onStrategyChanged?: () => void;
   onViewSwitch?: (tab: "today" | "week" | "strategy") => void;
 }
 
-export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, periodPrepPending, onPeriodPrepConsumed, stuckTask, onStuckConsumed, onTasksChanged, onViewSwitch }: ChatPanelProps) {
+export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, periodPrepPending, onPeriodPrepConsumed, stuckTask, onStuckConsumed, onTasksChanged, onStrategyChanged, onViewSwitch }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -457,6 +459,195 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     [onTasksChanged],
   );
 
+  const applyPeriodActions = useCallback(
+    async (actions: {
+      goalsToAdd?: GoalAction[];
+      goalsToUpdate?: GoalAction[];
+      goalsToRemove?: string[];
+      strategiesToAdd?: StrategyActionItem[];
+      strategiesToUpdate?: StrategyActionItem[];
+      strategiesToRemove?: string[];
+      tacticsToAdd?: TacticAction[];
+      tacticsToUpdate?: TacticAction[];
+      tacticsToRemove?: string[];
+      reflectionsToUpdate?: ReflectionAction[];
+      goalStrategyLinksToToggle?: GoalStrategyLinkAction[];
+    }) => {
+      const total =
+        (actions.goalsToAdd?.length ?? 0) + (actions.goalsToUpdate?.length ?? 0) + (actions.goalsToRemove?.length ?? 0) +
+        (actions.strategiesToAdd?.length ?? 0) + (actions.strategiesToUpdate?.length ?? 0) + (actions.strategiesToRemove?.length ?? 0) +
+        (actions.tacticsToAdd?.length ?? 0) + (actions.tacticsToUpdate?.length ?? 0) + (actions.tacticsToRemove?.length ?? 0) +
+        (actions.reflectionsToUpdate?.length ?? 0) + (actions.goalStrategyLinksToToggle?.length ?? 0);
+      if (total === 0) return;
+      console.log("[ChatPanel] applyPeriodActions:", actions);
+
+      let modified = false;
+
+      const periods = await getStrategyPeriods();
+      const activePeriod = periods.find((p) => p.status === "active");
+      const periodId = activePeriod?.id;
+
+      if (!periodId) {
+        console.warn("[ChatPanel] no active period found, skipping period actions");
+        return;
+      }
+
+      const currentGoals = await getStrategyGoals(periodId);
+
+      for (const g of actions.goalsToRemove ?? []) {
+        try {
+          await deleteStrategyGoal(g);
+          modified = true;
+          console.log("[ChatPanel] goal deleted:", g);
+        } catch (err) { console.error("[ChatPanel] deleteStrategyGoal error:", err); }
+      }
+
+      for (const g of actions.goalsToUpdate ?? []) {
+        if (!g.id) continue;
+        try {
+          const existing = currentGoals.find((eg) => eg.id === g.id);
+          await upsertStrategyGoal({
+            id: g.id,
+            title: g.title ?? existing?.title ?? "",
+            target: g.target ?? existing?.target ?? "",
+            deadline: g.deadline,
+            position: existing ? currentGoals.indexOf(existing) : currentGoals.length,
+            periodId,
+          });
+          modified = true;
+          console.log("[ChatPanel] goal updated:", g.id);
+        } catch (err) { console.error("[ChatPanel] upsertStrategyGoal error:", err); }
+      }
+
+      for (const g of actions.goalsToAdd ?? []) {
+        try {
+          const id = g.id || crypto.randomUUID();
+          const updatedGoals = await getStrategyGoals(periodId);
+          await upsertStrategyGoal({
+            id,
+            title: g.title,
+            target: g.target ?? "",
+            deadline: g.deadline,
+            position: updatedGoals.length,
+            periodId,
+          });
+          modified = true;
+          console.log("[ChatPanel] goal added:", id, g.title);
+        } catch (err) { console.error("[ChatPanel] upsertStrategyGoal (add) error:", err); }
+      }
+
+      for (const s of actions.strategiesToRemove ?? []) {
+        try {
+          await deleteStrategy(s);
+          modified = true;
+          console.log("[ChatPanel] strategy deleted:", s);
+        } catch (err) { console.error("[ChatPanel] deleteStrategy error:", err); }
+      }
+
+      for (const s of actions.strategiesToUpdate ?? []) {
+        if (!s.id) continue;
+        try {
+          const foundGoal = currentGoals.find((g) => g.strategies.some((st) => st.id === s.id));
+          const goalId = s.goalId || foundGoal?.id || "";
+          await upsertStrategy({
+            id: s.id,
+            goalId,
+            title: s.title,
+            description: "",
+            position: 0,
+          });
+          modified = true;
+          console.log("[ChatPanel] strategy updated:", s.id);
+        } catch (err) { console.error("[ChatPanel] upsertStrategy error:", err); }
+      }
+
+      for (const s of actions.strategiesToAdd ?? []) {
+        if (!s.goalId) { console.warn("[ChatPanel] strategiesToAdd: missing goalId for", s.title); continue; }
+        try {
+          const id = s.id || crypto.randomUUID();
+          const parentGoal = currentGoals.find((g) => g.id === s.goalId);
+          await upsertStrategy({
+            id,
+            goalId: s.goalId,
+            title: s.title,
+            description: "",
+            position: parentGoal?.strategies.length ?? 0,
+          });
+          modified = true;
+          console.log("[ChatPanel] strategy added:", id, s.title);
+        } catch (err) { console.error("[ChatPanel] upsertStrategy (add) error:", err); }
+      }
+
+      for (const t of actions.tacticsToRemove ?? []) {
+        try {
+          await deleteTactic(t);
+          modified = true;
+          console.log("[ChatPanel] tactic deleted:", t);
+        } catch (err) { console.error("[ChatPanel] deleteTactic error:", err); }
+      }
+
+      for (const t of actions.tacticsToUpdate ?? []) {
+        if (!t.id) continue;
+        try {
+          const strategyId = t.strategyId || (currentGoals.flatMap((g) => g.strategies).find((s) => s.tactics.some((tc) => tc.id === t.id))?.id ?? "");
+          await upsertTactic({
+            id: t.id,
+            strategyId,
+            title: t.title,
+            description: "",
+            position: 0,
+          });
+          modified = true;
+          console.log("[ChatPanel] tactic updated:", t.id);
+        } catch (err) { console.error("[ChatPanel] upsertTactic error:", err); }
+      }
+
+      for (const t of actions.tacticsToAdd ?? []) {
+        if (!t.strategyId) { console.warn("[ChatPanel] tacticsToAdd: missing strategyId for", t.title); continue; }
+        try {
+          const id = t.id || crypto.randomUUID();
+          const parentStrat = currentGoals.flatMap((g) => g.strategies).find((s) => s.id === t.strategyId);
+          await upsertTactic({
+            id,
+            strategyId: t.strategyId,
+            title: t.title,
+            description: "",
+            position: parentStrat?.tactics.length ?? 0,
+          });
+          modified = true;
+          console.log("[ChatPanel] tactic added:", id, t.title);
+        } catch (err) { console.error("[ChatPanel] upsertTactic (add) error:", err); }
+      }
+
+      for (const r of actions.reflectionsToUpdate ?? []) {
+        try {
+          const period = activePeriod;
+          const existing = period?.reflections.find((ref_) => ref_.id === r.id);
+          await upsertPeriodReflection({
+            id: r.id,
+            periodId,
+            prompt: existing?.prompt ?? "",
+            answer: r.answer,
+            position: existing ? period!.reflections.indexOf(existing) : 0,
+          });
+          modified = true;
+          console.log("[ChatPanel] reflection updated:", r.id);
+        } catch (err) { console.error("[ChatPanel] upsertPeriodReflection error:", err); }
+      }
+
+      for (const link of actions.goalStrategyLinksToToggle ?? []) {
+        try {
+          await toggleGoalStrategyLink(link.goalId, link.strategyId);
+          modified = true;
+          console.log("[ChatPanel] goal-strategy link toggled:", link.goalId, link.strategyId);
+        } catch (err) { console.error("[ChatPanel] toggleGoalStrategyLink error:", err); }
+      }
+
+      if (modified) onStrategyChanged?.();
+    },
+    [onStrategyChanged],
+  );
+
   const handleChatResponse = useCallback(
     async (response: AiResponse) => {
       const msgId = `ai-${Date.now()}`;
@@ -474,8 +665,9 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       }
 
       await applyTaskActions(response);
+      await applyPeriodActions(response);
     },
-    [applyTaskActions],
+    [applyTaskActions, applyPeriodActions],
   );
 
   const handlePrepResponse = useCallback(
@@ -488,6 +680,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       setPrepHasAiReply(true);
 
       await applyTaskActions(response);
+      await applyPeriodActions(response);
 
       if (response.prepComplete || pendingPrepExit.current) {
         if (pendingPrepExit.current && !response.prepComplete) {
@@ -499,7 +692,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         prepHistory.current = [];
       }
     },
-    [applyTaskActions],
+    [applyTaskActions, applyPeriodActions],
   );
 
   const sendPrepMessage = useCallback(

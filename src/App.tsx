@@ -49,6 +49,7 @@ export default function App() {
   const [periodPrepPending, setPeriodPrepPending] = useState<{ periodId: string } | null>(null);
   const [stuckTask, setStuckTask] = useState<{ taskId: string; taskName: string } | null>(null);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
+  const [strategyRefreshKey, setStrategyRefreshKey] = useState(0);
   const loaded = useRef(false);
 
   const notif = useNotifications(workingDays);
@@ -274,6 +275,10 @@ export default function App() {
     setTaskRefreshKey((k) => k + 1);
   }, []);
 
+  const handleStrategyChanged = useCallback(() => {
+    setStrategyRefreshKey((k) => k + 1);
+  }, []);
+
   const handleViewSwitch = useCallback((tab: "today" | "week" | "strategy") => {
     setActiveTab(tab as ViewTab);
     setActivePage("main");
@@ -327,6 +332,7 @@ export default function App() {
             onLaunchPeriodPrep={handleLaunchPeriodPrep}
             onStuck={handleStuck}
             taskRefreshKey={taskRefreshKey}
+            strategyRefreshKey={strategyRefreshKey}
             workingDays={workingDays}
           />
         );
@@ -375,6 +381,7 @@ export default function App() {
           stuckTask={stuckTask}
           onStuckConsumed={() => setStuckTask(null)}
           onTasksChanged={handleTasksChanged}
+          onStrategyChanged={handleStrategyChanged}
           onViewSwitch={handleViewSwitch}
         />
       </div>
