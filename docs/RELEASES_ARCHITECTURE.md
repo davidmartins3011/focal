@@ -132,10 +132,13 @@ Ce composant React gère l'expérience utilisateur de la mise à jour :
 **Cycle de vie :**
 
 1. **Au montage** : appelle `check()` qui interroge l'endpoint `latest.json`
-2. **Si une mise à jour existe** : affiche la popup (phase `available`)
-3. **L'utilisateur clique "Mettre à jour"** : passe en phase `downloading`, avec une barre de progression
-4. **Téléchargement terminé** : passe en phase `ready`, propose "Redémarrer maintenant"
-5. **Redémarrage** : appelle `relaunch()` qui ferme et relance l'app avec la nouvelle version
+2. **Toutes les 4 heures** : re-vérifie automatiquement (constante `CHECK_INTERVAL_MS` dans le composant), pour couvrir le cas où l'utilisateur ne redémarre jamais l'app
+3. **Si une mise à jour existe** : affiche la popup (phase `available`)
+4. **L'utilisateur clique "Mettre à jour"** : passe en phase `downloading`, avec une barre de progression
+5. **Téléchargement terminé** : passe en phase `ready`, propose "Redémarrer maintenant"
+6. **Redémarrage** : appelle `relaunch()` qui ferme et relance l'app avec la nouvelle version
+
+Si l'utilisateur clique "Plus tard", la popup disparaît mais réapparaîtra au prochain check périodique (4h) si une mise à jour est toujours disponible.
 
 **Phases du composant :**
 
@@ -189,6 +192,9 @@ Trois builds s'exécutent en parallèle :
 | `GITHUB_TOKEN` | Fourni automatiquement par GitHub Actions |
 | `TAURI_SIGNING_PRIVATE_KEY` | Clé privée pour signer les mises à jour |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Mot de passe de la clé privée |
+
+Ces secrets doivent être configurés en tant que **Repository secrets** (et non Environment secrets) :
+GitHub → repo → **Settings → Secrets and variables → Actions → New repository secret**.
 
 ---
 
@@ -247,33 +253,73 @@ Cela produit :
 
 ## Procédure de release pas à pas
 
-### 1. Mettre à jour la version
+### Prérequis (première release uniquement)
 
-Modifier la version dans les 3 fichiers :
+1. Générer les clés de signature :
+```bash
+npm run tauri signer generate -- -w ~/.tauri/focal.key
+```
+
+2. Copier la clé publique (`~/.tauri/focal.key.pub`) dans `src-tauri/tauri.conf.json` → `plugins.updater.pubkey` (remplacer `YOUR_UPDATER_PUBKEY_HERE`).
+
+3. Ajouter les **Repository secrets** sur GitHub (Settings → Secrets and variables → Actions → New repository secret) :
+   - `TAURI_SIGNING_PRIVATE_KEY` : contenu de `~/.tauri/focal.key`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` : mot de passe choisi à la génération
+
+### 1. Vérifier la clé publique
+
+S'assurer que `plugins.updater.pubkey` dans `src-tauri/tauri.conf.json` contient bien la vraie clé publique (pas le placeholder).
+
+```bash
+cat ~/.tauri/focal.key.pub
+```
+
+### 2. Mettre à jour la version
+
+Modifier la version dans les **3 fichiers** (ils doivent toujours être synchronisés) :
 - `package.json` → `"version": "0.2.0"`
 - `src-tauri/tauri.conf.json` → `"version": "0.2.0"`
 - `src-tauri/Cargo.toml` → `version = "0.2.0"`
 
-### 2. Commiter et taguer
+Vérifier la synchronisation :
+```bash
+grep '"version"' package.json
+grep '"version"' src-tauri/tauri.conf.json
+grep '^version' src-tauri/Cargo.toml
+```
+
+### 3. Commiter et taguer
 
 ```bash
 git add -A
+git status                          # vérifier que tout est propre
 git commit -m "release: v0.2.0"
 git tag v0.2.0
-git push origin main --tags
+git push origin main --tags         # le --tags déclenche le workflow
 ```
 
-### 3. Attendre le build
+### 4. Suivre le build
 
-Le workflow GitHub Actions se déclenche automatiquement. Suivre l'avancement dans l'onglet **Actions** du repo.
+Le workflow GitHub Actions se déclenche automatiquement.
+Suivre l'avancement sur : **https://github.com/davidmartins3011/focal/actions**
 
-### 4. Publier la release
+3 jobs tournent en parallèle (macOS ARM, macOS Intel, Windows). Durée typique : 10-20 minutes.
+En cas d'échec, cliquer sur le job pour voir les logs détaillés.
 
-Le workflow crée une **Release en draft**. Aller dans **GitHub → Releases**, vérifier que tous les artefacts sont présents, éditer les notes de release si besoin, puis cliquer **Publish release**.
+### 5. Publier la release
 
-### 5. Vérification
+Le workflow crée une **Release en draft**. Aller sur :
+**https://github.com/davidmartins3011/focal/releases**
 
-Les utilisateurs sur l'ancienne version verront la popup de mise à jour au prochain lancement de l'app.
+Vérifier que tous les artefacts sont présents (.dmg, .exe, .msi, latest.json, fichiers .sig), éditer les notes de release si besoin, puis cliquer **Publish release**.
+
+### 6. Vérification
+
+Après publication, vérifier que ce lien retourne un JSON valide :
+**https://github.com/davidmartins3011/focal/releases/latest/download/latest.json**
+
+C'est ce fichier que l'app consulte pour savoir si une mise à jour est disponible.
+Les utilisateurs sur l'ancienne version verront la popup de mise à jour au prochain lancement de l'app ou dans les 4 heures si l'app est déjà ouverte.
 
 ---
 
