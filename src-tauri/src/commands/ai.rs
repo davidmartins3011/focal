@@ -1936,6 +1936,256 @@ pub async fn send_weekly_prep_message(
     parse_daily_prep_response(&raw, &id_map)
 }
 
+// ── Period Prep ──
+
+fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> String {
+    let now = chrono::Local::now();
+    let today = now.format("%Y-%m-%d").to_string();
+
+    let mut parts = vec![
+        "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
+        "Tu es en mode PRÉPARATION DE LA PÉRIODE : tu aides l'utilisateur à préparer sa période stratégique (prise de recul).".to_string(),
+        format!("Date d'aujourd'hui : {today}"),
+        String::new(),
+    ];
+
+    // Load period info
+    if let Ok(row) = db.query_row(
+        "SELECT start_month, start_year, end_month, end_year, frequency FROM strategy_periods WHERE id = ?1",
+        params![period_id],
+        |row| Ok((
+            row.get::<_, i32>(0)?,
+            row.get::<_, i32>(1)?,
+            row.get::<_, i32>(2)?,
+            row.get::<_, i32>(3)?,
+            row.get::<_, String>(4)?,
+        )),
+    ) {
+        let months = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+        let sm = months.get(row.0 as usize).unwrap_or(&"?");
+        let em = months.get(row.2 as usize).unwrap_or(&"?");
+        let freq_label = match row.4.as_str() {
+            "monthly" => "mensuelle",
+            "bimonthly" => "bimestrielle",
+            "quarterly" => "trimestrielle",
+            "biannual" => "semestrielle",
+            _ => "périodique",
+        };
+        parts.push(format!("PÉRIODE EN COURS : {sm} {sy} — {em} {ey} (fréquence {freq_label})", sy = row.1, ey = row.3));
+        parts.push(String::new());
+    }
+
+    // Load current goals (North Star / Caps à tenir)
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, title, target, deadline FROM strategy_goals WHERE period_id = ?1 ORDER BY position",
+    ) {
+        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, Option<String>>(3)?,
+        ))) {
+            let goals: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+            if !goals.is_empty() {
+                parts.push("CAPS À TENIR (North Star Goals) de cette période :".to_string());
+                for (i, (id, title, target, deadline)) in goals.iter().enumerate() {
+                    let mut line = format!("{}. **{}**", i + 1, title);
+                    if !target.is_empty() {
+                        line.push_str(&format!(" — {}", target));
+                    }
+                    if let Some(d) = deadline {
+                        line.push_str(&format!(" (échéance: {})", d));
+                    }
+                    parts.push(line);
+
+                    // Load strategies linked to this goal
+                    if let Ok(mut sstmt) = db.prepare(
+                        "SELECT s.title, s.description FROM strategy_strategies s JOIN goal_strategy_links l ON l.strategy_id = s.id WHERE l.goal_id = ?1 ORDER BY s.position",
+                    ) {
+                        if let Ok(strats) = sstmt.query_map(params![id], |row| Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                        ))) {
+                            for s in strats.filter_map(|r| r.ok()) {
+                                let desc = if s.1.is_empty() { String::new() } else { format!(" — {}", s.1) };
+                                parts.push(format!("   • Objectif : {}{}", s.0, desc));
+                            }
+                        }
+                    }
+                }
+                parts.push(String::new());
+            } else {
+                parts.push("AUCUN CAP À TENIR défini pour cette période.".to_string());
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // Load all objectives (strategies) and their tactics
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT s.id, s.title, s.description FROM strategy_strategies s JOIN strategy_goals g ON s.goal_id = g.id WHERE g.period_id = ?1 ORDER BY s.position",
+    ) {
+        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))) {
+            let strats: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+            if !strats.is_empty() {
+                parts.push("OBJECTIFS CONCRETS de cette période :".to_string());
+                for (i, (sid, title, desc)) in strats.iter().enumerate() {
+                    let d = if desc.is_empty() { String::new() } else { format!(" — {}", desc) };
+                    parts.push(format!("{}. **{}**{}", i + 1, title, d));
+
+                    if let Ok(mut tstmt) = db.prepare(
+                        "SELECT title FROM strategy_tactics WHERE strategy_id = ?1 ORDER BY position",
+                    ) {
+                        if let Ok(tactics) = tstmt.query_map(params![sid], |row| row.get::<_, String>(0)) {
+                            for t in tactics.filter_map(|r| r.ok()) {
+                                parts.push(format!("   → Stratégie : {}", t));
+                            }
+                        }
+                    }
+                }
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // Load previous period reflections (commitments)
+    if let Ok(prev_id) = db.query_row(
+        "SELECT id FROM strategy_periods WHERE status = 'closed' ORDER BY end_year DESC, end_month DESC LIMIT 1",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        if let Ok(mut stmt) = db.prepare(
+            "SELECT prompt, answer FROM period_reflections WHERE period_id = ?1 AND answer != '' ORDER BY position",
+        ) {
+            if let Ok(rows) = stmt.query_map(params![prev_id], |row| Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+            ))) {
+                let refls: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+                if !refls.is_empty() {
+                    parts.push("RÉFLEXIONS DE LA PÉRIODE PRÉCÉDENTE :".to_string());
+                    for (prompt, answer) in &refls {
+                        parts.push(format!("- {} → \"{}\"", prompt, answer));
+                    }
+                    parts.push(String::new());
+                }
+            }
+        }
+    }
+
+    if let Some(profile) = get_user_profile(db) {
+        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
+            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
+            parts.push(String::new());
+        }
+    }
+
+    parts.push("CONTEXTE TDAH — PRINCIPES FONDAMENTAUX :".to_string());
+    parts.push("- Le cerveau TDAH a du mal à hiérarchiser : TOUT semble important. Ton rôle est d'aider à clarifier, pas d'ajouter du bruit.".to_string());
+    parts.push("- Trop d'objectifs = aucun objectif. Protège l'utilisateur quand il veut tout faire.".to_string());
+    parts.push("- La prise de recul est un moment précieux : aide à synthétiser et prioriser, pas à tout détailler.".to_string());
+    parts.push(String::new());
+
+    parts.push("RÈGLES DE CONVERSATION :".to_string());
+    parts.push("- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string());
+    parts.push("- Tu es un CONSEILLER : tu fais des suggestions, tu proposes des ajustements, tu donnes ton avis — mais c'est l'utilisateur qui a le dernier mot.".to_string());
+    parts.push("- Tutoie l'utilisateur. Sois chaleureux, bienveillant, encourageant et concis.".to_string());
+    parts.push("- Ne fais jamais la morale. Pas de jugement.".to_string());
+    parts.push(String::new());
+
+    parts.push("DÉROULEMENT NATUREL (adapte-toi, ce n'est pas un script rigide) :".to_string());
+    parts.push("1. Commence par un résumé de la situation : les caps à tenir actuels, les objectifs, et si disponible les réflexions de la période précédente (engagements à arrêter/commencer).".to_string());
+    parts.push("2. Demande si les caps à tenir sont toujours d'actualité ou s'il y a des changements.".to_string());
+    parts.push("3. Aide à affiner ou ajouter des objectifs concrets pour cette période.".to_string());
+    parts.push("4. Explore les priorités : qu'est-ce qui est le plus important cette période ?".to_string());
+    parts.push("5. Si des engagements de la période précédente existent (ce que l'utilisateur voulait arrêter/commencer), rappelle-les et demande comment les intégrer.".to_string());
+    parts.push("6. Confirme le plan et lance la période (prepComplete: true).".to_string());
+    parts.push(String::new());
+
+    parts.push("IMPORTANT :".to_string());
+    parts.push("- Tu ne peux PAS modifier directement les caps, objectifs ou stratégies. L'utilisateur le fera dans l'interface.".to_string());
+    parts.push("- Ton rôle est de l'aider à RÉFLÉCHIR : clarifier ses priorités, challenger ses choix, proposer des formulations.".to_string());
+    parts.push("- Si l'utilisateur dit \"c'est bon\" ou \"on est bons\", mets prepComplete à true.".to_string());
+    parts.push(String::new());
+
+    parts.push("STYLE DU CONTENU (content) — RESPECTE STRICTEMENT CE FORMAT :".to_string());
+    parts.push("- INTERDIT : titres markdown (#, ##, ###). Jamais de headers.".to_string());
+    parts.push("- Autorisé : **gras** pour les noms importants, listes numérotées (1. 2. 3.), \\n pour les sauts de ligne.".to_string());
+    parts.push("- Sections séparées par des phrases naturelles, PAS par des titres markdown.".to_string());
+    parts.push("- Ton conversationnel et chaleureux. Phrases courtes.".to_string());
+    parts.push(String::new());
+
+    parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
+    parts.push(r#"{"content": "...", "prepComplete": false}"#.to_string());
+    parts.push("- content : ton message texte.".to_string());
+    parts.push("- prepComplete : true UNIQUEMENT quand l'utilisateur confirme que la préparation est terminée.".to_string());
+
+    parts.join("\n")
+}
+
+fn parse_period_prep_response(raw: &str) -> Result<DailyPrepResponse, String> {
+    eprintln!("[period_prep] raw LLM response (first 500 chars): {}", &raw[..raw.len().min(500)]);
+
+    let Some(parsed) = clean_and_find_json(raw) else {
+        return Ok(DailyPrepResponse {
+            content: raw.to_string(),
+            tasks_to_add: vec![],
+            tasks_to_remove: vec![],
+            tasks_to_update: vec![],
+            tasks_to_toggle: vec![],
+            tasks_to_reorder: None,
+            prep_complete: false,
+            tags_to_set: vec![],
+            steps_to_set: vec![],
+        });
+    };
+
+    let content = parsed.get("content").and_then(|v| v.as_str()).unwrap_or(raw).to_string();
+    let content = strip_json_from_content(&content);
+
+    let prep_complete = json_field(&parsed, "prepComplete", "prep_complete")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    Ok(DailyPrepResponse {
+        content,
+        tasks_to_add: vec![],
+        tasks_to_remove: vec![],
+        tasks_to_update: vec![],
+        tasks_to_toggle: vec![],
+        tasks_to_reorder: None,
+        prep_complete,
+        tags_to_set: vec![],
+        steps_to_set: vec![],
+    })
+}
+
+#[tauri::command]
+pub async fn send_period_prep_message(
+    state: State<'_, AppState>,
+    user_message: String,
+    history: String,
+    period_id: String,
+) -> Result<DailyPrepResponse, String> {
+    let (provider_id, api_key, model, system_prompt) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let (provider, model) = get_active_provider(&db)?;
+        let system = build_period_prep_prompt(&db, &period_id);
+        (provider.id, provider.api_key, model, system)
+    };
+
+    let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
+    let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
+    msgs.push(("user".to_string(), user_message));
+
+    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs, true).await?;
+    parse_period_prep_response(&raw)
+}
+
 // ── Onboarding ──
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

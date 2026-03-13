@@ -105,6 +105,18 @@ export function sendWeeklyPrepMessage(
   });
 }
 
+export function sendPeriodPrepMessage(
+  userMessage: string,
+  history: { role: string; content: string }[],
+  periodId: string,
+): Promise<DailyPrepResponse> {
+  return invoke<DailyPrepResponse>("send_period_prep_message", {
+    userMessage,
+    history: JSON.stringify(history),
+    periodId,
+  });
+}
+
 export interface OnboardingResponse {
   content: string;
   profileUpdates: Partial<UserProfile>;

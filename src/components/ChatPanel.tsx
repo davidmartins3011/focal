@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, Task, Tag } from "../types";
-import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, clearChat, type AiResponse, type DailyPrepResponse, type TagAction, type StepsAction } from "../services/chat";
+import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessage, sendPeriodPrepMessage, clearChat, type AiResponse, type DailyPrepResponse, type TagAction, type StepsAction } from "../services/chat";
 import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps, setTaskTags, clearAllTasks, clearTodayTasks } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { runAnalysisNow } from "../services/memory";
@@ -152,6 +152,18 @@ const endPrepVariations: Record<string, string[]> = {
     "Bon bilan hebdo. Tu peux être fier ! 🌟",
     "C'est bouclé pour cette semaine. Bien joué ! 🎯",
   ],
+  period: [
+    "La période est bien préparée. En avant ! 🧭",
+    "Tes caps sont posés. Belle période en perspective ! 🚀",
+    "Préparation bouclée ! Tu sais où tu vas. 🎯",
+    "Parfait, la période est structurée. Go ! 💪",
+    "Top, les priorités sont claires. Bonne période ! ✨",
+    "Cap défini, objectifs posés. Tu vas assurer ! 🔥",
+    "Période bien cadrée. Tu as un plan solide ! ⭐",
+    "Préparation terminée ! Concentre-toi sur tes priorités. 👊",
+    "C'est calé pour cette période. En route ! 🌟",
+    "Bien joué ! La période est prête, à toi de jouer. ☀️",
+  ],
 };
 
 function pickEndPrepMessage(mode: string): ChatMessage {
@@ -174,13 +186,15 @@ interface ChatPanelProps {
   onDailyPrepConsumed?: () => void;
   weeklyPrepPending?: boolean;
   onWeeklyPrepConsumed?: () => void;
+  periodPrepPending?: { periodId: string } | null;
+  onPeriodPrepConsumed?: () => void;
   stuckTask?: StuckTaskInfo | null;
   onStuckConsumed?: () => void;
   onTasksChanged?: () => void;
-  onViewSwitch?: (tab: "today" | "week") => void;
+  onViewSwitch?: (tab: "today" | "week" | "strategy") => void;
 }
 
-export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, stuckTask, onStuckConsumed, onTasksChanged, onViewSwitch }: ChatPanelProps) {
+export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, periodPrepPending, onPeriodPrepConsumed, stuckTask, onStuckConsumed, onTasksChanged, onViewSwitch }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -191,7 +205,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
-  const [prepMode, setPrepMode] = useState<"daily" | "weekly" | "daily_review" | "weekly_review" | null>(null);
+  const [prepMode, setPrepMode] = useState<"daily" | "weekly" | "daily_review" | "weekly_review" | "period" | null>(null);
+  const periodIdRef = useRef<string | null>(null);
   const [rawView, setRawView] = useState(false);
   const [addedStepsMsgIds, setAddedStepsMsgIds] = useState<Set<string>>(new Set());
   const [stepsMsgTargetTask, setStepsMsgTargetTask] = useState<Record<string, string>>({});
@@ -488,7 +503,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   );
 
   const sendPrepMessage = useCallback(
-    (text: string, mode: "daily" | "weekly" | "daily_review" | "weekly_review" = "daily") => {
+    (text: string, mode: "daily" | "weekly" | "daily_review" | "weekly_review" | "period" = "daily") => {
       if (isTyping) return;
 
       prepHistory.current.push({ role: "user", content: text });
@@ -498,8 +513,15 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       setError(null);
       setIsTyping(true);
 
-      const sendFn = (mode === "weekly" || mode === "weekly_review") ? sendWeeklyPrepMessage : sendDailyPrepMessage;
-      sendFn(text, prepHistory.current.slice(0, -1))
+      let sendPromise: Promise<import("../services/chat").DailyPrepResponse>;
+      if (mode === "period" && periodIdRef.current) {
+        sendPromise = sendPeriodPrepMessage(text, prepHistory.current.slice(0, -1), periodIdRef.current);
+      } else {
+        const sendFn = (mode === "weekly" || mode === "weekly_review") ? sendWeeklyPrepMessage : sendDailyPrepMessage;
+        sendPromise = sendFn(text, prepHistory.current.slice(0, -1));
+      }
+
+      sendPromise
         .then((response) => {
           setIsTyping(false);
           handlePrepResponse(response);
@@ -570,6 +592,31 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     sendPrepMessage(greeting, "weekly");
   }, [isTyping, sendPrepMessage, onViewSwitch]);
 
+  const startPeriodPrep = useCallback((periodId: string) => {
+    if (isTyping) return;
+    setPrepMode("period");
+    setPrepHasAiReply(false);
+    pendingPrepExit.current = null;
+    prepHistory.current = [];
+    periodIdRef.current = periodId;
+    textareaRef.current?.focus();
+    onViewSwitch?.("strategy");
+    const greetings = [
+      "C'est parti ! Préparons cette période ensemble.",
+      "Salut ! On organise ta prise de recul ?",
+      "Hello ! Voyons tes priorités pour cette période.",
+      "Allez, on prépare la période !",
+      "Prêt à poser tes caps ? C'est parti !",
+      "On s'y met ! Quels sont tes objectifs pour cette période ?",
+      "C'est le moment de structurer ta période. On y va ?",
+      "Hop, on fait le point sur tes priorités stratégiques !",
+      "Let's go ! On clarifie tes caps à tenir.",
+      "Allez, on pose les bases de cette période !",
+    ];
+    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+    sendPrepMessage(greeting, "period");
+  }, [isTyping, sendPrepMessage, onViewSwitch]);
+
   useEffect(() => {
     if (!dailyPrepPending) return;
     onDailyPrepConsumed?.();
@@ -581,6 +628,12 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     onWeeklyPrepConsumed?.();
     startWeeklyPrep();
   }, [weeklyPrepPending, startWeeklyPrep, onWeeklyPrepConsumed]);
+
+  useEffect(() => {
+    if (!periodPrepPending) return;
+    onPeriodPrepConsumed?.();
+    startPeriodPrep(periodPrepPending.periodId);
+  }, [periodPrepPending, startPeriodPrep, onPeriodPrepConsumed]);
 
   useEffect(() => {
     if (!stuckTask) return;
@@ -689,6 +742,37 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     if (text === "/start-week") {
       resetInput();
       startWeeklyPrep();
+      return;
+    }
+
+    if (text === "/start-period") {
+      resetInput();
+      const activePeriodId = localStorage.getItem("focal-active-period-id");
+      if (activePeriodId) {
+        startPeriodPrep(activePeriodId);
+      } else {
+        const noActiveMsg: ChatMessage = {
+          id: `ai-${Date.now()}`,
+          role: "ai",
+          content: "Aucune période active trouvée. Ouvre l'onglet « Prise de recul » pour créer ou activer une période.",
+        };
+        setMessages((prev) => [...prev, noActiveMsg]);
+      }
+      return;
+    }
+
+    if (text === "/reset-period") {
+      resetInput();
+      const activePeriodId = localStorage.getItem("focal-active-period-id");
+      if (activePeriodId) {
+        localStorage.removeItem(`period-prep-dismissed-${activePeriodId}`);
+      }
+      const resetMsg: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        role: "ai",
+        content: "Préparation de la période réinitialisée. Le bandeau « Lancer la préparation » réapparaîtra dans la prise de recul.",
+      };
+      setMessages((prev) => [...prev, resetMsg]);
       return;
     }
 
@@ -803,7 +887,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         setIsTyping(false);
         setError(typeof err === "string" ? err : String(err));
       });
-  }, [input, isTyping, prepMode, onStartOnboarding, startDailyPrep, startWeeklyPrep, sendPrepMessage, resetInput, handleChatResponse]);
+  }, [input, isTyping, prepMode, onStartOnboarding, startDailyPrep, startWeeklyPrep, startPeriodPrep, sendPrepMessage, resetInput, handleChatResponse]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1056,7 +1140,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12" />
             </svg>
-            {{ daily: "Finir le planning du jour", weekly: "Finir le planning de la semaine", daily_review: "Finir la revue du jour", weekly_review: "Finir la revue de la semaine" }[prepMode]}
+            {{ daily: "Finir le planning du jour", weekly: "Finir le planning de la semaine", daily_review: "Finir la revue du jour", weekly_review: "Finir la revue de la semaine", period: "Finir la préparation de la période" }[prepMode]}
           </button>
         )}
         <div className={styles.inputBox}>

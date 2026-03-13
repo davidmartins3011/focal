@@ -340,7 +340,7 @@ export default function CalendarView() {
             <div className={styles.weekScoreBar}>
               <div className={styles.weekScoreFill} style={{ width: `${weekPct}%` }} />
             </div>
-            <span className={styles.weekScoreCount}>{weekStats.done}/{weekStats.total}</span>
+
           </div>
           <button className={styles.todayBtn} onClick={goToday}>Aujourd'hui</button>
         </div>

@@ -425,6 +425,141 @@
   margin-top: 10px;
 }
 
+.comparatorSetup {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.comparatorScopeLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+  text-align: center;
+}
+
+.comparatorScopes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.comparatorScopeBtn {
+  padding: 16px 12px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.comparatorScopeBtn:hover {
+  border-color: var(--accent);
+  background: var(--bg3);
+  transform: translateY(-1px);
+}
+
+.comparatorScopeBtnActive {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.comparatorScopeBtnIcon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.comparatorScopeBtnLabel {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.comparatorDateRange {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  animation: comparatorSlideIn 0.2s ease both;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  width: 100%;
+  max-width: 360px;
+  justify-content: center;
+}
+
+.comparatorDateLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.comparatorDateSep {
+  color: var(--text3);
+  font-size: 16px;
+  margin-top: 16px;
+}
+
+.comparatorDateInput {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.comparatorDateInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.15);
+}
+
+.comparatorLaunchBtn {
+  padding: 12px 32px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: 'Outfit', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.3px;
+}
+
+.comparatorLaunchBtn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.3);
+}
+
+.comparatorLaunchBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 /* ─── Pomodoro ─── */
 
 .pomodoro {

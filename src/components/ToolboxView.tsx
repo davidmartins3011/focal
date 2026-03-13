@@ -186,9 +186,42 @@ function ToolRouter({ toolId }: { toolId: ToolId }) {
 
 // ─── Task Comparator ───
 
+type ComparatorScope = "today" | "week" | "range" | "all";
+
+const COMPARATOR_SCOPES: { id: ComparatorScope; label: string; icon: string }[] = [
+  { id: "today", label: "Aujourd'hui", icon: "📅" },
+  { id: "week", label: "Cette semaine", icon: "🗓️" },
+  { id: "range", label: "Période", icon: "📆" },
+  { id: "all", label: "Tout", icon: "📋" },
+];
+
+function getWeekRange(): { start: string; end: string } {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const mon = new Date(now);
+  mon.setDate(now.getDate() + diff);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  return { start: fmt(mon), end: fmt(sun) };
+}
+
+function formatDateInput(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
 function ComparatorTool() {
-  const [allTasks, setAllTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [scope, setScope] = useState<ComparatorScope>("today");
+  const [rangeStart, setRangeStart] = useState(() => formatDateInput(new Date()));
+  const [rangeEnd, setRangeEnd] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return formatDateInput(d);
+  });
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [started, setStarted] = useState(false);
   const [bracket, setBracket] = useState<Task[]>([]);
   const [matchIndex, setMatchIndex] = useState(0);
   const [round, setRound] = useState(1);
@@ -210,16 +243,38 @@ function ComparatorTool() {
     setAnimKey((k) => k + 1);
   }, []);
 
-  useEffect(() => {
-    invoke<Task[]>("get_all_tasks")
-      .then((t) => {
-        const pending = t.filter((task) => !task.done);
-        setAllTasks(pending);
-        if (pending.length >= 2) initTournament(pending);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [initTournament]);
+  const loadTasks = useCallback(async (s: ComparatorScope) => {
+    setLoading(true);
+    try {
+      let result: Task[];
+      if (s === "today") {
+        result = await invoke<Task[]>("get_tasks", { context: "today" });
+      } else if (s === "week") {
+        const { start, end } = getWeekRange();
+        result = await invoke<Task[]>("get_tasks_by_date_range", { startDate: start, endDate: end });
+      } else if (s === "range") {
+        result = await invoke<Task[]>("get_tasks_by_date_range", { startDate: rangeStart, endDate: rangeEnd });
+      } else {
+        result = await invoke<Task[]>("get_all_tasks");
+      }
+      const pending = result.filter((t) => !t.done);
+      setTasks(pending);
+      return pending;
+    } catch {
+      setTasks([]);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [rangeStart, rangeEnd]);
+
+  const handleStart = useCallback(async () => {
+    const pending = await loadTasks(scope);
+    if (pending.length >= 2) {
+      initTournament(pending);
+      setStarted(true);
+    }
+  }, [scope, loadTasks, initTournament]);
 
   const matchesInRound = Math.floor(bracket.length / 2);
   const hasBye = bracket.length % 2 === 1;
@@ -253,18 +308,93 @@ function ComparatorTool() {
     }
   };
 
-  const handleReset = () => initTournament(allTasks);
+  const handleReset = () => initTournament(tasks);
+
+  const handleBackToSetup = () => {
+    setStarted(false);
+    setWinner(null);
+    setBracket([]);
+    setTasks([]);
+  };
+
+  const scopeLabel = COMPARATOR_SCOPES.find((s) => s.id === scope)?.label ?? "";
+
+  if (!started) {
+    return (
+      <>
+        <div className={styles.toolViewTitle}>Comparateur de tâches</div>
+        <div className={styles.toolViewDesc}>
+          Choisis le périmètre de tâches à comparer, puis lance le tournoi par élimination.
+        </div>
+        <div className={styles.comparatorSetup}>
+          <div className={styles.comparatorScopeLabel}>Quelles tâches comparer ?</div>
+          <div className={styles.comparatorScopes}>
+            {COMPARATOR_SCOPES.map((s) => (
+              <button
+                key={s.id}
+                className={`${styles.comparatorScopeBtn} ${scope === s.id ? styles.comparatorScopeBtnActive : ""}`}
+                onClick={() => setScope(s.id)}
+              >
+                <span className={styles.comparatorScopeBtnIcon}>{s.icon}</span>
+                <span className={styles.comparatorScopeBtnLabel}>{s.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {scope === "range" && (
+            <div className={styles.comparatorDateRange}>
+              <label className={styles.comparatorDateLabel}>
+                Du
+                <input
+                  type="date"
+                  className={styles.comparatorDateInput}
+                  value={rangeStart}
+                  onChange={(e) => setRangeStart(e.target.value)}
+                />
+              </label>
+              <span className={styles.comparatorDateSep}>→</span>
+              <label className={styles.comparatorDateLabel}>
+                Au
+                <input
+                  type="date"
+                  className={styles.comparatorDateInput}
+                  value={rangeEnd}
+                  onChange={(e) => setRangeEnd(e.target.value)}
+                />
+              </label>
+            </div>
+          )}
+
+          <button
+            className={styles.comparatorLaunchBtn}
+            onClick={handleStart}
+            disabled={loading}
+          >
+            {loading ? "Chargement…" : "⚔️ Lancer le tournoi"}
+          </button>
+        </div>
+      </>
+    );
+  }
 
   if (loading) {
     return <div className={styles.toolViewDesc}>Chargement des tâches…</div>;
   }
 
-  if (allTasks.length < 2) {
+  if (tasks.length < 2) {
     return (
       <>
         <div className={styles.toolViewTitle}>Comparateur de tâches</div>
         <div className={styles.toolViewDesc}>
-          Il faut au moins 2 tâches non terminées pour utiliser le comparateur.
+          Pas assez de tâches non terminées ({tasks.length}) pour « {scopeLabel} ».
+        </div>
+        <div className={styles.comparator}>
+          <button
+            className={`${styles.comparatorBtn} ${styles.comparatorBtnSecondary}`}
+            onClick={handleBackToSetup}
+          >
+            ← Changer le périmètre
+          </button>
         </div>
       </>
     );
@@ -274,7 +404,7 @@ function ComparatorTool() {
     <>
       <div className={styles.toolViewTitle}>Comparateur de tâches</div>
       <div className={styles.toolViewDesc}>
-        Clique sur la tâche que tu préfères faire en premier. Le tournoi par élimination déterminera ta priorité.
+        Clique sur la tâche que tu préfères faire en premier. Tournoi sur « {scopeLabel} » ({tasks.length} tâches).
       </div>
       <div className={styles.comparator}>
         {winner ? (
@@ -292,6 +422,12 @@ function ComparatorTool() {
               >
                 Recommencer
               </button>
+              <button
+                className={`${styles.comparatorBtn} ${styles.comparatorBtnSecondary}`}
+                onClick={handleBackToSetup}
+              >
+                Changer le périmètre
+              </button>
             </div>
           </div>
         ) : currentPair ? (
@@ -305,7 +441,6 @@ function ComparatorTool() {
               </div>
               <div className={styles.comparatorProgressLabel}>
                 Match {completedMatches + 1} / {totalMatches} — Tour {round}
-                {hasBye && matchIndex + 1 === matchesInRound ? "" : ""}
               </div>
             </div>
             <div className={styles.comparatorPair} key={animKey}>

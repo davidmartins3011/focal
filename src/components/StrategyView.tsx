@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { MONTH_NAMES } from "../data/strategyConstants";
+import { getSetting, setSetting } from "../services/settings";
 import {
   getStrategyPeriods,
   createStrategyPeriod,
@@ -175,9 +176,10 @@ function InlineEdit({ value, onSave, className, placeholder, tag: Tag = "span" }
 interface StrategyViewProps {
   frequency: StrategyFrequency;
   cycleStart: number;
+  onLaunchPeriodPrep?: (periodId: string) => void;
 }
 
-export default function StrategyView({ frequency, cycleStart }: StrategyViewProps) {
+export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep }: StrategyViewProps) {
   // ── Periods state ──
   const [periods, setPeriods] = useState<StrategyPeriod[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
@@ -244,10 +246,23 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
   }, [previousPeriod]);
 
   // ── Prep banner state ──
-  const [prepDismissed, setPrepDismissed] = useState(false);
+  const [prepDismissed, setPrepDismissed] = useState(true);
   const reflectionsRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setPrepDismissed(false); }, [selectedPeriodId]);
+  useEffect(() => {
+    if (!selectedPeriodId) return;
+    const key = `period-prep-dismissed-${selectedPeriodId}`;
+    getSetting(key)
+      .then((val) => setPrepDismissed(val === "done"))
+      .catch(() => setPrepDismissed(false));
+  }, [selectedPeriodId]);
+
+  // Expose active period id via localStorage for chat commands
+  useEffect(() => {
+    if (activePeriod?.id) {
+      localStorage.setItem("focal-active-period-id", activePeriod.id);
+    }
+  }, [activePeriod?.id]);
 
   // ── Goals state ──
   const [goals, setGoals] = useState<StrategyGoal[]>([]);
@@ -488,13 +503,27 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
                     <InlineEdit value={goal.title} onSave={(v) => handleUpdateGoal(goal, "title", v)} className={`${styles.goalTitle} ${styles.noHoverBg}`} tag="h3" />
                     <div className={styles.northStarMetaRow}>
                       <InlineEdit value={goal.target} onSave={(v) => handleUpdateGoal(goal, "target", v)} className={`${styles.goalTarget} ${styles.noHoverBg}`} placeholder="Description..." />
-                      <span className={styles.northStarDeadlineSep}>·</span>
-                      <input
-                        type="date"
-                        className={styles.northStarDeadlineInput}
-                        value={goal.deadline ?? ""}
-                        onChange={(e) => handleUpdateGoal(goal, "deadline", e.target.value)}
-                      />
+                      {goal.deadline ? (
+                        <>
+                          <span className={styles.northStarDeadlineSep}>·</span>
+                          <input
+                            type="date"
+                            className={styles.northStarDeadlineInput}
+                            value={goal.deadline}
+                            onChange={(e) => handleUpdateGoal(goal, "deadline", e.target.value || "")}
+                          />
+                          <button className={styles.northStarDeadlineClear} onClick={() => handleUpdateGoal(goal, "deadline", "")} title="Supprimer l'échéance">×</button>
+                        </>
+                      ) : (
+                        <label className={styles.northStarAddDeadline}>
+                          + Échéance
+                          <input
+                            type="date"
+                            className={styles.northStarDeadlineHidden}
+                            onChange={(e) => { if (e.target.value) handleUpdateGoal(goal, "deadline", e.target.value); }}
+                          />
+                        </label>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -635,6 +664,21 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
     </>
   );
 
+  // ── Visible periods (active + 3 most recent closed) ──
+  const MAX_CLOSED_COLLAPSED = 3;
+  const MAX_CLOSED_EXPANDED = 17;
+  const [showAllPeriods, setShowAllPeriods] = useState(false);
+
+  const visiblePeriods = useMemo(() => {
+    const active = periods.filter((p) => p.status === "active");
+    const closed = periods.filter((p) => p.status === "closed");
+    const limit = showAllPeriods ? MAX_CLOSED_EXPANDED : MAX_CLOSED_COLLAPSED;
+    return [...active, ...closed.slice(0, limit)];
+  }, [periods, showAllPeriods]);
+
+  const closedCount = periods.filter((p) => p.status === "closed").length;
+  const hasMore = closedCount > MAX_CLOSED_COLLAPSED;
+
   // ── Main render ──
 
   return (
@@ -648,7 +692,7 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
               + Nouvelle période
             </button>
           )}
-          {periods.map((p) => {
+          {visiblePeriods.map((p) => {
             const active = p.id === selectedPeriodId;
             return (
               <button
@@ -662,6 +706,11 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
               </button>
             );
           })}
+          {hasMore && (
+            <button className={styles.showMoreChip} onClick={() => setShowAllPeriods((v) => !v)}>
+              {showAllPeriods ? "▴" : `+${Math.min(closedCount, MAX_CLOSED_EXPANDED) - MAX_CLOSED_COLLAPSED}`}
+            </button>
+          )}
         </div>
       )}
 
@@ -718,10 +767,17 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
                 Définis tes caps à tenir, tes objectifs et tes stratégies pour guider cette période.
               </p>
               <div className={styles.ctaActions}>
-                <button className={styles.ctaBtn} onClick={() => setPrepDismissed(true)}>
+                <button className={styles.ctaBtn} onClick={() => {
+                  setSetting(`period-prep-dismissed-${selectedPeriodId}`, "done").catch(() => {});
+                  setPrepDismissed(true);
+                  onLaunchPeriodPrep?.(selectedPeriodId);
+                }}>
                   Lancer la préparation
                 </button>
-                <button className={styles.ctaDismiss} onClick={() => setPrepDismissed(true)}>
+                <button className={styles.ctaDismiss} onClick={() => {
+                  setSetting(`period-prep-dismissed-${selectedPeriodId}`, "done").catch(() => {});
+                  setPrepDismissed(true);
+                }}>
                   C'est bon pour cette période
                 </button>
               </div>

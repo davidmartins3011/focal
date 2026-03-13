@@ -10,6 +10,7 @@ import TodoView from "./components/TodoView";
 import SettingsView from "./components/SettingsView";
 import OnboardingView from "./components/OnboardingView";
 import NotificationCenter from "./components/NotificationCenter";
+import UpdateNotification from "./components/UpdateNotification";
 import type { ViewTab, SidebarPage, ThemeId, AISettings, StrategyFrequency, FrequencyOccurrence, WeekDayId } from "./types";
 import { useNotifications } from "./hooks/useNotifications";
 import { getAllSettings, setSetting } from "./services/settings";
@@ -45,6 +46,7 @@ export default function App() {
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const [dailyPrepPending, setDailyPrepPending] = useState(false);
   const [weeklyPrepPending, setWeeklyPrepPending] = useState(false);
+  const [periodPrepPending, setPeriodPrepPending] = useState<{ periodId: string } | null>(null);
   const [stuckTask, setStuckTask] = useState<{ taskId: string; taskName: string } | null>(null);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
   const loaded = useRef(false);
@@ -226,10 +228,13 @@ export default function App() {
         setActivePage("main");
         setActiveTab("week");
         break;
-      case "strategy-review":
+      case "strategy-review": {
         setActivePage("main");
         setActiveTab("strategy");
+        const pid = localStorage.getItem("focal-active-period-id");
+        if (pid) setPeriodPrepPending({ periodId: pid });
         break;
+      }
       default:
         setActivePage("main");
         setActiveTab("today");
@@ -257,6 +262,10 @@ export default function App() {
     setWeeklyPrepPending(true);
   }, []);
 
+  const handleLaunchPeriodPrep = useCallback((periodId: string) => {
+    setPeriodPrepPending({ periodId });
+  }, []);
+
   const handleStuck = useCallback((taskId: string, taskName: string) => {
     setStuckTask({ taskId, taskName });
   }, []);
@@ -265,8 +274,8 @@ export default function App() {
     setTaskRefreshKey((k) => k + 1);
   }, []);
 
-  const handleViewSwitch = useCallback((tab: "today" | "week") => {
-    setActiveTab(tab);
+  const handleViewSwitch = useCallback((tab: "today" | "week" | "strategy") => {
+    setActiveTab(tab as ViewTab);
     setActivePage("main");
   }, []);
 
@@ -315,6 +324,7 @@ export default function App() {
             strategyCycleStart={strategyCycleStart}
             onLaunchDailyPrep={handleLaunchDailyPrep}
             onLaunchWeeklyPrep={handleLaunchWeeklyPrep}
+            onLaunchPeriodPrep={handleLaunchPeriodPrep}
             onStuck={handleStuck}
             taskRefreshKey={taskRefreshKey}
             workingDays={workingDays}
@@ -360,12 +370,15 @@ export default function App() {
           onDailyPrepConsumed={() => setDailyPrepPending(false)}
           weeklyPrepPending={weeklyPrepPending}
           onWeeklyPrepConsumed={() => setWeeklyPrepPending(false)}
+          periodPrepPending={periodPrepPending}
+          onPeriodPrepConsumed={() => setPeriodPrepPending(null)}
           stuckTask={stuckTask}
           onStuckConsumed={() => setStuckTask(null)}
           onTasksChanged={handleTasksChanged}
           onViewSwitch={handleViewSwitch}
         />
       </div>
+      <UpdateNotification />
       {notif.notifCenterOpen && (
         <NotificationCenter
           history={notif.notifHistory}

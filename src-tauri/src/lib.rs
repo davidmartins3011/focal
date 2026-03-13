@@ -12,6 +12,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -102,6 +104,7 @@ pub fn run() {
             commands::ai::generate_suggestions,
             commands::ai::send_daily_prep_message,
             commands::ai::send_weekly_prep_message,
+            commands::ai::send_period_prep_message,
             commands::ai::send_onboarding_message,
             commands::ai::analyze_profile_url,
             commands::memory::get_memory_insights,
