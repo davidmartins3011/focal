@@ -1,9 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { StrategyReview, StrategyGoal, StrategyPeriod, PeriodSummary } from "../types";
-
-export function getStrategyReviews(): Promise<StrategyReview[]> {
-  return invoke<StrategyReview[]>("get_strategy_reviews");
-}
+import type { StrategyGoal, StrategyPeriod, PeriodSummary } from "../types";
 
 export function getStrategyPeriods(): Promise<StrategyPeriod[]> {
   return invoke<StrategyPeriod[]>("get_strategy_periods");
@@ -20,8 +16,23 @@ export function createStrategyPeriod(params: {
   return invoke<StrategyPeriod>("create_strategy_period", params);
 }
 
+export function updateStrategyPeriod(params: {
+  id: string;
+  startMonth: number;
+  startYear: number;
+  endMonth: number;
+  endYear: number;
+  frequency: string;
+}): Promise<void> {
+  return invoke("update_strategy_period", params);
+}
+
 export function closeStrategyPeriod(id: string): Promise<void> {
   return invoke("close_strategy_period", { id });
+}
+
+export function reopenStrategyPeriod(id: string): Promise<void> {
+  return invoke("reopen_strategy_period", { id });
 }
 
 export function upsertPeriodReflection(params: {
@@ -91,23 +102,6 @@ export function upsertTactic(params: {
 
 export function deleteTactic(id: string): Promise<void> {
   return invoke("delete_tactic", { id });
-}
-
-export function upsertAction(params: {
-  id: string;
-  tacticId: string;
-  text: string;
-  position: number;
-}): Promise<void> {
-  return invoke("upsert_action", params);
-}
-
-export function deleteAction(id: string): Promise<void> {
-  return invoke("delete_action", { id });
-}
-
-export function toggleAction(id: string): Promise<void> {
-  return invoke("toggle_action", { id });
 }
 
 export function getPeriodSummary(startDate: string, endDate: string): Promise<PeriodSummary> {

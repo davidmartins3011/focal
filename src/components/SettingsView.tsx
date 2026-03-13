@@ -39,10 +39,6 @@ interface SettingsViewProps {
   onStrategyFrequencyChange: (freq: StrategyFrequency) => void;
   strategyCycleStart: number;
   onStrategyCycleStartChange: (start: number) => void;
-  strategyOccurrence: FrequencyOccurrence;
-  onStrategyOccurrenceChange: (occ: FrequencyOccurrence) => void;
-  strategyDay: WeekDayId;
-  onStrategyDayChange: (day: WeekDayId) => void;
   workingDays: WeekDayId[];
   onWorkingDaysChange: (days: WeekDayId[]) => void;
 }
@@ -63,10 +59,6 @@ export default function SettingsView({
   onStrategyFrequencyChange,
   strategyCycleStart,
   onStrategyCycleStartChange,
-  strategyOccurrence,
-  onStrategyOccurrenceChange,
-  strategyDay,
-  onStrategyDayChange,
   workingDays,
   onWorkingDaysChange,
 }: SettingsViewProps) {
@@ -317,35 +309,6 @@ export default function SettingsView({
                 </div>
               </div>
 
-              <div className={styles.strategyFreqRow}>
-                <label className={styles.strategyLabel}>Quand</label>
-                <div className={styles.occurrenceRow}>
-                  <div className={styles.freqPills}>
-                    {STRATEGY_OCCURRENCE_OPTIONS.map((o) => (
-                      <button
-                        key={o.id}
-                        className={`${styles.freqPill} ${strategyOccurrence === o.id ? styles.freqActive : ""}`}
-                        onClick={() => onStrategyOccurrenceChange(o.id)}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className={styles.dayPills}>
-                    {DAY_LABELS.map((d) => (
-                      <button
-                        key={d.id}
-                        className={`${styles.dayPill} ${strategyDay === d.id ? styles.dayActive : ""}`}
-                        onClick={() => onStrategyDayChange(d.id)}
-                        disabled={!workingDays.includes(d.id)}
-                      >
-                        {d.short}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
               {strategyFrequency === "bimonthly" && (
                 <div className={styles.strategyFreqRow}>
                   <label className={styles.strategyLabel}>Mois</label>
@@ -394,6 +357,7 @@ export default function SettingsView({
                   </div>
                 </div>
               )}
+
             </div>}
           </div>
         </div>
@@ -447,9 +411,49 @@ export default function SettingsView({
                         />
                       </div>
                       {reminder.id === "strategy-review" ? (
-                        <div className={styles.reminderSyncNote}>
-                          Fréquence calée sur le réglage « Prise de recul » ci-dessus.
-                        </div>
+                        <>
+                          <div className={styles.reminderDaysRow}>
+                            <label className={styles.reminderTimeLabel}>Quand</label>
+                            <div className={styles.occurrenceRow}>
+                              <div className={styles.freqPills}>
+                                {STRATEGY_OCCURRENCE_OPTIONS.map((o) => (
+                                  <button
+                                    key={o.id}
+                                    className={`${styles.freqPill} ${(reminder.frequencyOccurrence ?? "1st") === o.id ? styles.freqActive : ""}`}
+                                    onClick={() => onNotifSettingsChange({
+                                      ...notifSettings,
+                                      reminders: notifSettings.reminders.map((r) =>
+                                        r.id === reminder.id ? { ...r, frequencyOccurrence: o.id } : r
+                                      ),
+                                    })}
+                                  >
+                                    {o.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className={styles.dayPills}>
+                                {DAY_LABELS.map((d) => (
+                                  <button
+                                    key={d.id}
+                                    className={`${styles.dayPill} ${reminder.days[0] === d.id ? styles.dayActive : ""}`}
+                                    onClick={() => onNotifSettingsChange({
+                                      ...notifSettings,
+                                      reminders: notifSettings.reminders.map((r) =>
+                                        r.id === reminder.id ? { ...r, days: [d.id] } : r
+                                      ),
+                                    })}
+                                    disabled={!workingDays.includes(d.id)}
+                                  >
+                                    {d.short}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <div className={styles.reminderSyncNote}>
+                            Période calée sur le réglage « Prise de recul » ci-dessus.
+                          </div>
+                        </>
                       ) : reminder.frequency ? (
                         <>
                           <div className={styles.reminderDaysRow}>

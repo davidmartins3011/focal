@@ -3,7 +3,9 @@ import { MONTH_NAMES } from "../data/strategyConstants";
 import {
   getStrategyPeriods,
   createStrategyPeriod,
+  updateStrategyPeriod,
   closeStrategyPeriod,
+  reopenStrategyPeriod,
   carryOverGoals,
   getStrategyGoals,
   upsertStrategyGoal,
@@ -33,12 +35,6 @@ function uid(): string {
   return crypto.randomUUID().slice(0, 8);
 }
 
-function goalProgress(goal: StrategyGoal): number {
-  let total = 0, done = 0;
-  for (const s of goal.strategies) for (const t of s.tactics) for (const a of t.actions) { total++; if (a.done) done++; }
-  return total === 0 ? 0 : Math.round((done / total) * 100);
-}
-
 function computeCurrentPeriod(freq: StrategyFrequency, cycleStart: number) {
   const now = new Date();
   const cm = now.getMonth();
@@ -60,12 +56,9 @@ function computeCurrentPeriod(freq: StrategyFrequency, cycleStart: number) {
 }
 
 function periodChipLabel(p: StrategyPeriod): string {
-  const freq = p.frequency as StrategyFrequency;
   const short = MONTH_NAMES[p.startMonth].slice(0, 3);
-  if (freq === "monthly") return `${short}.`;
-  if (freq === "bimonthly") return `${short}-${MONTH_NAMES[p.endMonth].slice(0, 3)}`;
-  if (freq === "quarterly") return `T${Math.floor(p.startMonth / 3) + 1}`;
-  return `S${p.startMonth < 6 ? 1 : 2}`;
+  if (p.startMonth === p.endMonth) return `${short}.`;
+  return `${short}-${MONTH_NAMES[p.endMonth].slice(0, 3)}`;
 }
 
 function periodTitleLabel(p: StrategyPeriod): string {
@@ -89,6 +82,28 @@ function frequencyLabel(freq: string): string {
     case "biannual": return "du semestre";
     default: return "de la période";
   }
+}
+
+function computeNextPeriod(current: StrategyPeriod) {
+  const freq = current.frequency as StrategyFrequency;
+  const step = freq === "monthly" ? 1 : freq === "bimonthly" ? 2 : freq === "quarterly" ? 3 : 6;
+  let sm = current.endMonth + 1;
+  let sy = current.endYear;
+  if (sm > 11) { sm -= 12; sy++; }
+  let em = sm + step - 1;
+  let ey = sy;
+  if (em > 11) { em -= 12; ey++; }
+  return { startMonth: sm, startYear: sy, endMonth: em, endYear: ey };
+}
+
+function isPeriodStarted(p: StrategyPeriod): boolean {
+  const now = new Date();
+  return now >= new Date(p.startYear, p.startMonth, 1);
+}
+
+function isWithinPeriod(p: StrategyPeriod): boolean {
+  const now = new Date();
+  return now >= new Date(p.startYear, p.startMonth, 1) && now <= new Date(p.endYear, p.endMonth + 1, 0);
 }
 
 const TAG_META: Record<string, { label: string; icon: string; color: string }> = {
@@ -171,10 +186,16 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
   const loadPeriods = useCallback(async () => {
     try {
       const data = await getStrategyPeriods();
-      setPeriods(data);
+      const visible = data.filter((p) => p.status !== "draft");
+      visible.sort((a, b) => {
+        if (a.status === "active" && b.status !== "active") return -1;
+        if (a.status !== "active" && b.status === "active") return 1;
+        return b.endYear - a.endYear || b.endMonth - a.endMonth;
+      });
+      setPeriods(visible);
       if (initialLoad.current) {
-        const active = data.find((p) => p.status === "active");
-        setSelectedPeriodId(active?.id ?? data[0]?.id ?? "");
+        const active = visible.find((p) => p.status === "active");
+        setSelectedPeriodId(active?.id ?? visible[0]?.id ?? "");
         initialLoad.current = false;
       }
     } catch (err) {
@@ -188,6 +209,27 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
   const activePeriod = periods.find((p) => p.status === "active");
   const isActive = selectedPeriod?.status === "active";
 
+  useEffect(() => {
+    if (!activePeriod) return;
+    if (!isWithinPeriod(activePeriod)) return;
+    const p = computeCurrentPeriod(frequency, cycleStart);
+    if (
+      activePeriod.frequency === frequency &&
+      activePeriod.startMonth === p.startMonth &&
+      activePeriod.startYear === p.startYear &&
+      activePeriod.endMonth === p.endMonth &&
+      activePeriod.endYear === p.endYear
+    ) return;
+    updateStrategyPeriod({
+      id: activePeriod.id,
+      startMonth: p.startMonth,
+      startYear: p.startYear,
+      endMonth: p.endMonth,
+      endYear: p.endYear,
+      frequency,
+    }).then(loadPeriods).catch(console.error);
+  }, [frequency, cycleStart, activePeriod?.id]);
+
   const previousPeriod = useMemo(() => {
     if (!isActive) return null;
     return periods.find((p) => p.status === "closed") ?? null;
@@ -200,6 +242,12 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
     if (!stop?.answer && !start?.answer) return null;
     return { stop: stop?.answer || "", start: start?.answer || "" };
   }, [previousPeriod]);
+
+  // ── Prep banner state ──
+  const [prepDismissed, setPrepDismissed] = useState(false);
+  const reflectionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setPrepDismissed(false); }, [selectedPeriodId]);
 
   // ── Goals state ──
   const [goals, setGoals] = useState<StrategyGoal[]>([]);
@@ -284,12 +332,51 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
   };
 
   const handleClosePeriod = async () => {
-    if (!selectedPeriod || !confirm("Clôturer cette période ? Tu pourras toujours la consulter dans l'historique.")) return;
+    if (!selectedPeriod) return;
     try {
       await closeStrategyPeriod(selectedPeriod.id);
+
+      const allPeriods = await getStrategyPeriods();
+      const existingDraft = allPeriods.find((p) => p.status === "draft");
+
+      if (existingDraft) {
+        await reopenStrategyPeriod(existingDraft.id);
+      } else {
+        const next = computeNextPeriod(selectedPeriod);
+        const nextId = `period-${crypto.randomUUID().slice(0, 12)}`;
+        await createStrategyPeriod({
+          id: nextId,
+          startMonth: next.startMonth,
+          startYear: next.startYear,
+          endMonth: next.endMonth,
+          endYear: next.endYear,
+          frequency: selectedPeriod.frequency,
+        });
+        for (let i = 0; i < goals.length; i++) {
+          await upsertStrategyGoal({
+            id: uid(),
+            title: goals[i].title,
+            target: goals[i].target,
+            deadline: goals[i].deadline,
+            position: i,
+            periodId: nextId,
+          });
+        }
+      }
+
       await loadPeriods();
     } catch (err) {
       console.error("[StrategyView] closePeriod error:", err);
+    }
+  };
+
+  const handleReopenPeriod = async () => {
+    if (!selectedPeriod) return;
+    try {
+      await reopenStrategyPeriod(selectedPeriod.id);
+      await loadPeriods();
+    } catch (err) {
+      console.error("[StrategyView] reopenPeriod error:", err);
     }
   };
 
@@ -392,10 +479,7 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
         </div>
       ) : (
         <div className={styles.goalsList}>
-          {goals.map((goal) => {
-            const pct = goalProgress(goal);
-
-            return (
+          {goals.map((goal) => (
               <div key={goal.id} className={styles.northStarCard}>
                 <button className={styles.northStarDeleteBtn} onClick={() => handleDeleteGoal(goal.id)} title="Supprimer">×</button>
                 <div className={styles.northStarHeader}>
@@ -405,7 +489,6 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
                     <div className={styles.northStarMetaRow}>
                       <InlineEdit value={goal.target} onSave={(v) => handleUpdateGoal(goal, "target", v)} className={`${styles.goalTarget} ${styles.noHoverBg}`} placeholder="Description..." />
                       <span className={styles.northStarDeadlineSep}>·</span>
-                      <span className={styles.northStarDeadlineLabel}>Échéance</span>
                       <input
                         type="date"
                         className={styles.northStarDeadlineInput}
@@ -413,17 +496,10 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
                         onChange={(e) => handleUpdateGoal(goal, "deadline", e.target.value)}
                       />
                     </div>
-                    {pct > 0 && (
-                      <div className={styles.progressRow}>
-                        <div className={styles.progressBar}><div className={styles.progressFill} style={{ width: `${pct}%` }} /></div>
-                        <span className={styles.progressPct}>{pct}%</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
-            );
-          })}
+          ))}
         </div>
       )}
     </>
@@ -462,9 +538,9 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
       <div className={styles.sectionHeader}>
         <span className={styles.sectionTitle}>Mes objectifs</span>
         {goals.length > 0 && (
-          <button className={styles.addGoalBtn} onClick={() => {
-            if (goals.length > 0) handleAddStrategy(goals[0].id, goals[0].strategies.length);
-          }}>+ Objectif</button>
+          <button className={styles.addGoalBtn} onClick={() => handleAddStrategy(goals[0].id, goals[0].strategies.length)}>
+            + Objectif
+          </button>
         )}
       </div>
 
@@ -626,17 +702,28 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
             </div>
           )}
 
-          {/* Active period header */}
-          {isActive && (
+          {/* Prep banner for active period */}
+          {isActive && !prepDismissed && (
             <div className={styles.ctaCard}>
               <div className={styles.ctaHeader}>
                 <span className={styles.ctaIcon}>🧭</span>
                 <div>
-                  <div className={styles.ctaTitle}>
+                  <div className={styles.ctaTitle}>Prépare ta période</div>
+                  <div className={styles.ctaMeta}>
                     {periodTitleLabel(selectedPeriod)} {selectedPeriod.startYear}
                   </div>
-                  <div className={styles.ctaMeta}>Période en cours</div>
                 </div>
+              </div>
+              <p className={styles.ctaText}>
+                Définis tes caps à tenir, tes objectifs et tes stratégies pour guider cette période.
+              </p>
+              <div className={styles.ctaActions}>
+                <button className={styles.ctaBtn} onClick={() => setPrepDismissed(true)}>
+                  Lancer la préparation
+                </button>
+                <button className={styles.ctaDismiss} onClick={() => setPrepDismissed(true)}>
+                  C'est bon pour cette période
+                </button>
               </div>
             </div>
           )}
@@ -739,7 +826,7 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
           )}
 
           {/* Reflections */}
-          <div className={styles.sectionHeader}>
+          <div ref={reflectionsRef} className={styles.sectionHeader}>
             <span className={styles.sectionTitle}>Réflexion {frequencyLabel(selectedPeriod.frequency)}</span>
           </div>
           <div className={styles.reflections}>
@@ -772,14 +859,39 @@ export default function StrategyView({ frequency, cycleStart }: StrategyViewProp
             ))}
           </div>
 
-          {/* Close period */}
-          {isActive && (
+          {/* Close / review / reopen period */}
+          {isActive && isPeriodStarted(selectedPeriod) && (
             <div className={styles.closePeriodSection}>
+              <button
+                className={styles.reviewPeriodBtn}
+                onClick={() => reflectionsRef.current?.scrollIntoView({ behavior: "smooth" })}
+              >
+                Lancer la revue de la période
+              </button>
               <button className={styles.closePeriodBtn} onClick={handleClosePeriod}>
                 Clôturer la période
               </button>
               <span className={styles.closePeriodHint}>
-                Remplis tes réflexions avant de clôturer. Tu pourras toujours consulter cette période dans l'historique.
+                Remplis tes réflexions avant de clôturer.
+              </span>
+            </div>
+          )}
+
+          {isActive && !isPeriodStarted(selectedPeriod) && (
+            <div className={styles.closePeriodSection}>
+              <span className={styles.closePeriodHint}>
+                Tu pourras lancer la revue et clôturer cette période à partir de {MONTH_NAMES[selectedPeriod.startMonth]}.
+              </span>
+            </div>
+          )}
+
+          {selectedPeriod.status === "closed" && isWithinPeriod(selectedPeriod) && (
+            <div className={styles.closePeriodSection}>
+              <button className={styles.reopenPeriodBtn} onClick={handleReopenPeriod}>
+                Rouvrir la période
+              </button>
+              <span className={styles.closePeriodHint}>
+                Rouvrir cette période masquera la période suivante (ses données seront conservées).
               </span>
             </div>
           )}

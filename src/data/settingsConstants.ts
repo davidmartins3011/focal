@@ -35,24 +35,35 @@ export function getOccurrenceOptions(freq: ReminderFrequency): { id: FrequencyOc
   ];
 }
 
-export const BIMONTHLY_CYCLES: { start: number; label: string }[] = [
-  { start: 1, label: "Jan, Mar, Mai, Jul, Sep, Nov" },
-  { start: 2, label: "Fév, Avr, Jun, Août, Oct, Déc" },
-];
+const SHORT_MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Août", "Sep", "Oct", "Nov", "Déc"];
 
-export const BIANNUAL_CYCLES: { start: number; label: string }[] = [
-  { start: 1, label: "Jan, Jul" },
-  { start: 2, label: "Fév, Août" },
-  { start: 3, label: "Mar, Sep" },
-  { start: 4, label: "Avr, Oct" },
-  { start: 5, label: "Mai, Nov" },
-  { start: 6, label: "Jun, Déc" },
+function buildCycleLabel(start: number, step: number): string {
+  const pairs: string[] = [];
+  for (let m = start - 1; m < 12; m += step) {
+    const end = (m + step - 1) % 12;
+    pairs.push(`${SHORT_MONTHS[m]}-${SHORT_MONTHS[end]}`);
+  }
+  return pairs.join(", ");
+}
+
+export const BIMONTHLY_CYCLES: { start: number; label: string }[] = [
+  { start: 1, label: buildCycleLabel(1, 2) },
+  { start: 2, label: buildCycleLabel(2, 2) },
 ];
 
 export const QUARTERLY_CYCLES: { start: number; label: string }[] = [
-  { start: 1, label: "Jan, Avr, Jul, Oct" },
-  { start: 2, label: "Fév, Mai, Août, Nov" },
-  { start: 3, label: "Mar, Jun, Sep, Déc" },
+  { start: 1, label: buildCycleLabel(1, 3) },
+  { start: 2, label: buildCycleLabel(2, 3) },
+  { start: 3, label: buildCycleLabel(3, 3) },
+];
+
+export const BIANNUAL_CYCLES: { start: number; label: string }[] = [
+  { start: 1, label: buildCycleLabel(1, 6) },
+  { start: 2, label: buildCycleLabel(2, 6) },
+  { start: 3, label: buildCycleLabel(3, 6) },
+  { start: 4, label: buildCycleLabel(4, 6) },
+  { start: 5, label: buildCycleLabel(5, 6) },
+  { start: 6, label: buildCycleLabel(6, 6) },
 ];
 
 export const STRATEGY_FREQUENCY_OPTIONS: { id: StrategyFrequency; label: string }[] = [

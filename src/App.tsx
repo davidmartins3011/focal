@@ -199,25 +199,6 @@ export default function App() {
     }));
   }, [notif]);
 
-  const handleStrategyOccurrenceChange = useCallback((occ: FrequencyOccurrence) => {
-    setStrategyOccurrence(occ);
-    notif.setNotifSettings((prev) => ({
-      ...prev,
-      reminders: prev.reminders.map((r) =>
-        r.id === "strategy-review" ? { ...r, frequencyOccurrence: occ } : r
-      ),
-    }));
-  }, [notif]);
-
-  const handleStrategyDayChange = useCallback((day: WeekDayId) => {
-    setStrategyDay(day);
-    notif.setNotifSettings((prev) => ({
-      ...prev,
-      reminders: prev.reminders.map((r) =>
-        r.id === "strategy-review" ? { ...r, days: [day] } : r
-      ),
-    }));
-  }, [notif]);
 
   const navigateToReminder = useCallback((reminderId: string) => {
     switch (reminderId) {
@@ -309,10 +290,6 @@ export default function App() {
             onStrategyFrequencyChange={handleStrategyFrequencyChange}
             strategyCycleStart={strategyCycleStart}
             onStrategyCycleStartChange={handleStrategyCycleStartChange}
-            strategyOccurrence={strategyOccurrence}
-            onStrategyOccurrenceChange={handleStrategyOccurrenceChange}
-            strategyDay={strategyDay}
-            onStrategyDayChange={handleStrategyDayChange}
             workingDays={workingDays}
             onWorkingDaysChange={setWorkingDays}
           />

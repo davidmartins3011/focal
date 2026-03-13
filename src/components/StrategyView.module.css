@@ -3,7 +3,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════════ */
-/* SECTION GSTA — Goal → Strategy → Tactic → Action              */
+/* Caps à tenir & Objectifs                                       */
 /* ══════════════════════════════════════════════════════════════ */
 
 .addGoalBtn {
@@ -166,14 +166,6 @@
   flex-shrink: 0;
 }
 
-.northStarDeadlineLabel {
-  font-size: 11px;
-  color: var(--text3);
-  opacity: 0.5;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
 .northStarDeadlineInput {
   font-family: 'Outfit', sans-serif;
   font-size: 11px;
@@ -243,13 +235,6 @@
   font-weight: 600;
   color: var(--text);
   cursor: text;
-}
-
-.objectiveDesc {
-  font-size: 12px;
-  color: var(--text3);
-  cursor: text;
-  margin-top: 2px;
 }
 
 /* ── Linked goal tags ── */
@@ -390,21 +375,6 @@
   cursor: text;
 }
 
-/* ── Legacy goalHeader (kept for compatibility) ── */
-.goalHeader {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 16px 18px 14px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.goalHeaderContent {
-  flex: 1;
-  min-width: 0;
-}
-
 .goalTitleRow {
   display: flex;
   align-items: center;
@@ -421,57 +391,10 @@
   cursor: text;
 }
 
-.goalMeta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
 .goalTarget {
   font-size: 12px;
   color: var(--text3);
   cursor: text;
-}
-
-.goalDeadline {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--accent-muted);
-  background: rgba(var(--accent-rgb), 0.06);
-  padding: 2px 8px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
-/* ── Progress ── */
-.progressRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.progressBar {
-  flex: 1;
-  height: 4px;
-  background: var(--bg4);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progressFill {
-  height: 100%;
-  border-radius: 4px;
-  background: var(--accent);
-  transition: width 0.6s ease;
-}
-
-.progressPct {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text2);
-  min-width: 32px;
-  text-align: right;
 }
 
 /* ── Chevrons ── */
@@ -487,195 +410,12 @@
   text-align: center;
 }
 
-.chevronSm {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text3);
-  transition: transform 0.2s;
-  transform: rotate(0deg);
-  flex-shrink: 0;
-  width: 12px;
-  text-align: center;
-}
-
 .chevronOpen {
   transform: rotate(90deg);
 }
 
-/* ── Goal body ── */
-.goalBody {
-  padding: 0 18px 16px;
-  border-top: 1px solid var(--border);
-}
-
-/* ── Strategy block ── */
-.strategyBlock {
-  margin-top: 14px;
-}
-
-.strategyHeader {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
-  padding: 6px 0;
-}
-
-.strategyLabel {
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--accent-muted);
-  white-space: nowrap;
-}
-
-.strategyTitle {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  flex: 1;
-  cursor: text;
-}
-
-.strategyPct {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text3);
-  margin-left: auto;
-}
-
-.strategyDesc {
-  padding-left: 20px;
-  margin-bottom: 6px;
-}
-
-.strategyDescText {
-  font-size: 11.5px;
-  color: var(--text3);
-  font-style: italic;
-  cursor: text;
-}
-
-/* ── Tactics group ── */
-.tacticsGroup {
-  padding-left: 20px;
-}
-
-.tacticBlock {
-  margin-bottom: 10px;
-}
-
-.tacticHeader {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-}
-
-.tacticPin {
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.tacticTitle {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text);
-  flex: 1;
-  cursor: text;
-}
-
-.tacticCountBadge {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text3);
-  background: var(--bg3);
-  padding: 1px 6px;
-  border-radius: 8px;
-}
-
-/* ── Actions list ── */
-.actionsList {
-  padding-left: 22px;
-}
-
-.actionItem {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 0;
-  position: relative;
-}
-
-.actionItem:hover .deleteBtnXs {
-  opacity: 1;
-}
-
-.actionCheck {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-
-.actionCheck input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.checkmark {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  border: 1.5px solid var(--border2);
-  background: var(--bg);
-  transition: all 0.15s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.checkmark::after {
-  content: '';
-  display: none;
-  width: 4px;
-  height: 7px;
-  border: solid var(--bg);
-  border-width: 0 1.5px 1.5px 0;
-  transform: rotate(45deg) translateY(-1px);
-}
-
-.actionCheck input:checked ~ .checkmark {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.actionCheck input:checked ~ .checkmark::after {
-  display: block;
-}
-
-.actionText {
-  font-size: 12.5px;
-  color: var(--text2);
-  flex: 1;
-  cursor: text;
-  line-height: 1.3;
-}
-
-.actionDone {
-  text-decoration: line-through;
-  opacity: 0.5;
-}
-
 /* ── Add buttons ── */
-.addActionBtn,
-.addTacticBtn,
-.addStrategyBtn {
+.addTacticBtn {
   font-size: 11px;
   font-weight: 500;
   font-family: 'Outfit', sans-serif;
@@ -684,51 +424,14 @@
   border: none;
   cursor: pointer;
   padding: 4px 0;
+  margin-top: 4px;
   opacity: 0.6;
   transition: all 0.15s;
 }
 
-.addActionBtn:hover,
-.addTacticBtn:hover,
-.addStrategyBtn:hover {
+.addTacticBtn:hover {
   opacity: 1;
   color: var(--accent);
-}
-
-.addActionBtn {
-  padding-left: 22px;
-}
-
-.addTacticBtn {
-  margin-top: 4px;
-}
-
-.addStrategyBtn {
-  margin-top: 8px;
-  padding-left: 0;
-}
-
-.addActionDot {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.addActionInput {
-  flex: 1;
-  font-size: 12.5px;
-  font-family: 'Outfit', sans-serif;
-  color: var(--text);
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--border2);
-  padding: 2px 0;
-  outline: none;
-}
-
-.addActionInput::placeholder {
-  color: var(--text3);
-  opacity: 0.6;
 }
 
 /* ── Delete buttons ── */
@@ -765,29 +468,8 @@
   line-height: 1;
 }
 
-.strategyHeader:hover .deleteBtnSm,
-.tacticHeader:hover .deleteBtnSm {
-  opacity: 0.5;
-}
-
 .deleteBtnSm:hover {
   opacity: 1 !important;
-  color: var(--red, #e74c3c);
-}
-
-.deleteBtnXs {
-  font-size: 12px;
-  color: var(--text3);
-  background: none;
-  border: none;
-  cursor: pointer;
-  opacity: 0;
-  transition: all 0.15s;
-  padding: 0 2px;
-  line-height: 1;
-}
-
-.deleteBtnXs:hover {
   color: var(--red, #e74c3c);
 }
 
@@ -916,34 +598,6 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* ── Past review header ── */
-.pastHeader {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  margin-bottom: 24px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.pastIcon {
-  font-size: 22px;
-}
-
-.pastTitle {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.pastMeta {
-  font-size: 11px;
-  color: var(--text3);
-  margin-top: 2px;
-}
-
 /* ── CTA Card ── */
 .ctaCard {
   background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.08), rgba(var(--accent-rgb), 0.02));
@@ -976,11 +630,6 @@
   margin-top: 2px;
 }
 
-.ctaMetaNudge {
-  color: var(--accent-muted);
-  font-weight: 500;
-}
-
 .ctaText {
   font-size: 13px;
   color: var(--text2);
@@ -1005,6 +654,27 @@
   background: var(--accent-light);
 }
 
+.ctaActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ctaDismiss {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 11.5px;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  padding: 4px 0;
+  transition: color 0.15s;
+}
+
+.ctaDismiss:hover {
+  color: var(--text2);
+}
+
 /* ── Section headers ── */
 .sectionHeader {
   display: flex;
@@ -1020,93 +690,6 @@
   letter-spacing: 1.5px;
   color: var(--text3);
 }
-
-.sectionHint {
-  font-size: 11px;
-  color: var(--text3);
-  opacity: 0.6;
-}
-
-/* ── Pillars grid ── */
-.pillarsGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 28px;
-}
-
-.pillarCard {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 16px;
-  animation: fadeUp 0.25s ease both;
-}
-
-.pillarCard:nth-child(1) { animation-delay: 0.05s; }
-.pillarCard:nth-child(2) { animation-delay: 0.1s; }
-.pillarCard:nth-child(3) { animation-delay: 0.15s; }
-.pillarCard:nth-child(4) { animation-delay: 0.2s; }
-
-.pillarHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.pillarTag {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.pillarPct {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text2);
-}
-
-.pillarGoal {
-  font-size: 12px;
-  color: var(--text2);
-  margin-bottom: 10px;
-  line-height: 1.4;
-}
-
-.pillarBar {
-  height: 4px;
-  background: var(--bg4);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 10px;
-}
-
-.pillarFill {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.8s ease;
-}
-
-.fill_roadmap { background: var(--accent); }
-.fill_data    { background: var(--blue); }
-.fill_crm     { background: var(--green); }
-.fill_saas    { background: var(--purple); }
-
-.pillarInsight {
-  font-size: 11px;
-  color: var(--text3);
-  line-height: 1.4;
-}
-
-/* Tag colors */
-.crm     { background: rgba(var(--green-rgb), 0.12);  color: var(--green); }
-.data    { background: rgba(var(--blue-rgb), 0.12);   color: var(--blue); }
-.roadmap { background: rgba(var(--accent-rgb), 0.12);  color: var(--accent); }
-.saas    { background: rgba(var(--purple-rgb), 0.12);  color: var(--purple); }
 
 /* ── Reflections ── */
 .reflections {
@@ -1136,51 +719,6 @@
   letter-spacing: 0.8px;
   color: var(--accent-muted);
   margin-bottom: 6px;
-}
-
-.reflectionAnswer {
-  font-size: 13px;
-  color: var(--text2);
-  line-height: 1.65;
-}
-
-/* ── Top 3 ── */
-.top3 {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 24px;
-}
-
-.top3Item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 11px 14px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  animation: fadeUp 0.25s ease both;
-}
-
-.top3Item:nth-child(1) { animation-delay: 0.05s; }
-.top3Item:nth-child(2) { animation-delay: 0.1s; }
-.top3Item:nth-child(3) { animation-delay: 0.15s; }
-
-.top3Number {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--accent);
-  flex-shrink: 0;
-  width: 20px;
-  text-align: center;
-  line-height: 1.3;
-}
-
-.top3Text {
-  font-size: 13px;
-  color: var(--text);
-  line-height: 1.4;
 }
 
 /* ══════════════════════════════════════════════════════════════ */
@@ -1469,6 +1007,42 @@
 .closePeriodBtn:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.reviewPeriodBtn {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.reviewPeriodBtn:hover {
+  background: var(--accent-light);
+}
+
+.reopenPeriodBtn {
+  background: none;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 8px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.reopenPeriodBtn:hover {
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .closePeriodHint {

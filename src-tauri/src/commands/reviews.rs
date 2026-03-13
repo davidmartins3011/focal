@@ -167,10 +167,42 @@ pub fn create_strategy_period(
 }
 
 #[tauri::command]
+pub fn update_strategy_period(
+    state: State<'_, AppState>,
+    id: String,
+    start_month: i32,
+    start_year: i32,
+    end_month: i32,
+    end_year: i32,
+    frequency: String,
+) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "UPDATE strategy_periods SET start_month=?2, start_year=?3, end_month=?4, end_year=?5, frequency=?6 WHERE id=?1 AND status='active'",
+        params![id, start_month, start_year, end_month, end_year, frequency],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn close_strategy_period(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.execute(
         "UPDATE strategy_periods SET status = 'closed', closed_at = datetime('now') WHERE id = ?1",
+        params![id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reopen_strategy_period(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "UPDATE strategy_periods SET status = 'draft' WHERE status = 'active'",
+        [],
+    ).map_err(|e| e.to_string())?;
+    db.execute(
+        "UPDATE strategy_periods SET status = 'active', closed_at = NULL WHERE id = ?1",
         params![id],
     ).map_err(|e| e.to_string())?;
     Ok(())

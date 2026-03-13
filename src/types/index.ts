@@ -142,33 +142,6 @@ export interface NotificationHistoryEntry {
 
 export type StrategyFrequency = "monthly" | "bimonthly" | "quarterly" | "biannual";
 
-export type PillarColor = "crm" | "data" | "roadmap" | "saas";
-
-export interface StrategyPillar {
-  id: string;
-  name: string;
-  tagColor: PillarColor;
-  goal: string;
-  progress: number;
-  insight: string;
-}
-
-export interface StrategyReflection {
-  id: string;
-  prompt: string;
-  answer: string;
-}
-
-export interface StrategyReview {
-  id: string;
-  month: number;   // 0-11
-  year: number;
-  createdAt: string; // ISO date
-  pillars: StrategyPillar[];
-  reflections: StrategyReflection[];
-  top3: string[];
-}
-
 export interface StrategyAction {
   id: string;
   text: string;
@@ -205,7 +178,7 @@ export interface GoalStrategyLink {
   strategyId: string;
 }
 
-export type PeriodStatus = "active" | "closed";
+export type PeriodStatus = "active" | "closed" | "draft";
 
 export interface PeriodReflection {
   id: string;
