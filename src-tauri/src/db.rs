@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     id TEXT PRIMARY KEY,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
+    cleared INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -227,6 +228,26 @@ CREATE TABLE IF NOT EXISTS ai_memory_analysis_log (
     analyzed_at TEXT NOT NULL,
     message_count INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS ai_suggestions (
+    id TEXT PRIMARY KEY,
+    icon TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    source TEXT NOT NULL,
+    impact TEXT NOT NULL DEFAULT 'medium',
+    category TEXT NOT NULL DEFAULT 'organisation',
+    confidence INTEGER NOT NULL DEFAULT 75,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    responded_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ai_suggestions_log (
+    run_date TEXT PRIMARY KEY,
+    ran_at TEXT NOT NULL,
+    suggestion_count INTEGER NOT NULL DEFAULT 0
+);
 ";
 
 pub fn create_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -253,7 +274,22 @@ pub fn create_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute("ALTER TABLE integrations ADD COLUMN account_email TEXT NOT NULL DEFAULT ''", []).ok();
     // Migration: move oauth_tokens from provider-keyed to integration-keyed
     migrate_oauth_tokens_to_integration(conn);
+    // Migration: add cleared flag for soft-delete on chat_messages
+    conn.execute("ALTER TABLE chat_messages ADD COLUMN cleared INTEGER NOT NULL DEFAULT 0", []).ok();
+    purge_old_chat_messages(conn);
     Ok(())
+}
+
+fn purge_old_chat_messages(conn: &Connection) {
+    conn.execute(
+        "DELETE FROM chat_message_steps WHERE message_id IN \
+         (SELECT id FROM chat_messages WHERE created_at < datetime('now', '-60 days'))",
+        [],
+    ).ok();
+    conn.execute(
+        "DELETE FROM chat_messages WHERE created_at < datetime('now', '-60 days')",
+        [],
+    ).ok();
 }
 
 fn migrate_oauth_tokens_to_integration(conn: &Connection) {

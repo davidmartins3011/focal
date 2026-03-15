@@ -7,3 +7,4 @@ pub mod profile;
 pub mod notifications;
 pub mod ai;
 pub mod memory;
+pub mod suggestions;

@@ -15,6 +15,7 @@ import type { ViewTab, SidebarPage, ThemeId, AISettings, StrategyFrequency, Freq
 import { useNotifications } from "./hooks/useNotifications";
 import { getAllSettings, setSetting } from "./services/settings";
 import { checkAndRunAnalysis } from "./services/memory";
+import { checkAndRunSuggestions } from "./services/chat";
 import styles from "./App.module.css";
 
 const VALID_THEMES: ThemeId[] = ["default", "clair", "sombre", "zen", "hyperfocus", "aurore", "ocean", "sakura", "nord", "solaire"];
@@ -117,6 +118,7 @@ export default function App() {
 
   useEffect(() => {
     checkAndRunAnalysis().catch(() => {});
+    checkAndRunSuggestions().catch(() => {});
 
     const now = new Date();
     const midnight = new Date(now);
@@ -126,8 +128,10 @@ export default function App() {
     let interval: ReturnType<typeof setInterval> | null = null;
     const timeout = setTimeout(() => {
       checkAndRunAnalysis().catch(() => {});
+      checkAndRunSuggestions().catch(() => {});
       interval = setInterval(() => {
         checkAndRunAnalysis().catch(() => {});
+        checkAndRunSuggestions().catch(() => {});
       }, 24 * 60 * 60 * 1000);
     }, msUntilMidnight);
 

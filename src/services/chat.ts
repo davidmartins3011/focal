@@ -99,8 +99,24 @@ export function decomposeTask(
   return invoke<DecompStep[]>("decompose_task", { taskName, context });
 }
 
-export function generateSuggestions(): Promise<Suggestion[]> {
-  return invoke<Suggestion[]>("generate_suggestions");
+export function getSuggestions(): Promise<Suggestion[]> {
+  return invoke<Suggestion[]>("get_suggestions");
+}
+
+export function getLastSuggestionsRun(): Promise<string | null> {
+  return invoke<string | null>("get_last_suggestions_run");
+}
+
+export function respondToSuggestion(id: string, status: "accepted" | "rejected"): Promise<void> {
+  return invoke<void>("respond_to_suggestion", { id, status });
+}
+
+export function checkAndRunSuggestions(): Promise<boolean> {
+  return invoke<boolean>("check_and_run_suggestions");
+}
+
+export function runSuggestionsNow(): Promise<boolean> {
+  return invoke<boolean>("run_suggestions_now");
 }
 
 export interface DailyPrepTask {

@@ -112,20 +112,6 @@ fn build_analysis_messages(
 }
 
 #[tauri::command]
-pub fn get_memory_insights(state: State<'_, AppState>) -> Result<Vec<MemoryInsight>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    read_all_insights(&db)
-}
-
-#[tauri::command]
-pub fn delete_memory_insight(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.execute("DELETE FROM ai_memory_insights WHERE id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
 pub async fn check_and_run_analysis(state: State<'_, AppState>) -> Result<bool, String> {
     let today = chrono::Local::now().date_naive();
     let mut any_ran = false;

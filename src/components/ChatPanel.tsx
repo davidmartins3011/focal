@@ -5,6 +5,7 @@ import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks,
 import { upsertStrategyGoal, deleteStrategyGoal, upsertStrategy, deleteStrategy, upsertTactic, deleteTactic, upsertPeriodReflection, toggleGoalStrategyLink, getStrategyGoals, getStrategyPeriods } from "../services/reviews";
 import { getSetting, setSetting } from "../services/settings";
 import { runAnalysisNow } from "../services/memory";
+import { runSuggestionsNow } from "../services/chat";
 import { chatHints, slashCommands } from "../data/chatConstants";
 import { providers } from "../data/settingsData";
 import styles from "./ChatPanel.module.css";
@@ -1051,6 +1052,32 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
           const errMsg = typeof err === "string" ? err : String(err);
           setError(errMsg);
           console.error("[ChatPanel] analyse-conversations error:", err);
+        });
+      return;
+    }
+
+    if (text === "/run-suggestions") {
+      resetInput();
+      const sysMsg: ChatMessage = { id: `sys-${Date.now()}`, role: "ai", content: "Génération des suggestions en cours… Cela peut prendre quelques secondes." };
+      setMessages((prev) => [...prev, sysMsg]);
+      setIsTyping(true);
+      runSuggestionsNow()
+        .then((didRun) => {
+          setIsTyping(false);
+          const resultMsg: ChatMessage = {
+            id: `ai-${Date.now()}`,
+            role: "ai",
+            content: didRun
+              ? "De nouvelles suggestions ont été générées ! Consulte l'onglet Suggestions pour les découvrir."
+              : "Pas assez de données pour générer des suggestions. Utilise l'app quelques jours et réessaie.",
+          };
+          setMessages((prev) => [...prev, resultMsg]);
+        })
+        .catch((err) => {
+          setIsTyping(false);
+          const errMsg = typeof err === "string" ? err : String(err);
+          setError(errMsg);
+          console.error("[ChatPanel] run-suggestions error:", err);
         });
       return;
     }

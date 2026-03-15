@@ -16,4 +16,5 @@ export const slashCommands: { command: string; description: string }[] = [
   { command: "/clear-db-tasks", description: "Supprime toutes les tâches de la base de données" },
   { command: "/clear-db-tasks-today", description: "Supprime les tâches d'aujourd'hui de la base de données" },
   { command: "/analyse-conversations", description: "Lance l'analyse comportementale des conversations" },
+  { command: "/run-suggestions", description: "Génère de nouvelles suggestions personnalisées" },
 ];

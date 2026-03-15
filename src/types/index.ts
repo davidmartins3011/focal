@@ -26,14 +26,6 @@ export interface Tag {
   color: "crm" | "data" | "roadmap" | "saas" | "urgent";
 }
 
-export interface WeekDay {
-  name: string;
-  date: number;
-  isToday: boolean;
-  taskSummary: string;
-  dots: ("done" | "pending")[];
-}
-
 export interface ChatMessage {
   id: string;
   role: "user" | "ai";
@@ -69,15 +61,6 @@ export interface UserProfile {
   extraInfo?: string;
   /** Résumé généré par l'IA à partir des profils publics (LinkedIn, site web…) */
   publicProfileSummary?: string;
-}
-
-export interface MemoryInsight {
-  id: string;
-  category: string;
-  insight: string;
-  sourceDate: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export type ThemeId = "default" | "clair" | "sombre" | "zen" | "hyperfocus" | "aurore" | "ocean" | "sakura" | "nord" | "solaire";
@@ -245,6 +228,8 @@ export interface Integration {
 export type SuggestionImpact = "high" | "medium" | "low";
 export type SuggestionCategory = "planification" | "habitudes" | "focus" | "organisation" | "bien-être";
 
+export type SuggestionStatus = "pending" | "accepted" | "rejected" | "later" | "expired";
+
 export interface Suggestion {
   id: string;
   icon: string;
@@ -254,6 +239,9 @@ export interface Suggestion {
   impact: SuggestionImpact;
   category: SuggestionCategory;
   confidence: number;
+  status: SuggestionStatus;
+  createdAt: string;
+  respondedAt?: string;
 }
 
 export interface OAuthCredentialsInfo {

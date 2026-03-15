@@ -101,16 +101,18 @@ pub fn run() {
             commands::ai::validate_api_key,
             commands::ai::send_message,
             commands::ai::decompose_task,
-            commands::ai::generate_suggestions,
             commands::ai::send_daily_prep_message,
             commands::ai::send_weekly_prep_message,
             commands::ai::send_period_prep_message,
             commands::ai::send_onboarding_message,
             commands::ai::analyze_profile_url,
-            commands::memory::get_memory_insights,
-            commands::memory::delete_memory_insight,
             commands::memory::check_and_run_analysis,
             commands::memory::run_analysis_now,
+            commands::suggestions::get_suggestions,
+            commands::suggestions::get_last_suggestions_run,
+            commands::suggestions::respond_to_suggestion,
+            commands::suggestions::check_and_run_suggestions,
+            commands::suggestions::run_suggestions_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
