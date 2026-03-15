@@ -65,13 +65,16 @@ export default function SuggestionsView() {
   const pending = suggestions.filter((s) => s.status === "pending");
   const later = suggestions.filter((s) => s.status === "later");
   const accepted = suggestions.filter((s) => s.status === "accepted");
-  const rejected = suggestions.filter((s) => s.status === "rejected");
 
   const handleRespond = async (id: string, status: "accepted" | "rejected" | "later") => {
     await respondToSuggestion(id, status);
-    setSuggestions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status } : s)),
-    );
+    if (status === "rejected") {
+      setSuggestions((prev) => prev.filter((s) => s.id !== id));
+    } else {
+      setSuggestions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, status } : s)),
+      );
+    }
   };
 
   const handleGenerate = async () => {
@@ -101,7 +104,6 @@ export default function SuggestionsView() {
 
   const renderCard = (s: Suggestion, showActions = true) => {
     const isPending = s.status === "pending" || s.status === "later";
-    const isAccepted = s.status === "accepted";
     return (
       <div
         key={s.id}
@@ -147,11 +149,9 @@ export default function SuggestionsView() {
                   ✗ Non pertinent
                 </button>
               </>
-            ) : isAccepted ? (
-              <span className={styles.appliedLabel}>✓ Pertinent</span>
-            ) : (
-              <span className={styles.rejectedLabel}>✗ Non pertinent</span>
-            )}
+          ) : (
+            <span className={styles.appliedLabel}>✓ Pertinent</span>
+          )}
           </div>
         )}
       </div>
@@ -307,21 +307,6 @@ export default function SuggestionsView() {
               </div>
             )}
 
-            {rejected.length > 0 && (
-              <div className={styles.section}>
-                <div className={styles.sectionHeader}>
-                  <span className={styles.sectionTitle}>
-                    Suggestions non pertinentes
-                  </span>
-                  <span className={styles.sectionCount}>
-                    {rejected.length}
-                  </span>
-                </div>
-                <div className={styles.suggestionsList}>
-                  {rejected.map((s) => renderCard(s, false))}
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>

@@ -290,37 +290,30 @@ fn collect_14d_tasks(db: &rusqlite::Connection) -> String {
 }
 
 fn collect_past_suggestions(db: &rusqlite::Connection) -> Vec<(String, String, String)> {
-    let mut stmt = db
-        .prepare(
-            "SELECT title, description, status FROM ai_suggestions \
-             WHERE status IN ('accepted', 'rejected') \
-             ORDER BY responded_at DESC",
-        )
-        .ok();
+    let Ok(mut stmt) = db.prepare(
+        "SELECT title, description, status FROM ai_suggestions \
+         WHERE status IN ('accepted', 'rejected') \
+           AND responded_at >= datetime('now', '-6 months') \
+         ORDER BY responded_at DESC",
+    ) else {
+        return vec![];
+    };
 
-    if let Some(ref mut s) = stmt {
-        s.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
-            .ok()
-            .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            .unwrap_or_default()
-    } else {
-        vec![]
-    }
+    stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
 }
 
 fn collect_memory_insights(db: &rusqlite::Connection) -> Vec<(String, String)> {
-    let mut stmt = db
-        .prepare("SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC")
-        .ok();
+    let Ok(mut stmt) = db.prepare(
+        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
+    ) else {
+        return vec![];
+    };
 
-    if let Some(ref mut s) = stmt {
-        s.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .ok()
-            .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            .unwrap_or_default()
-    } else {
-        vec![]
-    }
+    stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
 }
 
 fn build_suggestions_context(
@@ -380,7 +373,7 @@ pub fn get_suggestions(state: State<'_, AppState>) -> Result<Vec<AiSuggestion>, 
     let mut stmt = db
         .prepare(
             "SELECT id, icon, title, description, source, impact, category, confidence, status, created_at, responded_at \
-             FROM ai_suggestions WHERE status != 'expired' ORDER BY created_at DESC",
+             FROM ai_suggestions WHERE status NOT IN ('expired', 'rejected') ORDER BY created_at DESC",
         )
         .map_err(|e| e.to_string())?;
 
@@ -500,12 +493,11 @@ async fn run_suggestions_analysis(state: &State<'_, AppState>) -> Result<bool, S
     {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let count = parsed.suggestions.len() as i32;
+        let new_count = parsed.suggestions.len() as i32;
 
         let current_pending: i32 = db
             .query_row("SELECT COUNT(*) FROM ai_suggestions WHERE status = 'pending'", [], |r| r.get(0))
             .unwrap_or(0);
-        let new_count = parsed.suggestions.len() as i32;
         let overflow = (current_pending + new_count) - 10;
         if overflow > 0 {
             db.execute(
@@ -528,7 +520,7 @@ async fn run_suggestions_analysis(state: &State<'_, AppState>) -> Result<bool, S
         db.execute(
             "INSERT OR REPLACE INTO ai_suggestions_log (run_date, ran_at, suggestion_count) \
              VALUES (?1, datetime('now'), ?2)",
-            params![today, count],
+            params![today, new_count],
         )
         .map_err(|e| e.to_string())?;
     }
