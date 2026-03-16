@@ -135,8 +135,14 @@
   line-height: 1.5;
 }
 
-.reviewBtn {
+.reviewActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   flex-shrink: 0;
+}
+
+.reviewBtn {
   background: var(--accent);
   color: var(--bg);
   border: none;
@@ -152,4 +158,23 @@
 
 .reviewBtn:hover {
   background: var(--accent-light);
+}
+
+.closeBtn {
+  background: none;
+  color: var(--text3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.closeBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }

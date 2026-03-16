@@ -223,6 +223,20 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
     return tasks.find((t) => t.id === taskId) ?? overdueTasks.find((t) => t.id === taskId);
   }
 
+  async function handleCloseDay() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+    const allUndone = [...tasks, ...overdueTasks].filter((t) => !t.done);
+    await Promise.all(
+      allUndone.map((t) => updateTaskSvc({ id: t.id, scheduledDate: tomorrowStr })),
+    );
+
+    setTasks((prev) => prev.filter((t) => t.done));
+    setOverdueTasks([]);
+  }
+
   function decompose(taskId: string, redo = false) {
     if (isBusy) return;
     const task = findTask(taskId);
@@ -609,7 +623,10 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
             Fais le bilan de ta journée : ce que tu as accompli, les blocages, et ton top 3 de demain.
           </span>
         </div>
-        <button className={styles.reviewBtn}>Lancer la revue</button>
+        <div className={styles.reviewActions}>
+          <button className={styles.reviewBtn}>Lancer la revue</button>
+          <button className={styles.closeBtn} onClick={handleCloseDay}>Clôturer la journée</button>
+        </div>
       </div>
 
       {!showTimerPanel && selectedTask && selectedTask.estimatedMinutes && !selectedTask.done && (

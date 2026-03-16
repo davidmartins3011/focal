@@ -220,34 +220,12 @@ export default function SuggestionsView() {
           </div>
         ) : (
           <>
-            <div className={styles.statsBar}>
-              <div className={styles.statCard}>
-                <div className={styles.statValue}>{suggestions.length}</div>
-                <div className={styles.statLabel}>Total</div>
-              </div>
-              <div className={styles.statCard}>
-                <div className={styles.statValue}>{pending.length}</div>
-                <div className={styles.statLabel}>À évaluer</div>
-              </div>
-              <div className={styles.statCard}>
-                <div className={styles.statValue}>{accepted.length}</div>
-                <div className={styles.statLabel}>Pertinentes</div>
-              </div>
-            </div>
-
             {pending.length > 0 && (
               <div className={styles.section}>
                 <div className={styles.sectionHeader}>
                   <span className={styles.sectionTitle}>
                     Nouvelles suggestions
                   </span>
-                  <button
-                    className={styles.refreshBtn}
-                    onClick={handleGenerate}
-                    disabled={generating}
-                  >
-                    {generating ? "Analyse…" : "✦ Régénérer"}
-                  </button>
                 </div>
                 <div className={styles.suggestionsList}>
                   {pending.map((s) => renderCard(s))}
@@ -295,7 +273,7 @@ export default function SuggestionsView() {
               <div className={styles.section}>
                 <div className={styles.sectionHeader}>
                   <span className={styles.sectionTitle}>
-                    Suggestions pertinentes
+                    Marquées comme pertinentes
                   </span>
                   <span className={styles.sectionCount}>
                     {accepted.length}

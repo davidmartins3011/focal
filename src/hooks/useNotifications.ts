@@ -142,6 +142,7 @@ export function useNotifications(workingDays: WeekDayId[]) {
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const firedRef = useRef<Set<string>>(new Set());
+  const lastTickRef = useRef<number>(Date.now());
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -252,6 +253,44 @@ export function useNotifications(workingDays: WeekDayId[]) {
 
     const check = () => {
       const now = new Date();
+      const nowMs = now.getTime();
+      const previousTick = lastTickRef.current;
+      lastTickRef.current = nowMs;
+      const elapsed = nowMs - previousTick;
+
+      if (elapsed > 120_000) {
+        const lastActive = new Date(previousTick).toISOString();
+        getNotificationHistory().then((history) => {
+          const missed = detectMissedNotifications(notifSettings, history, lastActive, workingDays);
+          if (missed.length > 0) {
+            setNotifHistory((prev) => {
+              const existingIds = new Set(prev.map((e) => e.id));
+              const newMissed = missed.filter((m) => !existingIds.has(m.id));
+              return newMissed.length > 0 ? [...prev, ...newMissed] : prev;
+            });
+            setNotifCenterOpen(true);
+            for (const m of missed) {
+              addNotificationEntry({
+                reminderId: m.reminderId,
+                icon: m.icon,
+                label: m.label,
+                description: m.description,
+                scheduledTime: m.scheduledTime,
+                firedAt: m.firedAt,
+                missed: true,
+              }).catch(() => {});
+              sendNativeNotification(
+                `${m.icon} ${m.label} (manqué)`,
+                m.description,
+                m.reminderId,
+              );
+            }
+          }
+          saveLastActive();
+        }).catch(() => {});
+        return;
+      }
+
       const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
       const dateKey = now.toISOString().slice(0, 10);
 

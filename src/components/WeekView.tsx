@@ -390,6 +390,20 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     return scheduledTasks.find((t) => t.id === taskId) ?? overdueTasks.find((t) => t.id === taskId);
   }
 
+  async function handleCloseWeek() {
+    const nextMonday = new Date(monday);
+    nextMonday.setDate(nextMonday.getDate() + 7);
+    const nextMondayStr = fmtDate(nextMonday);
+
+    const allUndone = [...scheduledTasks, ...overdueTasks].filter((t) => !t.done);
+    await Promise.all(
+      allUndone.map((t) => updateTaskSvc({ id: t.id, scheduledDate: nextMondayStr })),
+    );
+
+    setScheduledTasks((prev) => prev.filter((t) => t.done));
+    setOverdueTasks([]);
+  }
+
   function decompose(taskId: string, redo = false) {
     if (isBusy) return;
     const task = findTask(taskId);
@@ -892,7 +906,10 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
             Fais le point sur ta semaine : objectifs atteints, blocages récurrents, et priorités pour la semaine prochaine.
           </span>
         </div>
-        <button className={styles.reviewBtn}>Lancer la revue</button>
+        <div className={styles.reviewActions}>
+          <button className={styles.reviewBtn}>Lancer la revue</button>
+          <button className={styles.closeBtn} onClick={handleCloseWeek}>Clôturer la semaine</button>
+        </div>
       </div>
     </div>
   );
