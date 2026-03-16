@@ -283,7 +283,7 @@ export default function App() {
     setStrategyRefreshKey((k) => k + 1);
   }, []);
 
-  const handleViewSwitch = useCallback((tab: "today" | "week" | "strategy") => {
+  const handleViewSwitch = useCallback((tab: "today" | "tomorrow" | "week" | "next-week" | "strategy") => {
     setActiveTab(tab as ViewTab);
     setActivePage("main");
   }, []);

@@ -33,7 +33,7 @@ export interface ChatMessage {
   steps?: { text: string }[];
 }
 
-export type ViewTab = "today" | "week" | "strategy";
+export type ViewTab = "today" | "tomorrow" | "week" | "next-week" | "strategy";
 
 export type SidebarPage = "main" | "suggestions" | "todos" | "toolbox" | "integrations" | "settings" | "profile";
 

@@ -12,6 +12,8 @@ export const slashCommands: { command: string; description: string }[] = [
   { command: "/start-week", description: "Démarre la préparation de ta semaine avec l'IA" },
   { command: "/start-period", description: "Démarre la préparation de ta période (prise de recul) avec l'IA" },
   { command: "/reset-period", description: "Réinitialise la préparation de la période en cours (debug)" },
+  { command: "/reset-day", description: "Réinitialise l'état de la journée (rouvre le jour, relance la préparation)" },
+  { command: "/reset-week", description: "Réinitialise l'état de la semaine (rouvre la semaine, relance la préparation)" },
   { command: "/clear", description: "Efface l'historique du chat" },
   { command: "/clear-db-tasks", description: "Supprime toutes les tâches de la base de données" },
   { command: "/clear-db-tasks-today", description: "Supprime les tâches d'aujourd'hui de la base de données" },

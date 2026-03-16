@@ -699,123 +699,6 @@
   font-weight: 500;
 }
 
-/* ─── Brain dump ─── */
-
-.brainDump {
-  margin-top: 16px;
-}
-
-.brainDumpTextarea {
-  width: 100%;
-  min-height: 120px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg2);
-  color: var(--text);
-  font-size: 14px;
-  font-family: 'Outfit', sans-serif;
-  padding: 14px 16px;
-  resize: vertical;
-  outline: none;
-  transition: border-color 0.2s;
-  line-height: 1.6;
-  box-sizing: border-box;
-}
-
-.brainDumpTextarea::placeholder {
-  color: var(--text3);
-}
-
-.brainDumpTextarea:focus {
-  border-color: var(--accent);
-}
-
-.brainDumpActions {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.brainDumpBtn {
-  padding: 8px 20px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  background: var(--accent);
-  border: none;
-  color: white;
-  font-family: 'Outfit', sans-serif;
-}
-
-.brainDumpBtn:hover {
-  opacity: 0.85;
-}
-
-.brainDumpBtn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.brainDumpBtnSecondary {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  color: var(--text2);
-}
-
-.brainDumpBtnSecondary:hover {
-  background: var(--bg3);
-}
-
-.brainDumpItems {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 16px;
-}
-
-.brainDumpItem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  color: var(--text);
-  animation: fadeUp 0.2s ease both;
-}
-
-.brainDumpItemDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
-}
-
-.brainDumpItemText {
-  flex: 1;
-}
-
-.brainDumpItemDelete {
-  background: none;
-  border: none;
-  color: var(--text3);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: all 0.15s;
-}
-
-.brainDumpItemDelete:hover {
-  background: var(--bg4);
-  color: var(--text);
-}
-
 /* ─── Energy check ─── */
 
 .energyCheck {
@@ -1114,6 +997,28 @@
   display: flex;
   gap: 10px;
   margin-top: 16px;
+}
+
+.top5Btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--accent);
+  border: none;
+  color: white;
+  font-family: 'Outfit', sans-serif;
+}
+
+.top5Btn:hover {
+  opacity: 0.85;
+}
+
+.top5Btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .top5Result {

@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Task } from "../types";
 import styles from "./ToolboxView.module.css";
 
-type ToolId = "comparator" | "top5" | "pomodoro" | "braindump" | "decision" | "breathing" | "restart" | "grounding" | "bodydouble" | "woop" | "bodyscan" | "micromovement";
+type ToolId = "comparator" | "top5" | "pomodoro" | "decision" | "breathing" | "restart" | "grounding" | "bodydouble" | "woop" | "bodyscan" | "micromovement";
 
 interface ToolDef {
   id: ToolId;
@@ -30,12 +30,6 @@ const TOOLS: Record<ToolId, ToolDef> = {
     icon: "🍅",
     title: "Timer Pomodoro",
     description: "Lance un cycle de focus de 25 min suivi d'une pause pour avancer sans t'épuiser.",
-  },
-  braindump: {
-    id: "braindump",
-    icon: "🧠",
-    title: "Vidage de tête",
-    description: "Note tout ce qui te passe par la tête pour te libérer l'esprit et y voir plus clair.",
   },
   decision: {
     id: "decision",
@@ -102,7 +96,7 @@ const TOOL_SECTIONS: ToolSection[] = [
   {
     label: "Organisation",
     icon: "📋",
-    toolIds: ["comparator", "top5", "braindump", "decision", "woop"],
+    toolIds: ["comparator", "top5", "decision", "woop"],
   },
   {
     label: "Conscience & Relaxation",
@@ -172,7 +166,6 @@ function ToolRouter({ toolId }: { toolId: ToolId }) {
     case "comparator": return <ComparatorTool />;
     case "top5": return <Top5Tool />;
     case "pomodoro": return <PomodoroTool />;
-    case "braindump": return <BrainDumpTool />;
     case "decision": return <QuickDecisionTool />;
     case "breathing": return <BreathingTool />;
     case "restart": return <RestartSequenceTool />;
@@ -621,7 +614,7 @@ function Top5Tool() {
           )}
           <div className={styles.top5Actions}>
             <button
-              className={styles.brainDumpBtn}
+              className={styles.top5Btn}
               onClick={handleLock}
               disabled={selected.size === 0 || saving}
             >
@@ -825,93 +818,6 @@ function PomodoroTool() {
             <div className={styles.pomodoroStatLabel}>Min de focus</div>
           </div>
         </div>
-      </div>
-    </>
-  );
-}
-
-// ─── Brain Dump ───
-
-function BrainDumpTool() {
-  const [text, setText] = useState("");
-  const [items, setItems] = useState<string[]>([]);
-
-  const handleAdd = () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-
-    const newItems = trimmed
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    setItems((prev) => [...prev, ...newItems]);
-    setText("");
-  };
-
-  const handleDelete = (index: number) => {
-    setItems((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleClear = () => {
-    setItems([]);
-    setText("");
-  };
-
-  return (
-    <>
-      <div className={styles.toolViewTitle}>Vidage de tête</div>
-      <div className={styles.toolViewDesc}>
-        Écris tout ce qui te passe par la tête, sans filtre. Tu trieras après.
-      </div>
-      <div className={styles.brainDump}>
-        <textarea
-          className={styles.brainDumpTextarea}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Écris ici tout ce qui te vient… une idée par ligne si tu veux."
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && e.metaKey) {
-              e.preventDefault();
-              handleAdd();
-            }
-          }}
-        />
-        <div className={styles.brainDumpActions}>
-          <button
-            className={styles.brainDumpBtn}
-            onClick={handleAdd}
-            disabled={!text.trim()}
-          >
-            Ajouter
-          </button>
-          {items.length > 0 && (
-            <button
-              className={`${styles.brainDumpBtn} ${styles.brainDumpBtnSecondary}`}
-              onClick={handleClear}
-            >
-              Tout effacer
-            </button>
-          )}
-        </div>
-
-        {items.length > 0 && (
-          <div className={styles.brainDumpItems}>
-            {items.map((item, i) => (
-              <div key={i} className={styles.brainDumpItem}>
-                <div className={styles.brainDumpItemDot} />
-                <span className={styles.brainDumpItemText}>{item}</span>
-                <button
-                  className={styles.brainDumpItemDelete}
-                  onClick={() => handleDelete(i)}
-                  title="Supprimer"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </>
   );

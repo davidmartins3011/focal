@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { NotificationSettings, NotificationHistoryEntry, WeekDayId, NotificationReminder } from "../types";
 import { defaultReminders } from "../data/settingsData";
 import { getSetting, setSetting } from "../services/settings";
-import { getISOWeekNumber } from "../utils/dateFormat";
+import { getISOWeekNumber, toISODate } from "../utils/dateFormat";
 import {
   getNotificationHistory,
   addNotificationEntry,
@@ -104,7 +104,7 @@ function detectMissedNotifications(
         continue;
       }
 
-      const dateKey = cursor.toISOString().slice(0, 10);
+      const dateKey = toISODate(cursor);
       const scheduledDate = new Date(`${dateKey}T${r.time}:00`);
 
       if (scheduledDate > lastActiveDate && scheduledDate <= now) {
@@ -292,7 +292,7 @@ export function useNotifications(workingDays: WeekDayId[]) {
       }
 
       const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      const dateKey = now.toISOString().slice(0, 10);
+      const dateKey = toISODate(now);
 
       for (const r of notifSettings.reminders) {
         if (!r.enabled) continue;
@@ -365,7 +365,7 @@ export function useNotifications(workingDays: WeekDayId[]) {
     setPendingNavigation(null);
   }, []);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toISODate(new Date());
   const unreadNotifs = useMemo(
     () => notifHistory.filter(
       (e) => !e.read && (e.firedAt.slice(0, 10) === todayStr || e.missed)

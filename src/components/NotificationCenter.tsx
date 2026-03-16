@@ -1,4 +1,5 @@
 import type { NotificationHistoryEntry } from "../types";
+import { toISODate } from "../utils/dateFormat";
 import styles from "./NotificationCenter.module.css";
 
 interface NotificationCenterProps {
@@ -23,7 +24,7 @@ export default function NotificationCenter({
   onClose,
   onAction,
 }: NotificationCenterProps) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toISODate(new Date());
 
   const todayEntries = history
     .filter((e) => !e.read && (e.firedAt.slice(0, 10) === todayStr || e.missed))

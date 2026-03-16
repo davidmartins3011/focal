@@ -36,8 +36,27 @@ export function formatDate(iso: string): string {
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-function toISODate(d: Date) {
+export function toISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function getMondayDate(d: Date): Date {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+export function getMondayISO(d: Date): string {
+  return toISODate(getMondayDate(d));
+}
+
+export function weekPrepKey(mondayIso: string): string {
+  const d = new Date(mondayIso + "T12:00:00");
+  const weekNum = getISOWeekNumber(d);
+  return `weekly-prep-${d.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
 }
 
 export function formatQuickDateHint(dateStr: string): string {
@@ -51,6 +70,30 @@ export interface QuickDates {
   nextMonday: string;
   twoWeeksMonday: string;
   oneMonthMonday: string;
+}
+
+export function getNextDay(isoDate: string): string {
+  const d = new Date(isoDate + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  return toISODate(d);
+}
+
+export function dayPrepKey(date: string): string {
+  return `daily-prep-${date}`;
+}
+
+export function dayClosedKey(date: string): string {
+  return `day-closed-${date}`;
+}
+
+export function weekClosedKey(mondayIso: string): string {
+  return `week-closed-${mondayIso}`;
+}
+
+export function getNextMonday(mondayIso: string): string {
+  const d = new Date(mondayIso + "T12:00:00");
+  d.setDate(d.getDate() + 7);
+  return toISODate(d);
 }
 
 export function getQuickDates(): QuickDates {

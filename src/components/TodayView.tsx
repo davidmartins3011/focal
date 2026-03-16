@@ -6,7 +6,6 @@ import {
   KeyboardSensor,
   useSensor,
   useSensors,
-  useDroppable,
   DragOverlay,
   type DragEndEvent,
 } from "@dnd-kit/core";
@@ -22,25 +21,26 @@ import FocusTimer from "./FocusTimer";
 import ProgressBar from "./ProgressBar";
 import SortableTaskItem from "./SortableTaskItem";
 import TaskItem from "./TaskItem";
-import type { Task, MicroStep, Tag } from "../types";
-import { getTasks as fetchTasks, getOverdueTasks, toggleTask as toggleTaskSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, setMicroSteps, setTaskTags, getStreak } from "../services/tasks";
-import { decomposeTask } from "../services/chat";
+import DroppableEmptyZone from "./DroppableEmptyZone";
+import type { Task } from "../types";
+import { getTasks as fetchTasks, getTasksByDate, getOverdueTasks, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, getStreak } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
+import { dayClosedKey, dayPrepKey, toISODate } from "../utils/dateFormat";
+import { sortOverdueTasks } from "../utils/taskUtils";
+import useTaskActions from "../hooks/useTaskActions";
 import styles from "./TodayView.module.css";
 
 const MAIN_DROP_ID = "drop:main";
 
-function DroppableEmptyZone({ id, label }: { id: string; label: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-  return (
-    <div ref={setNodeRef} className={`${styles.emptyDropZone} ${isOver ? styles.emptyDropZoneOver : ""}`}>
-      {label}
-    </div>
-  );
-}
-
-function todayKey(): string {
-  return `daily-prep-${new Date().toISOString().slice(0, 10)}`;
+function initializePriorities(tasks: Task[], maxMain: number): Task[] {
+  let mainCount = tasks.filter((t) => t.priority === "main").length;
+  return tasks.map((t) => {
+    if (t.priority === "main" || t.priority === "secondary") return t;
+    const p: "main" | "secondary" = mainCount < maxMain ? "main" : "secondary";
+    if (p === "main") mainCount++;
+    updateTaskSvc({ id: t.id, priority: p }).catch(() => {});
+    return { ...t, priority: p };
+  });
 }
 
 interface TodayViewProps {
@@ -48,53 +48,66 @@ interface TodayViewProps {
   onLaunchDailyPrep?: () => void;
   onStuck?: (taskId: string, taskName: string) => void;
   refreshKey?: number;
+  /** ISO date to display (defaults to today). */
+  viewDate?: string;
+  /** Planning-only mode: no review/close actions, no overdue, no timer. */
+  isPlanning?: boolean;
+  /** Whether the current day has been marked as done (controls UI in today mode). */
+  isDayCompleted?: boolean;
+  /** Called when the user marks the day as done. */
+  onDayCompleted?: () => void;
 }
 
-export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStuck, refreshKey }: TodayViewProps) {
+export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStuck, refreshKey, viewDate, isPlanning, isDayCompleted, onDayCompleted }: TodayViewProps) {
   const [prepDone, setPrepDone] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
   const [streak, setStreak] = useState(0);
-  const [decomposingId, setDecomposingId] = useState<string | null>(null);
-  const [decomposingStepKey, setDecomposingStepKey] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [timerTaskId, setTimerTaskId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const [dayKey, setDayKey] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dayKey, setDayKey] = useState(() => toISODate(new Date()));
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const now = new Date().toISOString().slice(0, 10);
+      const now = toISODate(new Date());
       if (now !== dayKey) setDayKey(now);
     }, 30_000);
     return () => clearInterval(interval);
   }, [dayKey]);
 
+  const effectiveDate = viewDate ?? dayKey;
+
+  const { decomposingId, updateTaskState, getDecomposingStepId, taskCallbacks } =
+    useTaskActions({ tasks, overdueTasks, setTasks, setOverdueTasks, onStuck, tag: "TodayView" });
+
   useEffect(() => {
-    fetchTasks("today")
-      .then((fetched) => {
-        let mainCount = fetched.filter((t) => t.priority === "main").length;
-        const initialized = fetched.map((t) => {
-          if (t.priority === "main" || t.priority === "secondary") return t;
-          const p: "main" | "secondary" = mainCount < dailyPriorityCount ? "main" : "secondary";
-          if (p === "main") mainCount++;
-          updateTaskSvc({ id: t.id, priority: p }).catch(() => {});
-          return { ...t, priority: p };
-        });
-        setTasks(initialized);
-      })
-      .catch((err) => console.error("[TodayView] fetchTasks error:", err));
-    getOverdueTasks()
-      .then(setOverdueTasks)
-      .catch((err) => console.error("[TodayView] getOverdueTasks error:", err));
-    getStreak()
-      .then(setStreak)
-      .catch((err) => console.error("[TodayView] getStreak error:", err));
-    getSetting(todayKey())
-      .then((val) => setPrepDone(val === "done"))
-      .catch(() => {});
-  }, [refreshKey, dayKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    async function load() {
+      try {
+        const fetched = isPlanning
+          ? await getTasksByDate(effectiveDate)
+          : await fetchTasks("today");
+        setTasks(initializePriorities(fetched, dailyPriorityCount));
+      } catch (err) {
+        console.error("[TodayView] fetchTasks error:", err);
+      }
+
+      if (!isPlanning) {
+        getOverdueTasks()
+          .then(setOverdueTasks)
+          .catch((err) => console.error("[TodayView] getOverdueTasks error:", err));
+      } else {
+        setOverdueTasks([]);
+      }
+
+      getStreak().then(setStreak).catch(() => {});
+      getSetting(dayPrepKey(effectiveDate))
+        .then((val) => setPrepDone(val === "done"))
+        .catch(() => {});
+    }
+    load();
+  }, [refreshKey, dayKey, effectiveDate, isPlanning]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setTasks((prev) => {
@@ -117,28 +130,13 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
   const mainDoneCount = mainTasks.filter((t) => t.done).length;
   const secondaryDoneCount = secondaryTasks.filter((t) => t.done).length;
 
-  const sortedOverdueTasks = useMemo(() => {
-    return [...overdueTasks].sort((a, b) => {
-      const aMain = a.priority === "main" ? 1 : 0;
-      const bMain = b.priority === "main" ? 1 : 0;
-      if (aMain !== bMain) return bMain - aMain;
-      const aScore = Math.max(a.urgency ?? 0, a.importance ?? 0);
-      const bScore = Math.max(b.urgency ?? 0, b.importance ?? 0);
-      return bScore - aScore;
-    });
-  }, [overdueTasks]);
+  const sortedOverdue = useMemo(() => sortOverdueTasks(overdueTasks), [overdueTasks]);
 
   const defaultFocusId = mainTasks.find((t) => !t.done && t.estimatedMinutes)?.id ?? null;
   const effectiveSelectedId = selectedTaskId ?? defaultFocusId;
   const selectedTask = effectiveSelectedId ? tasks.find((t) => t.id === effectiveSelectedId) : null;
   const timerTask = timerTaskId ? tasks.find((t) => t.id === timerTaskId) : null;
   const showTimerPanel = timerTaskId !== null && effectiveSelectedId === timerTaskId;
-  const isBusy = !!decomposingId || !!decomposingStepKey;
-
-  function updateTaskState(updater: (tasks: Task[]) => Task[]) {
-    setTasks(updater);
-    setOverdueTasks(updater);
-  }
 
   function commitTasks(newMain: Task[], newSec: Task[]) {
     const combined = [...newMain, ...newSec];
@@ -146,29 +144,8 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
     reorderTasksSvc(combined.map((t) => t.id));
   }
 
-  function toggleTask(id: string) {
-    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
-    toggleTaskSvc(id);
-  }
-
-  function deleteTask(id: string) {
-    updateTaskState((prev) => prev.filter((t) => t.id !== id));
-    deleteTaskSvc(id).catch((err) => console.error("[TodayView] deleteTask error:", err));
-  }
-
-  function setPriority(id: string, field: "urgency" | "importance", value: number | undefined) {
-    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
-    updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) => console.error("[TodayView] setPriority error:", err));
-  }
-
-  function setTagsOnTask(id: string, tags: Tag[]) {
-    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, tags } : t)));
-    setTaskTags(id, tags).catch((err) => console.error("[TodayView] setTaskTags error:", err));
-  }
-
   function setScheduledDate(id: string, date: string | undefined) {
-    const today = new Date().toISOString().slice(0, 10);
-    if (date === today || date === undefined) {
+    if (date === effectiveDate || (!isPlanning && date === undefined)) {
       const overdueTask = overdueTasks.find((t) => t.id === id);
       if (overdueTask) {
         setOverdueTasks((prev) => prev.filter((t) => t.id !== id));
@@ -184,134 +161,14 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
     updateTaskSvc({ id, scheduledDate: date }).catch((err) => console.error("[TodayView] setScheduledDate error:", err));
   }
 
-  function renameTask(id: string, name: string) {
-    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, name } : t)));
-    updateTaskSvc({ id, name }).catch((err) => console.error("[TodayView] renameTask error:", err));
-  }
-
-  function toggleStep(taskId: string, stepId: string) {
-    updateTaskState((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId || !t.microSteps) return t;
-        return { ...t, microSteps: t.microSteps.map((s) => s.id === stepId ? { ...s, done: !s.done } : s) };
-      })
-    );
-  }
-
-  function updateEstimate(taskId: string, minutes: number | undefined) {
-    updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, estimatedMinutes: minutes } : t));
-    updateTaskSvc({ id: taskId, estimatedMinutes: minutes ?? 0 }).catch((err) => console.error("[TodayView] updateEstimate error:", err));
-  }
-
-  function updateStepEstimate(taskId: string, stepId: string, minutes: number | undefined) {
-    const task = findTask(taskId);
-    if (!task?.microSteps) return;
-    const updated = task.microSteps.map((s) => s.id === stepId ? { ...s, estimatedMinutes: minutes } : s);
-    updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, microSteps: updated } : t));
-    setMicroSteps(taskId, updated).catch((err) => console.error("[TodayView] updateStepEstimate error:", err));
-  }
-
-  function editStep(taskId: string, stepId: string, text: string) {
-    const task = findTask(taskId);
-    if (!task?.microSteps) return;
-    const updated = task.microSteps.map((s) => s.id === stepId ? { ...s, text } : s);
-    updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, microSteps: updated } : t));
-    setMicroSteps(taskId, updated).catch((err) => console.error("[TodayView] editStep error:", err));
-  }
-
-  function findTask(taskId: string): Task | undefined {
-    return tasks.find((t) => t.id === taskId) ?? overdueTasks.find((t) => t.id === taskId);
-  }
-
-  async function handleCloseDay() {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-
-    const allUndone = [...tasks, ...overdueTasks].filter((t) => !t.done);
-    await Promise.all(
-      allUndone.map((t) => updateTaskSvc({ id: t.id, scheduledDate: tomorrowStr })),
-    );
-
-    setTasks((prev) => prev.filter((t) => t.done));
-    setOverdueTasks([]);
-  }
-
-  function decompose(taskId: string, redo = false) {
-    if (isBusy) return;
-    const task = findTask(taskId);
-    if (!task) return;
-
-    if (redo) {
-      updateTaskState((prev) =>
-        prev.map((t) => t.id === taskId ? { ...t, microSteps: undefined, aiDecomposed: false } : t)
-      );
-    }
-
-    setDecomposingId(taskId);
-
-    decomposeTask(task.name)
-      .then((result) => {
-        const prefix = redo ? "rs" : "s";
-        const steps = result.map((s, i) => ({
-          id: `${taskId}-${prefix}${i}`,
-          text: s.text,
-          done: false,
-          estimatedMinutes: s.estimatedMinutes,
-        }));
-        updateTaskState((prev) =>
-          prev.map((t) => t.id === taskId ? { ...t, microSteps: steps, aiDecomposed: true } : t)
-        );
-        setMicroSteps(taskId, steps).catch(() => {});
-        setTimeout(() => setDecomposingId(null), steps.length * 300 + 500);
-      })
-      .catch((err) => {
-        console.error("[TodayView] decompose error:", err);
-        setDecomposingId(null);
-      });
-  }
-
-  function decomposeStep(taskId: string, stepId: string) {
-    if (isBusy) return;
-    const task = findTask(taskId);
-    const step = task?.microSteps?.find((s) => s.id === stepId);
-    if (!task || !step) return;
-
-    setDecomposingStepKey(`${taskId}:${stepId}`);
-
-    decomposeTask(step.text, `Sous-étape de la tâche "${task.name}"`)
-      .then((result) => {
-        const subSteps = result.map((s, i) => ({
-          id: `${stepId}-sub${i}`,
-          text: s.text,
-          done: false,
-          estimatedMinutes: s.estimatedMinutes,
-        }));
-        let finalSteps: MicroStep[] | undefined;
-        updateTaskState((prev) =>
-          prev.map((t) => {
-            if (t.id !== taskId || !t.microSteps) return t;
-            const idx = t.microSteps.findIndex((s) => s.id === stepId);
-            if (idx === -1) return t;
-            const newSteps = [...t.microSteps];
-            newSteps.splice(idx, 1, ...subSteps);
-            finalSteps = newSteps;
-            return { ...t, microSteps: newSteps };
-          })
-        );
-        if (finalSteps) setMicroSteps(taskId, finalSteps).catch(() => {});
-        setDecomposingStepKey(null);
-      })
-      .catch((err) => {
-        console.error("[TodayView] decomposeStep error:", err);
-        setDecomposingStepKey(null);
-      });
+  async function handleMarkDone() {
+    await setSetting(dayClosedKey(dayKey), "true");
+    onDayCompleted?.();
   }
 
   function completeTimerTask() {
     if (timerTaskId) {
-      updateTaskState((prev) => prev.map((t) => (t.id === timerTaskId ? { ...t, done: true } : t)));
-      toggleTaskSvc(timerTaskId);
+      taskCallbacks.onToggle(timerTaskId);
       if (selectedTaskId === timerTaskId) setSelectedTaskId(null);
     }
     setTimerTaskId(null);
@@ -319,14 +176,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
 
   function getNextFocusTask(): string | undefined {
     return mainTasks.find((t) => !t.done && t.id !== timerTaskId && t.estimatedMinutes)?.name;
-  }
-
-  function getDecomposingStepId(taskId: string): string | null {
-    if (!decomposingStepKey) return null;
-    const sepIdx = decomposingStepKey.indexOf(":");
-    return decomposingStepKey.substring(0, sepIdx) === taskId
-      ? decomposingStepKey.substring(sepIdx + 1)
-      : null;
   }
 
   // --- Drag & Drop ---
@@ -338,7 +187,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
 
     const overId = over.id as string;
 
-    // Drop on empty main zone
     if (overId === MAIN_DROP_ID) {
       const secIdx = secondaryTasks.findIndex((t) => t.id === active.id);
       const overdueIdx = overdueTasks.findIndex((t) => t.id === active.id);
@@ -348,11 +196,10 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
         updateTaskSvc({ id: task.id, priority: "main" }).catch(() => {});
       } else if (overdueIdx !== -1) {
         const movedTask = overdueTasks[overdueIdx];
-        const today = new Date().toISOString().slice(0, 10);
         const priority: "main" | "secondary" = mainTasks.length < dailyPriorityCount ? "main" : "secondary";
         setOverdueTasks((prev) => prev.filter((t) => t.id !== active.id));
-        commitTasks([...mainTasks, { ...movedTask, scheduledDate: today, priority }], secondaryTasks);
-        updateTaskSvc({ id: movedTask.id, scheduledDate: today, priority }).catch(() => {});
+        commitTasks([...mainTasks, { ...movedTask, scheduledDate: effectiveDate, priority }], secondaryTasks);
+        updateTaskSvc({ id: movedTask.id, scheduledDate: effectiveDate, priority }).catch(() => {});
       }
       return;
     }
@@ -363,14 +210,12 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
     const overMainIdx = mainTasks.findIndex((t) => t.id === over.id);
     const overSecIdx = secondaryTasks.findIndex((t) => t.id === over.id);
 
-    // Overdue → Today
     if (activeOverdueIdx !== -1 && (overMainIdx !== -1 || overSecIdx !== -1)) {
       const movedTask = overdueTasks[activeOverdueIdx];
-      const today = new Date().toISOString().slice(0, 10);
       const toMain = overMainIdx !== -1 && mainTasks.length < dailyPriorityCount;
       const priority: "main" | "secondary" = toMain ? "main" : "secondary";
       setOverdueTasks((prev) => prev.filter((t) => t.id !== active.id));
-      const task = { ...movedTask, scheduledDate: today, priority };
+      const task = { ...movedTask, scheduledDate: effectiveDate, priority };
       if (toMain) {
         const newMain = [...mainTasks];
         newMain.splice(overMainIdx, 0, task);
@@ -380,23 +225,20 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
         newSec.splice(overSecIdx !== -1 ? overSecIdx : newSec.length, 0, task);
         commitTasks(mainTasks, newSec);
       }
-      updateTaskSvc({ id: movedTask.id, scheduledDate: today, priority }).catch(() => {});
+      updateTaskSvc({ id: movedTask.id, scheduledDate: effectiveDate, priority }).catch(() => {});
       return;
     }
 
-    // Reorder within main
     if (activeMainIdx !== -1 && overMainIdx !== -1) {
       commitTasks(arrayMove(mainTasks, activeMainIdx, overMainIdx), secondaryTasks);
       return;
     }
 
-    // Reorder within secondary
     if (activeSecIdx !== -1 && overSecIdx !== -1) {
       commitTasks(mainTasks, arrayMove(secondaryTasks, activeSecIdx, overSecIdx));
       return;
     }
 
-    // Main → Secondary (demote)
     if (activeMainIdx !== -1 && overSecIdx !== -1) {
       const task = mainTasks[activeMainIdx];
       const newSec = [...secondaryTasks];
@@ -406,7 +248,6 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
       return;
     }
 
-    // Secondary → Main (promote or swap)
     if (activeSecIdx !== -1 && overMainIdx !== -1) {
       const task = secondaryTasks[activeSecIdx];
       if (mainTasks.length < dailyPriorityCount) {
@@ -433,38 +274,15 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
     ? (tasks.find((t) => t.id === activeId) ?? overdueTasks.find((t) => t.id === activeId))
     : null;
 
-  const handleStuck = useCallback((taskId: string) => {
-    const allTasks = [...tasks, ...overdueTasks];
-    const task = allTasks.find((t) => t.id === taskId);
-    if (task && onStuck) onStuck(taskId, task.name);
-  }, [tasks, overdueTasks, onStuck]);
-
-  const handleTaskUpdated = useCallback((updated: Task) => {
-    updateTaskState((prev) => prev.map((t) => t.id === updated.id ? { ...t, ...updated } : t));
-  }, []);
-
-  const taskCallbacks = {
-    onToggle: toggleTask,
-    onToggleStep: toggleStep,
-    onDecompose: decompose,
-    onRedecompose: (id: string) => decompose(id, true),
-    onDecomposeStep: decomposeStep,
-    onEditStep: editStep,
-    onStuck: handleStuck,
-    onUpdateEstimate: updateEstimate,
-    onUpdateStepEstimate: updateStepEstimate,
-    onDelete: deleteTask,
-    onRename: renameTask,
+  const allCallbacks = {
+    ...taskCallbacks,
     onSetScheduledDate: setScheduledDate,
-    onSetPriority: setPriority,
-    onSetTags: setTagsOnTask,
-    onTaskUpdated: handleTaskUpdated,
   };
 
   const dismissPrep = useCallback(() => {
-    setSetting(todayKey(), "done").catch(() => {});
+    setSetting(dayPrepKey(effectiveDate), "done").catch(() => {});
     setPrepDone(true);
-  }, []);
+  }, [effectiveDate]);
 
   const launchPrep = useCallback(() => {
     dismissPrep();
@@ -473,11 +291,11 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
 
   return (
     <div>
-      {!prepDone && (
+      {!prepDone && !isDayCompleted && (
         <PrepBanner variant="daily" onLaunch={launchPrep} onDismiss={dismissPrep} />
       )}
 
-      {timerTask && timerTask.estimatedMinutes && (
+      {timerTask && !isPlanning && timerTask.estimatedMinutes && (
         <div style={{ display: showTimerPanel ? undefined : "none" }}>
           <FocusTimer
             key={timerTask.id}
@@ -503,7 +321,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
         <div className={styles.sectionHeader}>
           <span className={styles.sectionTitle}>
             <span className={styles.priorityIcon}>⚡</span>
-            Priorités du jour
+            {isPlanning ? "Priorités de demain" : "Priorités du jour"}
           </span>
           <span className={styles.sectionCount}>
             {mainDoneCount}/
@@ -527,7 +345,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
               <SortableTaskItem
                 key={task.id}
                 task={task}
-                {...taskCallbacks}
+                {...allCallbacks}
                 isDecomposing={decomposingId === task.id}
                 decomposingStepId={getDecomposingStepId(task.id)}
                 animDelay={0.08 + i * 0.04}
@@ -556,7 +374,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
                   <SortableTaskItem
                     key={task.id}
                     task={task}
-                    {...taskCallbacks}
+                    {...allCallbacks}
                     isDecomposing={decomposingId === task.id}
                     decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.12 + i * 0.04}
@@ -571,7 +389,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
           </>
         )}
 
-        {sortedOverdueTasks.length > 0 && (
+        {sortedOverdue.length > 0 && (
           <>
             <div className={`${styles.sectionHeader} ${styles.overdueHeader}`}>
               <span className={`${styles.sectionTitle} ${styles.overdueTitle}`}>
@@ -579,17 +397,17 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
                 Reliquat des jours précédents
               </span>
               <span className={styles.sectionCount}>
-                {sortedOverdueTasks.length}
+                {sortedOverdue.length}
               </span>
             </div>
 
-            <SortableContext items={sortedOverdueTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={sortedOverdue.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <div className={styles.taskList}>
-                {sortedOverdueTasks.map((task, i) => (
+                {sortedOverdue.map((task, i) => (
                   <SortableTaskItem
                     key={task.id}
                     task={task}
-                    {...taskCallbacks}
+                    {...allCallbacks}
                     isDecomposing={decomposingId === task.id}
                     decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.16 + i * 0.04}
@@ -615,21 +433,30 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
         </DragOverlay>
       </DndContext>
 
-      <div className={styles.reviewSection}>
-        <div className={styles.reviewIcon}>🌙</div>
-        <div className={styles.reviewContent}>
-          <span className={styles.reviewTitle}>Revue du soir</span>
-          <span className={styles.reviewDesc}>
-            Fais le bilan de ta journée : ce que tu as accompli, les blocages, et ton top 3 de demain.
-          </span>
+      {!isPlanning && !isDayCompleted && (
+        <div className={styles.reviewSection}>
+          <div className={styles.reviewIcon}>🌙</div>
+          <div className={styles.reviewContent}>
+            <span className={styles.reviewTitle}>Revue du soir</span>
+            <span className={styles.reviewDesc}>
+              Fais le bilan de ta journée : ce que tu as accompli, les blocages, et ton top 3 de demain.
+            </span>
+          </div>
+          <div className={styles.reviewActions}>
+            <button className={styles.reviewBtn}>Lancer la revue</button>
+            <button className={styles.closeBtn} onClick={handleMarkDone}>Marquer comme terminée</button>
+          </div>
         </div>
-        <div className={styles.reviewActions}>
-          <button className={styles.reviewBtn}>Lancer la revue</button>
-          <button className={styles.closeBtn} onClick={handleCloseDay}>Clôturer la journée</button>
-        </div>
-      </div>
+      )}
 
-      {!showTimerPanel && selectedTask && selectedTask.estimatedMinutes && !selectedTask.done && (
+      {!isPlanning && isDayCompleted && (
+        <div className={styles.dayCompletedBanner}>
+          <span className={styles.dayCompletedIcon}>✓</span>
+          <span className={styles.dayCompletedText}>Journée terminée</span>
+        </div>
+      )}
+
+      {!isPlanning && !showTimerPanel && selectedTask && selectedTask.estimatedMinutes && !selectedTask.done && (
         <FocusNow
           task={selectedTask.name}
           estimatedMinutes={selectedTask.estimatedMinutes}

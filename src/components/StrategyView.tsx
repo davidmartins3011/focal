@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { MONTH_NAMES } from "../data/strategyConstants";
 import { getSetting, setSetting } from "../services/settings";
+import { toISODate } from "../utils/dateFormat";
 import {
   getStrategyPeriods,
   createStrategyPeriod,
@@ -71,7 +72,7 @@ function periodTitleLabel(p: StrategyPeriod): string {
 function periodDateRange(p: StrategyPeriod): { start: string; end: string } {
   const s = new Date(p.startYear, p.startMonth, 1);
   const e = new Date(p.endYear, p.endMonth + 1, 0);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const fmt = (d: Date) => toISODate(d);
   return { start: fmt(s), end: fmt(e) };
 }
 

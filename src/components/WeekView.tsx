@@ -21,21 +21,19 @@ import {
 import PrepBanner from "./PrepBanner";
 import SortableTaskItem from "./SortableTaskItem";
 import TaskItem from "./TaskItem";
-import type { Task, MicroStep, Tag, WeekDayId } from "../types";
+import DroppableEmptyZone from "./DroppableEmptyZone";
+import type { Task, WeekDayId } from "../types";
 import {
   getTasks as fetchTasks,
   getTasksByDateRange,
   getOverdueTasks,
-  toggleTask as toggleTaskSvc,
-  toggleMicroStep as toggleStepSvc,
   updateTask as updateTaskSvc,
-  deleteTask as deleteTaskSvc,
   reorderTasks as reorderTasksSvc,
-  setMicroSteps,
-  setTaskTags,
 } from "../services/tasks";
-import { decomposeTask } from "../services/chat";
 import { getSetting, setSetting } from "../services/settings";
+import { toISODate, weekClosedKey, weekPrepKey, getMondayDate } from "../utils/dateFormat";
+import { sortOverdueTasks } from "../utils/taskUtils";
+import useTaskActions from "../hooks/useTaskActions";
 import styles from "./WeekView.module.css";
 
 const ALL_DAY_LABELS: { id: WeekDayId; label: string; offset: number }[] = [
@@ -50,42 +48,9 @@ const ALL_DAY_LABELS: { id: WeekDayId; label: string; offset: number }[] = [
 
 const DEFAULT_WORKING_DAYS: WeekDayId[] = ["lun", "mar", "mer", "jeu", "ven"];
 
-function weekKey(): string {
-  const now = new Date();
-  const jan1 = new Date(now.getFullYear(), 0, 1);
-  const dayOfYear = Math.floor((now.getTime() - jan1.getTime()) / 86400000) + 1;
-  const weekNum = Math.ceil((dayOfYear + jan1.getDay()) / 7);
-  return `weekly-prep-${now.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
-}
-
-function getMonday(d: Date): Date {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function fmtDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 const DAY_DROP_PREFIX = "day:";
 const WEEK_PRI_DROP_ID = "drop:weekPriorities";
 const DAY_MAIN_DROP_ID = "drop:dayMain";
-
-function DroppableEmptyZone({ id, label }: { id: string; label: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-  return (
-    <div ref={setNodeRef} className={`${styles.emptyDropZone} ${isOver ? styles.emptyDropZoneOver : ""}`}>
-      {label}
-    </div>
-  );
-}
 
 function DroppableDayCard({
   dateStr, isToday, isSelected, isDragging, label, dayNum, total, dots, onClick,
@@ -122,22 +87,30 @@ interface WeekViewProps {
   refreshKey?: number;
   workingDays?: WeekDayId[];
   dailyPriorityCount?: number;
+  /** ISO monday date to display (defaults to current week's monday). */
+  viewMonday?: string;
+  /** Planning-only mode: no review/close actions, no overdue tasks. */
+  isPlanning?: boolean;
+  /** Whether the current week has been marked as done. */
+  isWeekCompleted?: boolean;
+  /** Called when the user marks the week as done. */
+  onWeekCompleted?: () => void;
 }
 
-export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, workingDays = DEFAULT_WORKING_DAYS, dailyPriorityCount = 3 }: WeekViewProps) {
+export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, workingDays = DEFAULT_WORKING_DAYS, dailyPriorityCount = 3, viewMonday, isPlanning, isWeekCompleted, onWeekCompleted }: WeekViewProps) {
   const [selectedFilter, setSelectedFilter] = useState<"week" | string>("week");
   const [scheduledTasks, setScheduledTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
   const [prepDone, setPrepDone] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [decomposingId, setDecomposingId] = useState<string | null>(null);
-  const [decomposingStepKey, setDecomposingStepKey] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const isBusy = !!decomposingId || !!decomposingStepKey;
-  const monday = useMemo(() => getMonday(new Date()), []);
-  const todayStr = useMemo(() => fmtDate(new Date()), []);
+  const monday = useMemo(() => viewMonday ? new Date(viewMonday + "T12:00:00") : getMondayDate(new Date()), [viewMonday]);
+  const todayStr = useMemo(() => toISODate(new Date()), []);
   const isWeekMode = selectedFilter === "week";
+
+  const { decomposingId, updateTaskState, findTask, getDecomposingStepId, taskCallbacks } =
+    useTaskActions({ tasks: scheduledTasks, overdueTasks, setTasks: setScheduledTasks, setOverdueTasks, onStuck, tag: "WeekView" });
 
   const activeDays = useMemo(
     () => ALL_DAY_LABELS.filter((d) => workingDays.includes(d.id)),
@@ -150,7 +123,7 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     return activeDays.map((day) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + day.offset);
-      const dateStr = fmtDate(d);
+      const dateStr = toISODate(d);
       const dayTasks = scheduledTasks.filter((t) => t.scheduledDate === dateStr);
       return {
         label: day.label,
@@ -168,12 +141,12 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     const lastDay = activeDays.length > 0 ? activeDays[activeDays.length - 1] : ALL_DAY_LABELS[4];
     const endDate = new Date(monday);
     endDate.setDate(monday.getDate() + lastDay.offset);
-    const mondayStr = fmtDate(monday);
+    const mondayStr = toISODate(monday);
 
     Promise.all([
-      fetchTasks("week"),
-      getTasksByDateRange(mondayStr, fmtDate(endDate)),
-      getOverdueTasks(),
+      isPlanning ? Promise.resolve([]) : fetchTasks("week"),
+      getTasksByDateRange(mondayStr, toISODate(endDate)),
+      isPlanning ? Promise.resolve([]) : getOverdueTasks(),
     ])
       .then(([weekCtxTasks, dateTasks, overdueAll]) => {
         const dateIds = new Set(dateTasks.map((t) => t.id));
@@ -220,10 +193,10 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
       })
       .catch((err) => console.error("[WeekView] fetch error:", err));
 
-    getSetting(weekKey())
+    getSetting(weekPrepKey(toISODate(monday)))
       .then((val) => setPrepDone(val === "done"))
       .catch(() => {});
-  }, [monday, refreshKey, activeDays]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [monday, refreshKey, activeDays, isPlanning]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setScheduledTasks((prev) => {
@@ -261,7 +234,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // Derived lists
   const weekMainTasks = useMemo(
     () => scheduledTasks.filter((t) => t.priority === "main"),
     [scheduledTasks],
@@ -278,25 +250,11 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
   const dayMainTasks = allDayTasks.filter((t) => t.priority === "main");
   const daySecTasks = allDayTasks.filter((t) => t.priority !== "main");
 
-  const sortedOverdueTasks = useMemo(() => {
-    return [...overdueTasks].sort((a, b) => {
-      const aMain = a.priority === "main" ? 1 : 0;
-      const bMain = b.priority === "main" ? 1 : 0;
-      if (aMain !== bMain) return bMain - aMain;
-      const aScore = Math.max(a.urgency ?? 0, a.importance ?? 0);
-      const bScore = Math.max(b.urgency ?? 0, b.importance ?? 0);
-      return bScore - aScore;
-    });
-  }, [overdueTasks]);
+  const sortedOverdue = useMemo(() => sortOverdueTasks(overdueTasks), [overdueTasks]);
 
   const prioritiesDone = isWeekMode ? weekMainTasks.filter((t) => t.done).length : dayMainTasks.filter((t) => t.done).length;
   const secondaryDone = isWeekMode ? weekSecTasks.filter((t) => t.done).length : daySecTasks.filter((t) => t.done).length;
   const dayPriorityOverflow = !isWeekMode && dayMainTasks.length > dailyPriorityCount;
-
-  function updateTaskState(updater: (tasks: Task[]) => Task[]) {
-    setScheduledTasks(updater);
-    setOverdueTasks(updater);
-  }
 
   function commitDayTasks(dayDate: string, newMain: Task[], newSec: Task[]) {
     const newDayTasks = [...newMain, ...newSec];
@@ -307,32 +265,12 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     reorderTasksSvc(newDayTasks.map((t) => t.id));
   }
 
-  function toggleTask(id: string) {
-    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
-    toggleTaskSvc(id).catch((err) => console.error("[WeekView] toggleTask error:", err));
-  }
-
-  function deleteTask(id: string) {
-    updateTaskState((prev) => prev.filter((t) => t.id !== id));
-    deleteTaskSvc(id).catch((err) => console.error("[WeekView] deleteTask error:", err));
-  }
-
-  function toggleStep(taskId: string, stepId: string) {
-    updateTaskState((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId || !t.microSteps) return t;
-        return { ...t, microSteps: t.microSteps.map((s) => s.id === stepId ? { ...s, done: !s.done } : s) };
-      }),
-    );
-    toggleStepSvc(stepId).catch((err) => console.error("[WeekView] toggleStep error:", err));
-  }
-
   function setScheduledDate(id: string, date: string | undefined) {
-    const mondayStr = fmtDate(monday);
+    const mondayStr = toISODate(monday);
     const lastDay = activeDays.length > 0 ? activeDays[activeDays.length - 1] : ALL_DAY_LABELS[4];
     const lastDayDate = new Date(monday);
     lastDayDate.setDate(monday.getDate() + lastDay.offset);
-    const lastDayStr = fmtDate(lastDayDate);
+    const lastDayStr = toISODate(lastDayDate);
 
     if (date && date >= mondayStr && date <= lastDayStr) {
       const overdueTask = overdueTasks.find((t) => t.id === id);
@@ -350,110 +288,9 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     updateTaskSvc({ id, scheduledDate: date }).catch((err) => console.error("[WeekView] setScheduledDate error:", err));
   }
 
-  function setPriority(id: string, field: "urgency" | "importance", value: number | undefined) {
-    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
-    updateTaskSvc({ id, [field]: value ?? 0 }).catch((err) => console.error("[WeekView] setPriority error:", err));
-  }
-
-  function setTagsOnTask(id: string, tags: Tag[]) {
-    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, tags } : t)));
-    setTaskTags(id, tags).catch((err) => console.error("[WeekView] setTaskTags error:", err));
-  }
-
-  function renameTask(id: string, name: string) {
-    updateTaskState((prev) => prev.map((t) => (t.id === id ? { ...t, name } : t)));
-    updateTaskSvc({ id, name }).catch((err) => console.error("[WeekView] renameTask error:", err));
-  }
-
-  function updateEstimate(taskId: string, minutes: number | undefined) {
-    updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, estimatedMinutes: minutes } : t));
-    updateTaskSvc({ id: taskId, estimatedMinutes: minutes ?? 0 }).catch((err) => console.error("[WeekView] updateEstimate error:", err));
-  }
-
-  function updateStepEstimate(taskId: string, stepId: string, minutes: number | undefined) {
-    const task = findTask(taskId);
-    if (!task?.microSteps) return;
-    const updated = task.microSteps.map((s) => s.id === stepId ? { ...s, estimatedMinutes: minutes } : s);
-    updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, microSteps: updated } : t));
-    setMicroSteps(taskId, updated).catch((err) => console.error("[WeekView] updateStepEstimate error:", err));
-  }
-
-  function editStep(taskId: string, stepId: string, text: string) {
-    const task = findTask(taskId);
-    if (!task?.microSteps) return;
-    const updated = task.microSteps.map((s) => s.id === stepId ? { ...s, text } : s);
-    updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, microSteps: updated } : t));
-    setMicroSteps(taskId, updated).catch((err) => console.error("[WeekView] editStep error:", err));
-  }
-
-  function findTask(taskId: string): Task | undefined {
-    return scheduledTasks.find((t) => t.id === taskId) ?? overdueTasks.find((t) => t.id === taskId);
-  }
-
-  async function handleCloseWeek() {
-    const nextMonday = new Date(monday);
-    nextMonday.setDate(nextMonday.getDate() + 7);
-    const nextMondayStr = fmtDate(nextMonday);
-
-    const allUndone = [...scheduledTasks, ...overdueTasks].filter((t) => !t.done);
-    await Promise.all(
-      allUndone.map((t) => updateTaskSvc({ id: t.id, scheduledDate: nextMondayStr })),
-    );
-
-    setScheduledTasks((prev) => prev.filter((t) => t.done));
-    setOverdueTasks([]);
-  }
-
-  function decompose(taskId: string, redo = false) {
-    if (isBusy) return;
-    const task = findTask(taskId);
-    if (!task) return;
-    if (redo) {
-      updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, microSteps: undefined, aiDecomposed: false } : t));
-    }
-    setDecomposingId(taskId);
-    decomposeTask(task.name)
-      .then((result) => {
-        const prefix = redo ? "rs" : "s";
-        const steps = result.map((s, i) => ({ id: `${taskId}-${prefix}${i}`, text: s.text, done: false, estimatedMinutes: s.estimatedMinutes }));
-        updateTaskState((prev) => prev.map((t) => t.id === taskId ? { ...t, microSteps: steps, aiDecomposed: true } : t));
-        setMicroSteps(taskId, steps).catch(() => {});
-        setTimeout(() => setDecomposingId(null), steps.length * 300 + 500);
-      })
-      .catch((err) => { console.error("[WeekView] decompose error:", err); setDecomposingId(null); });
-  }
-
-  function decomposeStep(taskId: string, stepId: string) {
-    if (isBusy) return;
-    const task = findTask(taskId);
-    const step = task?.microSteps?.find((s) => s.id === stepId);
-    if (!task || !step) return;
-    setDecomposingStepKey(`${taskId}:${stepId}`);
-    decomposeTask(step.text, `Sous-étape de la tâche "${task.name}"`)
-      .then((result) => {
-        const subSteps = result.map((s, i) => ({ id: `${stepId}-sub${i}`, text: s.text, done: false, estimatedMinutes: s.estimatedMinutes }));
-        let finalSteps: MicroStep[] | undefined;
-        updateTaskState((prev) =>
-          prev.map((t) => {
-            if (t.id !== taskId || !t.microSteps) return t;
-            const idx = t.microSteps.findIndex((s) => s.id === stepId);
-            if (idx === -1) return t;
-            const newSteps = [...t.microSteps];
-            newSteps.splice(idx, 1, ...subSteps);
-            finalSteps = newSteps;
-            return { ...t, microSteps: newSteps };
-          }),
-        );
-        if (finalSteps) setMicroSteps(taskId, finalSteps).catch(() => {});
-        setDecomposingStepKey(null);
-      })
-      .catch((err) => { console.error("[WeekView] decomposeStep error:", err); setDecomposingStepKey(null); });
-  }
-
-  function getDecomposingStepId(taskId: string): string | null {
-    if (!decomposingStepKey) return null;
-    const sepIdx = decomposingStepKey.indexOf(":");
-    return decomposingStepKey.substring(0, sepIdx) === taskId ? decomposingStepKey.substring(sepIdx + 1) : null;
+  async function handleMarkWeekDone() {
+    await setSetting(weekClosedKey(toISODate(monday)), "true");
+    onWeekCompleted?.();
   }
 
   // --- Drag & Drop ---
@@ -487,7 +324,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
 
     const overId = over.id as string;
 
-    // Drop on a day card
     if (overId.startsWith(DAY_DROP_PREFIX)) {
       rescheduleToDay(active.id as string, overId.slice(DAY_DROP_PREFIX.length));
       return;
@@ -507,7 +343,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
       if (scrollParent) requestAnimationFrame(() => { scrollParent.scrollTop = scrollTop; });
     };
 
-    // Drop on empty week priorities zone
     if (overId === WEEK_PRI_DROP_ID) {
       const inSec = weekSecTasks.some((t) => t.id === draggedId);
       const overdueIdx = overdueTasks.findIndex((t) => t.id === draggedId);
@@ -530,7 +365,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     const overInMain = weekMainTasks.findIndex((t) => t.id === overId);
     const overInSec = weekSecTasks.findIndex((t) => t.id === overId);
 
-    // Reorder within main
     if (activeInMain !== -1 && overInMain !== -1) {
       const reordered = arrayMove(weekMainTasks, activeInMain, overInMain);
       const nonMain = scheduledTasks.filter((t) => t.priority !== "main");
@@ -539,7 +373,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
       return;
     }
 
-    // Reorder within secondary
     if (activeInSec !== -1 && overInSec !== -1) {
       const reordered = arrayMove(weekSecTasks, activeInSec, overInSec);
       const mainTasks = scheduledTasks.filter((t) => t.priority === "main");
@@ -548,7 +381,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
       return;
     }
 
-    // Main → Secondary (demote)
     if (activeInMain !== -1 && overInSec !== -1) {
       setScheduledTasks((prev) => prev.map((t) => t.id === draggedId ? { ...t, priority: "secondary" as const } : t));
       updateTaskSvc({ id: draggedId, priority: "secondary" }).catch(() => {});
@@ -556,7 +388,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
       return;
     }
 
-    // Secondary → Main (promote or swap)
     if (activeInSec !== -1 && overInMain !== -1) {
       if (weekMainTasks.length < weekPriorityLimit) {
         setScheduledTasks((prev) => prev.map((t) => t.id === draggedId ? { ...t, priority: "main" as const } : t));
@@ -575,7 +406,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
       return;
     }
 
-    // Overdue → Main (promote or swap)
     if (activeInOverdue !== -1 && overInMain !== -1) {
       const movedTask = overdueTasks[activeInOverdue];
       setOverdueTasks((prev) => prev.filter((t) => t.id !== draggedId));
@@ -595,7 +425,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
       return;
     }
 
-    // Overdue → Secondary
     if (activeInOverdue !== -1 && overInSec !== -1) {
       const movedTask = overdueTasks[activeInOverdue];
       setOverdueTasks((prev) => prev.filter((t) => t.id !== draggedId));
@@ -608,7 +437,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
   function handleDayDragEnd(activeIdStr: string, overId: string) {
     const dayDate = selectedFilter as string;
 
-    // Drop on empty day main zone
     if (overId === DAY_MAIN_DROP_ID) {
       const secIdx = daySecTasks.findIndex((t) => t.id === activeIdStr);
       const overdueIdx = overdueTasks.findIndex((t) => t.id === activeIdStr);
@@ -637,7 +465,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     const overMainIdx = dayMainTasks.findIndex((t) => t.id === overId);
     const overSecIdx = daySecTasks.findIndex((t) => t.id === overId);
 
-    // Overdue → day tasks
     if (activeOverdueIdx !== -1 && (overMainIdx !== -1 || overSecIdx !== -1)) {
       const movedTask = overdueTasks[activeOverdueIdx];
       const toMain = overMainIdx !== -1 && dayMainTasks.length < dailyPriorityCount;
@@ -657,19 +484,16 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
       return;
     }
 
-    // Reorder within main
     if (activeMainIdx !== -1 && overMainIdx !== -1) {
       commitDayTasks(dayDate, arrayMove(dayMainTasks, activeMainIdx, overMainIdx), daySecTasks);
       return;
     }
 
-    // Reorder within secondary
     if (activeSecIdx !== -1 && overSecIdx !== -1) {
       commitDayTasks(dayDate, dayMainTasks, arrayMove(daySecTasks, activeSecIdx, overSecIdx));
       return;
     }
 
-    // Main → Secondary (demote)
     if (activeMainIdx !== -1 && overSecIdx !== -1) {
       const task = dayMainTasks[activeMainIdx];
       const newSec = [...daySecTasks];
@@ -679,7 +503,6 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
       return;
     }
 
-    // Secondary → Main (promote or swap)
     if (activeSecIdx !== -1 && overMainIdx !== -1) {
       const task = daySecTasks[activeSecIdx];
       if (dayMainTasks.length < dailyPriorityCount) {
@@ -706,38 +529,15 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     return info ? `${info.label}. ${info.dayNum}` : null;
   }, [isWeekMode, selectedFilter, dayInfos]);
 
-  const handleStuck = useCallback((taskId: string) => {
-    const allTasks = [...scheduledTasks, ...overdueTasks];
-    const task = allTasks.find((t) => t.id === taskId);
-    if (task && onStuck) onStuck(taskId, task.name);
-  }, [scheduledTasks, overdueTasks, onStuck]);
-
-  const handleTaskUpdated = useCallback((updated: Task) => {
-    updateTaskState((prev) => prev.map((t) => t.id === updated.id ? { ...t, ...updated } : t));
-  }, []);
-
-  const taskCallbacks = {
-    onToggle: toggleTask,
-    onToggleStep: toggleStep,
-    onDecompose: decompose,
-    onRedecompose: (id: string) => decompose(id, true),
-    onDecomposeStep: decomposeStep,
-    onEditStep: editStep,
-    onStuck: handleStuck,
-    onUpdateEstimate: updateEstimate,
-    onUpdateStepEstimate: updateStepEstimate,
-    onDelete: deleteTask,
-    onRename: renameTask,
+  const allCallbacks = {
+    ...taskCallbacks,
     onSetScheduledDate: setScheduledDate,
-    onSetPriority: setPriority,
-    onSetTags: setTagsOnTask,
-    onTaskUpdated: handleTaskUpdated,
   };
 
   const dismissPrep = useCallback(() => {
-    setSetting(weekKey(), "done").catch(() => {});
+    setSetting(weekPrepKey(toISODate(monday)), "done").catch(() => {});
     setPrepDone(true);
-  }, []);
+  }, [monday]);
 
   const launchPrep = useCallback(() => {
     dismissPrep();
@@ -746,7 +546,7 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
 
   return (
     <div ref={wrapperRef}>
-      {!prepDone && (
+      {!prepDone && !isWeekCompleted && (
         <PrepBanner variant="weekly" onLaunch={launchPrep} onDismiss={dismissPrep} />
       )}
 
@@ -791,7 +591,7 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
                   <DroppableEmptyZone id={WEEK_PRI_DROP_ID} label="Glisse une tâche ici pour la prioriser" />
                 )}
                 {weekMainTasks.map((task, i) => (
-                  <SortableTaskItem key={task.id} task={task} {...taskCallbacks}
+                  <SortableTaskItem key={task.id} task={task} {...allCallbacks}
                     isDecomposing={decomposingId === task.id} decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.08 + i * 0.04} />
                 ))}
@@ -807,7 +607,7 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
                 <SortableContext items={weekSecTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   <div className={styles.taskList}>
                     {weekSecTasks.map((task, i) => (
-                      <SortableTaskItem key={task.id} task={task} {...taskCallbacks}
+                      <SortableTaskItem key={task.id} task={task} {...allCallbacks}
                         isDecomposing={decomposingId === task.id} decomposingStepId={getDecomposingStepId(task.id)}
                         animDelay={0.08 + i * 0.04} isSecondary />
                     ))}
@@ -841,7 +641,7 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
                   <DroppableEmptyZone id={DAY_MAIN_DROP_ID} label={allDayTasks.length === 0 ? "Aucune tâche prévue pour ce jour" : "Glisse une tâche ici pour la prioriser"} />
                 )}
                 {dayMainTasks.map((task, i) => (
-                  <SortableTaskItem key={task.id} task={task} {...taskCallbacks}
+                  <SortableTaskItem key={task.id} task={task} {...allCallbacks}
                     isDecomposing={decomposingId === task.id} decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.08 + i * 0.04} />
                 ))}
@@ -857,7 +657,7 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
                 <SortableContext items={daySecTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   <div className={styles.taskList}>
                     {daySecTasks.map((task, i) => (
-                      <SortableTaskItem key={task.id} task={task} {...taskCallbacks}
+                      <SortableTaskItem key={task.id} task={task} {...allCallbacks}
                         isDecomposing={decomposingId === task.id} decomposingStepId={getDecomposingStepId(task.id)}
                         animDelay={0.08 + i * 0.04} isSecondary />
                     ))}
@@ -868,19 +668,19 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
           </>
         )}
 
-        {sortedOverdueTasks.length > 0 && (
+        {sortedOverdue.length > 0 && (
           <>
             <div className={`${styles.sectionHeader} ${styles.overdueHeader}`}>
               <span className={`${styles.sectionTitle} ${styles.overdueTitle}`}>
                 <span className={styles.priorityIcon}>📋</span>
                 Reliquat de la semaine passée
               </span>
-              <span className={styles.sectionCount}>{sortedOverdueTasks.length}</span>
+              <span className={styles.sectionCount}>{sortedOverdue.length}</span>
             </div>
-            <SortableContext items={sortedOverdueTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={sortedOverdue.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <div className={styles.taskList}>
-                {sortedOverdueTasks.map((task, i) => (
-                  <SortableTaskItem key={task.id} task={task} {...taskCallbacks}
+                {sortedOverdue.map((task, i) => (
+                  <SortableTaskItem key={task.id} task={task} {...allCallbacks}
                     isDecomposing={decomposingId === task.id} decomposingStepId={getDecomposingStepId(task.id)}
                     animDelay={0.16 + i * 0.04} isSecondary isOverdue />
                 ))}
@@ -898,19 +698,28 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
         </DragOverlay>
       </DndContext>
 
-      <div className={styles.reviewSection}>
-        <div className={styles.reviewIcon}>📋</div>
-        <div className={styles.reviewContent}>
-          <span className={styles.reviewTitle}>Revue de la semaine</span>
-          <span className={styles.reviewDesc}>
-            Fais le point sur ta semaine : objectifs atteints, blocages récurrents, et priorités pour la semaine prochaine.
-          </span>
+      {!isPlanning && !isWeekCompleted && (
+        <div className={styles.reviewSection}>
+          <div className={styles.reviewIcon}>📋</div>
+          <div className={styles.reviewContent}>
+            <span className={styles.reviewTitle}>Revue de la semaine</span>
+            <span className={styles.reviewDesc}>
+              Fais le point sur ta semaine : objectifs atteints, blocages récurrents, et priorités pour la semaine prochaine.
+            </span>
+          </div>
+          <div className={styles.reviewActions}>
+            <button className={styles.reviewBtn}>Lancer la revue</button>
+            <button className={styles.closeBtn} onClick={handleMarkWeekDone}>Marquer comme terminée</button>
+          </div>
         </div>
-        <div className={styles.reviewActions}>
-          <button className={styles.reviewBtn}>Lancer la revue</button>
-          <button className={styles.closeBtn} onClick={handleCloseWeek}>Clôturer la semaine</button>
+      )}
+
+      {!isPlanning && isWeekCompleted && (
+        <div className={styles.weekCompletedBanner}>
+          <span className={styles.weekCompletedIcon}>✓</span>
+          <span className={styles.weekCompletedText}>Semaine terminée</span>
         </div>
-      </div>
+      )}
     </div>
   );
 }

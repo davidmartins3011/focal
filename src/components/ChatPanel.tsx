@@ -4,6 +4,7 @@ import { getChatMessages, sendMessage, sendDailyPrepMessage, sendWeeklyPrepMessa
 import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps, setTaskTags, clearAllTasks, clearTodayTasks } from "../services/tasks";
 import { upsertStrategyGoal, deleteStrategyGoal, upsertStrategy, deleteStrategy, upsertTactic, deleteTactic, upsertPeriodReflection, toggleGoalStrategyLink, getStrategyGoals, getStrategyPeriods } from "../services/reviews";
 import { getSetting, setSetting } from "../services/settings";
+import { dayClosedKey, dayPrepKey, weekClosedKey, getMondayISO, weekPrepKey, toISODate } from "../utils/dateFormat";
 import { runAnalysisNow } from "../services/memory";
 import { runSuggestionsNow } from "../services/chat";
 import { chatHints, slashCommands } from "../data/chatConstants";
@@ -357,7 +358,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
           }
         }
         const effectiveScheduledDate = upd.scheduledDate
-          ?? (!isInTodayList && upd.priority ? new Date().toISOString().slice(0, 10) : undefined);
+          ?? (!isInTodayList && upd.priority ? toISODate(new Date()) : undefined);
         if (effectiveScheduledDate && !upd.scheduledDate) {
           console.log("[ChatPanel] auto-set scheduledDate to today for overdue task:", resolvedId);
         }
@@ -372,7 +373,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
           setTodayTasks((prev) => {
             const exists = prev.some((t) => t.id === resolvedId);
             if (exists) {
-              return effectiveScheduledDate && effectiveScheduledDate !== new Date().toISOString().slice(0, 10)
+              return effectiveScheduledDate && effectiveScheduledDate !== toISODate(new Date())
                 ? prev.filter((t) => t.id !== resolvedId)
                 : prev.map((t) => (t.id === resolvedId ? updated : t));
             }
@@ -967,6 +968,47 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         content: "Préparation de la période réinitialisée. Le bandeau « Lancer la préparation » réapparaîtra dans la prise de recul.",
       };
       setMessages((prev) => [...prev, resetMsg]);
+      return;
+    }
+
+    if (text === "/reset-day") {
+      resetInput();
+      const todayStr = toISODate(new Date());
+      const prepKey = dayPrepKey(todayStr);
+      Promise.all([
+        setSetting(dayClosedKey(todayStr), ""),
+        setSetting(prepKey, ""),
+      ]).then(() => {
+        onTasksChanged?.();
+        const resetMsg: ChatMessage = {
+          id: `ai-${Date.now()}`,
+          role: "ai",
+          content: "Journée réinitialisée. Le jour n'est plus marqué comme terminé et la préparation quotidienne peut être relancée.",
+        };
+        setMessages((prev) => [...prev, resetMsg]);
+      }).catch((err) => {
+        console.error("[ChatPanel] reset-day error:", err);
+      });
+      return;
+    }
+
+    if (text === "/reset-week") {
+      resetInput();
+      const mondayStr = getMondayISO(new Date());
+      Promise.all([
+        setSetting(weekClosedKey(mondayStr), ""),
+        setSetting(weekPrepKey(mondayStr), ""),
+      ]).then(() => {
+        onTasksChanged?.();
+        const resetMsg: ChatMessage = {
+          id: `ai-${Date.now()}`,
+          role: "ai",
+          content: "Semaine réinitialisée. La semaine n'est plus marquée comme terminée et la préparation hebdomadaire peut être relancée.",
+        };
+        setMessages((prev) => [...prev, resetMsg]);
+      }).catch((err) => {
+        console.error("[ChatPanel] reset-week error:", err);
+      });
       return;
     }
 
