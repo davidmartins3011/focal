@@ -541,6 +541,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: var(--bg);
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
 }
 
 .statusBtn {
@@ -628,6 +632,216 @@
   color: var(--red);
   background: rgba(var(--red-rgb), 0.08);
   border-color: rgba(var(--red-rgb), 0.15);
+}
+
+/* ── Strategy picker ── */
+.strategyWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.strategySelected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(var(--accent-rgb), 0.06);
+  border: 1px solid rgba(var(--accent-rgb), 0.15);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.strategySelectedInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.strategyGoalHint {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strategyTitle {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strategyRemoveBtn {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.strategyRemoveBtn:hover {
+  color: var(--red);
+}
+
+.strategyPickBtn {
+  background: none;
+  border: 1px dashed var(--border2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text3);
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.strategyPickBtn:hover {
+  background: var(--accent-soft);
+  border-color: rgba(var(--accent-rgb), 0.3);
+  color: var(--text2);
+}
+
+.strategyChangeBtn {
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--text3);
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  padding: 2px 0;
+  transition: color 0.15s;
+  align-self: flex-start;
+}
+
+.strategyChangeBtn:hover {
+  color: var(--accent);
+}
+
+.strategyDropdown {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.strategyGoalGroup {
+  margin-bottom: 6px;
+}
+
+.strategyGoalGroup:last-of-type {
+  margin-bottom: 4px;
+}
+
+.strategyGoalLabel {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text3);
+  padding: 4px 6px 2px;
+}
+
+.strategyOption {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text2);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.12s;
+}
+
+.strategyOption:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.strategyOptionActive {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.strategyObjective {
+  display: block;
+  width: 100%;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text3);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.12s;
+}
+
+.strategyObjective:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.strategyObjective.strategyOptionActive {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.strategyNone {
+  font-size: 11px;
+  color: var(--text3);
+  opacity: 0.5;
+  padding: 4px 10px;
+  font-style: italic;
+}
+
+.strategyEmpty {
+  font-size: 12px;
+  color: var(--text3);
+  padding: 8px;
+  text-align: center;
+}
+
+.strategyCancel {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text3);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: color 0.15s;
+  padding-top: 8px;
+}
+
+.strategyCancel:hover {
+  color: var(--text2);
 }
 
 /* ── Divider ── */

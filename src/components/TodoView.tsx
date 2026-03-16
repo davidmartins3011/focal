@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   DndContext,
   closestCenter,
@@ -22,10 +22,11 @@ import TodoItemRow from "./TodoItemRow";
 import TaskDetailModal from "./TaskDetailModal";
 import CalendarView from "./CalendarView";
 import { getAllTasks, createTask, toggleTask as toggleTaskSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, reorderTasks, setTaskTags } from "../services/tasks";
+import useStrategies from "../hooks/useStrategies";
 import styles from "./TodoView.module.css";
 
 type ViewMode = "list" | "calendar";
-type Filter = "all" | "done" | "ai" | "prioritized" | "unscheduled";
+type Filter = "all" | "done" | "prioritized" | "unscheduled";
 type PopoverType = "priority" | "schedule";
 
 function SortableTodoItemRow(props: React.ComponentProps<typeof TodoItemRow>) {
@@ -78,6 +79,8 @@ export default function TodoView() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+  const [strategyFilter, setStrategyFilter] = useState<string | null>(null);
+  const { getStrategyInfo, pickerObjectives } = useStrategies();
 
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -185,13 +188,31 @@ export default function TodoView() {
 
   const showDone = filter === "done";
 
+  const doneStrategyOptions = useMemo(() => {
+    if (!showDone) return [];
+    const doneTasks = tasks.filter((t) => t.done && t.strategyId);
+    const idSet = new Set(doneTasks.map((t) => t.strategyId!));
+    const options: { id: string; label: string; count: number }[] = [];
+    for (const obj of pickerObjectives) {
+      if (idSet.has(obj.id)) {
+        const count = doneTasks.filter((t) => t.strategyId === obj.id).length;
+        options.push({ id: obj.id, label: obj.title, count });
+      }
+      for (const s of obj.strategies) {
+        if (idSet.has(s.id)) {
+          const count = doneTasks.filter((t) => t.strategyId === s.id).length;
+          options.push({ id: s.id, label: `${obj.title} → ${s.title}`, count });
+        }
+      }
+    }
+    return options;
+  }, [showDone, tasks, pickerObjectives]);
+
   const filtered = tasks.filter((t) => {
     const matchesFilter = (() => {
       switch (filter) {
         case "done":
           return t.done;
-        case "ai":
-          return t.aiDecomposed && !t.done;
         case "prioritized":
           return (t.urgency != null || t.importance != null) && !t.done;
         case "unscheduled":
@@ -201,20 +222,26 @@ export default function TodoView() {
       }
     })();
     if (!matchesFilter) return false;
+    if (showDone && strategyFilter) {
+      const info = getStrategyInfo(t.strategyId);
+      if (strategyFilter === "__none__") {
+        if (t.strategyId) return false;
+      } else {
+        if (t.strategyId !== strategyFilter && info?.objectiveId !== strategyFilter) return false;
+      }
+    }
     if (!searchQuery.trim()) return true;
     return t.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
   });
 
   const totalActive = tasks.filter((t) => !t.done).length;
   const totalDone = tasks.filter((t) => t.done).length;
-  const totalAI = tasks.filter((t) => t.aiDecomposed).length;
   const totalUnscheduled = tasks.filter((t) => !t.scheduledDate && !t.done).length;
 
   const filters: { key: Filter; label: string }[] = [
     { key: "all", label: "Tous" },
     { key: "unscheduled", label: "Non planifiés" },
     { key: "prioritized", label: "Avec priorité" },
-    { key: "ai", label: "Via IA" },
     { key: "done", label: `Terminés (${totalDone})` },
   ];
 
@@ -294,9 +321,6 @@ export default function TodoView() {
               <span className={styles.stat}>
                 <strong>{totalDone}</strong> terminé{totalDone > 1 ? "s" : ""}
               </span>
-              <span className={styles.stat}>
-                <strong>{totalAI}</strong> via IA
-              </span>
               {totalUnscheduled > 0 && (
                 <span className={styles.stat}>
                   <strong>{totalUnscheduled}</strong> non planifié{totalUnscheduled > 1 ? "s" : ""}
@@ -357,12 +381,39 @@ export default function TodoView() {
                   <button
                     key={f.key}
                     className={`${styles.filterBtn} ${filter === f.key ? styles.active : ""}`}
-                    onClick={() => setFilter(f.key)}
+                    onClick={() => { setFilter(f.key); if (f.key !== "done") setStrategyFilter(null); }}
                   >
                     {f.label}
                   </button>
                 ))}
               </div>
+
+              {showDone && doneStrategyOptions.length > 0 && (
+                <div className={styles.strategyFilters}>
+                  <span className={styles.strategyFiltersLabel}>🧭 Filtrer par :</span>
+                  <button
+                    className={`${styles.strategyFilterBtn} ${strategyFilter === null ? styles.strategyFilterActive : ""}`}
+                    onClick={() => setStrategyFilter(null)}
+                  >
+                    Tous
+                  </button>
+                  {doneStrategyOptions.map((opt) => (
+                    <button
+                      key={opt.id}
+                      className={`${styles.strategyFilterBtn} ${strategyFilter === opt.id ? styles.strategyFilterActive : ""}`}
+                      onClick={() => setStrategyFilter(opt.id)}
+                    >
+                      {opt.label} <span className={styles.strategyFilterCount}>{opt.count}</span>
+                    </button>
+                  ))}
+                  <button
+                    className={`${styles.strategyFilterBtn} ${strategyFilter === "__none__" ? styles.strategyFilterActive : ""}`}
+                    onClick={() => setStrategyFilter("__none__")}
+                  >
+                    Sans stratégie
+                  </button>
+                </div>
+              )}
 
               {filtered.length === 0 ? (
                 <div className={styles.emptyState}>

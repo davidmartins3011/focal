@@ -717,9 +717,9 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       }
 
       sendPromise
-        .then((response) => {
+        .then(async (response) => {
           setIsTyping(false);
-          handlePrepResponse(response);
+          await handlePrepResponse(response);
           textareaRef.current?.focus();
         })
         .catch((err) => {
@@ -732,7 +732,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
             prepHistory.current = [];
           }
           const errMsg = typeof err === "string" ? err : String(err);
-          setError(errMsg);
+          setError(errMsg || "Erreur inconnue lors de l'appel à l'IA.");
           console.error(`[ChatPanel] ${mode} prep error:`, err);
         });
     },
@@ -850,7 +850,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       })
       .catch((err) => {
         setIsTyping(false);
-        setError(typeof err === "string" ? err : String(err));
+        const errMsg = typeof err === "string" ? err : String(err);
+        setError(errMsg || "Erreur inconnue lors de l'appel à l'IA.");
       });
   }, [stuckTask, onStuckConsumed]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1147,7 +1148,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       })
       .catch((err) => {
         setIsTyping(false);
-        setError(typeof err === "string" ? err : String(err));
+        const errMsg = typeof err === "string" ? err : String(err);
+        setError(errMsg || "Erreur inconnue lors de l'appel à l'IA.");
       });
   }, [input, isTyping, prepMode, onStartOnboarding, startDailyPrep, startWeeklyPrep, startPeriodPrep, sendPrepMessage, resetInput, handleChatResponse]);
 

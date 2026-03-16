@@ -19,6 +19,7 @@ export interface Task {
   importance?: number;
   description?: string;
   createdAt?: string;
+  strategyId?: string;
 }
 
 export interface Tag {
@@ -187,18 +188,12 @@ export interface TagDistribution {
   count: number;
 }
 
-export interface TaskHighlight {
-  name: string;
-  tag?: string;
-}
-
 export interface PeriodSummary {
   tasksCompleted: number;
   tasksTotal: number;
   focusDays: number;
   totalDays: number;
   distribution: TagDistribution[];
-  highlights: TaskHighlight[];
 }
 
 export interface IntegrationRule {

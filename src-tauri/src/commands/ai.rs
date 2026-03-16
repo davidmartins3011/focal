@@ -709,7 +709,10 @@ async fn call_anthropic(
     system: &str,
     messages: Vec<(String, String)>,
 ) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| format!("Erreur client HTTP: {e}"))?;
     let msgs: Vec<AnthropicMessage> = messages
         .into_iter()
         .map(|(role, content)| AnthropicMessage {
@@ -724,7 +727,7 @@ async fn call_anthropic(
 
     let body = AnthropicRequest {
         model: model.to_string(),
-        max_tokens: 1024,
+        max_tokens: 4096,
         system: system.to_string(),
         messages: msgs,
     };
@@ -738,6 +741,13 @@ async fn call_anthropic(
         .send()
         .await
         .map_err(|e| format!("Erreur réseau Anthropic: {e}"))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body_text = resp.text().await.unwrap_or_default();
+        eprintln!("[Anthropic] HTTP {status}: {body_text}");
+        return Err(format!("Erreur API Anthropic (HTTP {status}): {body_text}"));
+    }
 
     let data: AnthropicResponse = resp
         .json()
@@ -761,7 +771,10 @@ async fn call_openai_compatible(
     messages: Vec<(String, String)>,
     json_mode: bool,
 ) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| format!("Erreur client HTTP: {e}"))?;
     let mut msgs: Vec<OpenAIMessage> = vec![OpenAIMessage {
         role: "system".to_string(),
         content: system.to_string(),
@@ -784,7 +797,7 @@ async fn call_openai_compatible(
     let body = OpenAIRequest {
         model: model.to_string(),
         messages: msgs,
-        max_tokens: Some(1024),
+        max_tokens: Some(4096),
         response_format,
     };
 
@@ -796,6 +809,13 @@ async fn call_openai_compatible(
         .send()
         .await
         .map_err(|e| format!("Erreur réseau: {e}"))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body_text = resp.text().await.unwrap_or_default();
+        eprintln!("[OpenAI-compat] HTTP {status}: {body_text}");
+        return Err(format!("Erreur API (HTTP {status}): {body_text}"));
+    }
 
     let data: OpenAIResponse = resp
         .json()

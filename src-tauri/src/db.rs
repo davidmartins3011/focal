@@ -276,6 +276,8 @@ pub fn create_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     migrate_oauth_tokens_to_integration(conn);
     // Migration: add cleared flag for soft-delete on chat_messages
     conn.execute("ALTER TABLE chat_messages ADD COLUMN cleared INTEGER NOT NULL DEFAULT 0", []).ok();
+    // Migration: add strategy_id to tasks for linking tasks to strategies
+    conn.execute("ALTER TABLE tasks ADD COLUMN strategy_id TEXT", []).ok();
     purge_old_chat_messages(conn);
     Ok(())
 }

@@ -46,6 +46,8 @@ pub struct Task {
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,13 +170,6 @@ pub struct TagDistribution {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskHighlight {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tag: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PeriodSummary {
     pub tasks_completed: i32,
@@ -182,7 +177,14 @@ pub struct PeriodSummary {
     pub focus_days: i32,
     pub total_days: i32,
     pub distribution: Vec<TagDistribution>,
-    pub highlights: Vec<TaskHighlight>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyProgressItem {
+    pub strategy_id: String,
+    pub total: i32,
+    pub completed: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

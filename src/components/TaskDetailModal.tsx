@@ -2,17 +2,11 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { Task, Tag } from "../types";
 import { updateTask as updateTaskSvc, getAllTags } from "../services/tasks";
+import { TAG_COLORS } from "../data/tagConstants";
+import useStrategies from "../hooks/useStrategies";
 import styles from "./TaskDetailModal.module.css";
 
 type PriorityScore = 1 | 2 | 3 | 4 | 5;
-
-const TAG_COLORS: { id: Tag["color"]; label: string; css: string }[] = [
-  { id: "crm", label: "Vert", css: "var(--green)" },
-  { id: "data", label: "Bleu", css: "var(--blue)" },
-  { id: "roadmap", label: "Accent", css: "var(--accent)" },
-  { id: "saas", label: "Violet", css: "var(--purple)" },
-  { id: "urgent", label: "Rouge", css: "var(--red)" },
-];
 
 interface Props {
   task: Task;
@@ -58,6 +52,8 @@ export default function TaskDetailModal({
   const [tagSearch, setTagSearch] = useState("");
   const [newTagColor, setNewTagColor] = useState<Tag["color"]>("data");
   const [knownTags, setKnownTags] = useState<Tag[]>([]);
+  const [showStrategyPicker, setShowStrategyPicker] = useState(false);
+  const { pickerObjectives, getStrategyInfo } = useStrategies();
   const descTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -141,6 +137,15 @@ export default function TaskDetailModal({
     if (!onSetTags) return;
     onSetTags(task.id, task.tags.filter((_, i) => i !== index));
   }, [task.tags, task.id, onSetTags]);
+
+  const currentStrategyInfo = getStrategyInfo(task.strategyId);
+
+  const handleStrategyChange = useCallback((tacticId: string | undefined) => {
+    const newId = tacticId ?? "";
+    updateTaskSvc({ id: task.id, strategyId: newId }).catch(() => {});
+    onTaskUpdated?.({ ...task, strategyId: tacticId });
+    setShowStrategyPicker(false);
+  }, [task, onTaskUpdated]);
 
   const stepsTotal = task.microSteps?.length ?? 0;
   const stepsDone = task.microSteps?.filter((s) => s.done).length ?? 0;
@@ -359,6 +364,88 @@ export default function TaskDetailModal({
                   )}
                   {!onSetTags && task.tags.length === 0 && (
                     <span className={styles.noTags}>Aucun tag</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Strategy link */}
+            <div className={styles.metaRow} style={{ alignItems: "flex-start" }}>
+              <div className={styles.metaIcon} style={{ marginTop: 2 }}>🧭</div>
+              <div className={styles.metaLabel} style={{ marginTop: 4 }}>Stratégie</div>
+              <div className={styles.metaValue}>
+                <div className={styles.strategyWrap}>
+                  {currentStrategyInfo ? (
+                    <div className={styles.strategySelected}>
+                      <div className={styles.strategySelectedInfo}>
+                        {currentStrategyInfo.strategyId !== currentStrategyInfo.objectiveId && (
+                          <span className={styles.strategyGoalHint}>{currentStrategyInfo.objectiveTitle}</span>
+                        )}
+                        <span className={styles.strategyTitle}>{currentStrategyInfo.strategyTitle}</span>
+                      </div>
+                      <button
+                        className={styles.strategyRemoveBtn}
+                        onClick={() => handleStrategyChange(undefined)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className={styles.strategyPickBtn}
+                      onClick={() => setShowStrategyPicker(!showStrategyPicker)}
+                    >
+                      Rattacher à une stratégie…
+                    </button>
+                  )}
+                  {currentStrategyInfo && !showStrategyPicker && (
+                    <button
+                      className={styles.strategyChangeBtn}
+                      onClick={() => setShowStrategyPicker(true)}
+                    >
+                      Changer
+                    </button>
+                  )}
+                  {showStrategyPicker && (
+                    <div className={styles.strategyDropdown}>
+                      {pickerObjectives.length === 0 ? (
+                        <div className={styles.strategyEmpty}>
+                          Aucune stratégie définie dans la prise de recul
+                        </div>
+                      ) : (
+                        pickerObjectives.map((obj) => (
+                          <div key={obj.id} className={styles.strategyGoalGroup}>
+                            {obj.strategies.length > 0 ? (
+                              <>
+                                <div className={styles.strategyGoalLabel}>{obj.title}</div>
+                                {obj.strategies.map((strategy) => (
+                                  <button
+                                    key={strategy.id}
+                                    className={`${styles.strategyOption} ${task.strategyId === strategy.id ? styles.strategyOptionActive : ""}`}
+                                    onClick={() => handleStrategyChange(strategy.id)}
+                                  >
+                                    {strategy.title}
+                                  </button>
+                                ))}
+                              </>
+                            ) : (
+                              <button
+                                className={`${styles.strategyObjective} ${task.strategyId === obj.id ? styles.strategyOptionActive : ""}`}
+                                onClick={() => handleStrategyChange(obj.id)}
+                              >
+                                {obj.title}
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      )}
+                      <button
+                        className={styles.strategyCancel}
+                        onClick={() => setShowStrategyPicker(false)}
+                      >
+                        Fermer
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

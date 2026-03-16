@@ -1,20 +1,14 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { Task, Tag } from "../types";
-import { getAllTags } from "../services/tasks";
+import { getAllTags, updateTask as updateTaskSvc } from "../services/tasks";
+import { TAG_COLORS } from "../data/tagConstants";
 import EditableEstimate from "./EditableEstimate";
 import PriorityBadge from "./PriorityBadge";
 import TaskDetailModal from "./TaskDetailModal";
+import useStrategies from "../hooks/useStrategies";
 import { getQuickDates, formatQuickDateHint } from "../utils/dateFormat";
 import styles from "./TaskItem.module.css";
-
-const TAG_COLORS = [
-  { id: "crm" as const, label: "Vert", css: "var(--green)" },
-  { id: "data" as const, label: "Bleu", css: "var(--blue)" },
-  { id: "roadmap" as const, label: "Accent", css: "var(--accent)" },
-  { id: "saas" as const, label: "Violet", css: "var(--purple)" },
-  { id: "urgent" as const, label: "Rouge", css: "var(--red)" },
-];
 
 const CELEBRATIONS = [
   "Bien joué ! 🎯",
@@ -101,6 +95,8 @@ export default function TaskItem({
   const [newTagLabel, setNewTagLabel] = useState("");
   const [newTagColor, setNewTagColor] = useState<Tag["color"]>("data");
   const [knownTags, setKnownTags] = useState<Tag[]>([]);
+  const [showStrategyPicker, setShowStrategyPicker] = useState(false);
+  const [strategyPickerPos, setStrategyPickerPos] = useState<{ top: number; left: number } | null>(null);
   const prevDoneRef = useRef(task.done);
   const stuckMenuRef = useRef<HTMLDivElement>(null);
   const scheduleRef = useRef<HTMLDivElement>(null);
@@ -110,7 +106,11 @@ export default function TaskItem({
   const tagEditorRef = useRef<HTMLDivElement>(null);
   const tagEditorPopoverRef = useRef<HTMLDivElement>(null);
   const tagBtnRef = useRef<HTMLButtonElement>(null);
+  const strategyBtnRef = useRef<HTMLButtonElement>(null);
+  const strategyPopoverRef = useRef<HTMLDivElement>(null);
   const quickDates = useMemo(() => getQuickDates(), []);
+  const { getStrategyInfo, pickerObjectives } = useStrategies();
+  const strategyInfo = getStrategyInfo(task.strategyId);
 
   const hasSteps = task.microSteps && task.microSteps.length > 0;
   const canDecompose = !task.done && !hasSteps && !isDecomposing;
@@ -127,7 +127,7 @@ export default function TaskItem({
   }, [task.done]);
 
   useEffect(() => {
-    if (!showStuckMenu && !showSchedule && !showTagEditor) return;
+    if (!showStuckMenu && !showSchedule && !showTagEditor && !showStrategyPicker) return;
     const handler = (e: MouseEvent) => {
       if (showStuckMenu && stuckMenuRef.current && !stuckMenuRef.current.contains(e.target as Node)) {
         setShowStuckMenu(false);
@@ -142,10 +142,15 @@ export default function TaskItem({
         const inPopover = tagEditorPopoverRef.current?.contains(e.target as Node);
         if (!inBtn && !inPopover) setShowTagEditor(false);
       }
+      if (showStrategyPicker) {
+        const inBtn = strategyBtnRef.current?.contains(e.target as Node);
+        const inPopover = strategyPopoverRef.current?.contains(e.target as Node);
+        if (!inBtn && !inPopover) setShowStrategyPicker(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showStuckMenu, showSchedule, showTagEditor]);
+  }, [showStuckMenu, showSchedule, showTagEditor, showStrategyPicker]);
 
   useEffect(() => {
     if (!task.microSteps?.length) {
@@ -259,6 +264,21 @@ export default function TaskItem({
     }
     setShowTagEditor(!showTagEditor);
   }, [showTagEditor]);
+
+  const handleStrategyChange = useCallback((strategyId: string | undefined) => {
+    updateTaskSvc({ id: task.id, strategyId: strategyId ?? "" }).catch(() => {});
+    onTaskUpdated?.({ ...task, strategyId });
+    setShowStrategyPicker(false);
+  }, [task, onTaskUpdated]);
+
+  const openStrategyPicker = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!showStrategyPicker && strategyBtnRef.current) {
+      const rect = strategyBtnRef.current.getBoundingClientRect();
+      setStrategyPickerPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setShowStrategyPicker(!showStrategyPicker);
+  }, [showStrategyPicker]);
 
   return (
     <div
@@ -419,6 +439,61 @@ export default function TaskItem({
             </div>
           )}
           <button
+            ref={strategyBtnRef}
+            className={`${styles.strategyBtn} ${showStrategyPicker ? styles.strategyBtnActive : ""} ${strategyInfo ? styles.strategyBtnLinked : ""}`}
+            onClick={openStrategyPicker}
+            title={strategyInfo ? `Stratégie : ${strategyInfo.strategyTitle}` : "Rattacher à une stratégie"}
+          >
+            🧭
+          </button>
+          {showStrategyPicker && strategyPickerPos && createPortal(
+            <div
+              ref={strategyPopoverRef}
+              className={styles.strategyPopover}
+              style={{ top: strategyPickerPos.top, left: strategyPickerPos.left }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {strategyInfo && (
+                <button
+                  className={styles.strategyPopoverRemove}
+                  onClick={() => handleStrategyChange(undefined)}
+                >
+                  Retirer la stratégie
+                </button>
+              )}
+              {pickerObjectives.length === 0 ? (
+                <div className={styles.strategyPopoverEmpty}>Aucune stratégie définie</div>
+              ) : (
+                pickerObjectives.map((obj) => (
+                  <div key={obj.id} className={styles.strategyPopoverGroup}>
+                    {obj.strategies.length > 0 ? (
+                      <>
+                        <div className={styles.strategyPopoverLabel}>{obj.title}</div>
+                        {obj.strategies.map((s) => (
+                          <button
+                            key={s.id}
+                            className={`${styles.strategyPopoverOption} ${task.strategyId === s.id ? styles.strategyPopoverOptionActive : ""}`}
+                            onClick={() => handleStrategyChange(s.id)}
+                          >
+                            {s.title}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <button
+                        className={`${styles.strategyPopoverObjective} ${task.strategyId === obj.id ? styles.strategyPopoverOptionActive : ""}`}
+                        onClick={() => handleStrategyChange(obj.id)}
+                      >
+                        {obj.title}
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>,
+            document.body
+          )}
+          <button
             className={styles.detailBtn}
             onClick={(e) => { e.stopPropagation(); setShowDetail(true); }}
             title="Voir le détail"
@@ -438,8 +513,24 @@ export default function TaskItem({
           )}
         </div>
 
-        {(task.tags.length > 0 || task.urgency != null || task.importance != null || (isOverdue && task.priority === "main") || (onSetTags && !task.done)) && (
+        {(task.tags.length > 0 || task.urgency != null || task.importance != null || (isOverdue && task.priority === "main") || (onSetTags && !task.done) || strategyInfo) && (
           <div className={styles.tags}>
+            {strategyInfo && (
+              <span
+                className={styles.strategyBadge}
+                title={strategyInfo.strategyId !== strategyInfo.objectiveId ? `${strategyInfo.objectiveTitle} → ${strategyInfo.strategyTitle}` : strategyInfo.strategyTitle}
+              >
+                🧭 {strategyInfo.strategyTitle}
+                {!task.done && (
+                  <button
+                    className={styles.strategyBadgeRemove}
+                    onClick={(e) => { e.stopPropagation(); handleStrategyChange(undefined); }}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            )}
             {isOverdue && task.priority === "main" && (
               <span className={`${styles.tag} ${styles.wasPriority}`}>
                 ⚡ était prioritaire

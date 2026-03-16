@@ -591,6 +591,35 @@
 .urgent  { background: rgba(var(--red-rgb), 0.12);     color: var(--red); }
 .wasPriority { background: rgba(var(--warning-rgb), 0.12); color: var(--warning); }
 
+.strategyBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9.5px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.strategyBadgeRemove {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.5;
+  padding: 0 0 0 3px;
+  line-height: 1;
+  transition: opacity 0.15s;
+}
+.strategyBadgeRemove:hover { opacity: 1; }
+
 .tagRemove {
   background: none;
   border: none;
@@ -1135,4 +1164,136 @@
 @keyframes timerPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
+}
+
+/* ── Strategy inline picker ── */
+.strategyBtn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+  opacity: 0;
+  line-height: 1;
+}
+
+.item:hover .strategyBtn {
+  opacity: 0.5;
+}
+
+.strategyBtn:hover,
+.strategyBtnActive {
+  opacity: 1 !important;
+  background: var(--bg3);
+}
+
+.strategyBtnLinked {
+  opacity: 0;
+}
+
+.strategyPopover {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  min-width: 220px;
+  max-width: 300px;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: fadeUp 0.15s ease both;
+}
+
+.strategyPopoverRemove {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  color: var(--red, #e55);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.strategyPopoverRemove:hover {
+  background: rgba(255, 80, 80, 0.1);
+}
+
+.strategyPopoverEmpty {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--text3);
+  text-align: center;
+}
+
+.strategyPopoverGroup {
+  margin-bottom: 2px;
+}
+
+.strategyPopoverLabel {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text3);
+  opacity: 0.7;
+}
+
+.strategyPopoverOption {
+  width: 100%;
+  text-align: left;
+  padding: 5px 10px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.strategyPopoverOption:hover {
+  background: var(--bg3);
+}
+
+.strategyPopoverOptionActive {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
+}
+
+.strategyPopoverObjective {
+  width: 100%;
+  text-align: left;
+  padding: 4px 10px;
+  border: none;
+  background: none;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text3);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.strategyPopoverObjective:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.strategyPopoverObjective.strategyPopoverOptionActive {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
 }

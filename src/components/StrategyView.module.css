@@ -864,10 +864,193 @@
   background: var(--blue);
 }
 
+/* ── Objective progress ── */
+.objProgressSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+  animation: fadeUp 0.25s ease 0.08s both;
+}
+
+.objProgressSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.objProgressSectionIcon {
+  font-size: 14px;
+}
+
+.objProgressSectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text3);
+}
+
+.objProgressCard {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+
+.objProgressHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.objProgressTitleWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.objProgressTag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+.objProgressTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.objProgressCount {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.objProgressCountSlash {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text3);
+}
+
+.objProgressBar {
+  height: 6px;
+  background: var(--bg4);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.objProgressFill {
+  height: 100%;
+  border-radius: 6px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+
+.tacticProgressList {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border2);
+  margin-left: 4px;
+}
+
+.tacticProgressItem {
+  padding-left: 0;
+}
+
+.tacticProgressHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tacticProgressTag {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--purple, var(--text3));
+  background: rgba(var(--accent-rgb), 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.tacticProgressTitle {
+  font-size: 12px;
+  color: var(--text2);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tacticProgressCount {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.tacticProgressBar {
+  height: 3px;
+  background: var(--bg4);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-left: 0;
+}
+
+.tacticProgressFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-muted, var(--accent));
+  opacity: 0.65;
+  transition: width 0.4s ease;
+  min-width: 1px;
+}
+
 /* ── Distribution bar ── */
 .bilanDistribution {
-  margin-bottom: 12px;
+  margin-bottom: 20px;
   animation: fadeUp 0.25s ease 0.1s both;
+}
+
+.bilanDistSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.bilanDistSectionIcon {
+  font-size: 14px;
+}
+
+.bilanDistSectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text3);
 }
 
 .bilanDistBar {
@@ -912,42 +1095,6 @@
   font-size: 10.5px;
   font-weight: 600;
   color: var(--text2);
-}
-
-/* ── Highlights ── */
-.bilanHighlights {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 28px;
-}
-
-.bilanHighlight {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  animation: fadeUp 0.25s ease both;
-}
-
-.bilanHighlight:nth-child(1) { animation-delay: 0.05s; }
-.bilanHighlight:nth-child(2) { animation-delay: 0.1s; }
-.bilanHighlight:nth-child(3) { animation-delay: 0.15s; }
-.bilanHighlight:nth-child(4) { animation-delay: 0.2s; }
-
-.bilanHighlightIcon {
-  font-size: 14px;
-  flex-shrink: 0;
-  line-height: 1.4;
-}
-
-.bilanHighlightText {
-  font-size: 12.5px;
-  color: var(--text2);
-  line-height: 1.4;
 }
 
 .bilanEmpty {

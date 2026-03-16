@@ -23,7 +23,7 @@ import SortableTaskItem from "./SortableTaskItem";
 import TaskItem from "./TaskItem";
 import DroppableEmptyZone from "./DroppableEmptyZone";
 import type { Task } from "../types";
-import { getTasks as fetchTasks, getTasksByDate, getOverdueTasks, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, getStreak } from "../services/tasks";
+import { getTasks as fetchTasks, getTasksByDate, getOverdueTasks, getOverdueTasksForDate, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, getStreak } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { dayClosedKey, dayPrepKey, toISODate } from "../utils/dateFormat";
 import { sortOverdueTasks } from "../utils/taskUtils";
@@ -56,9 +56,11 @@ interface TodayViewProps {
   isDayCompleted?: boolean;
   /** Called when the user marks the day as done. */
   onDayCompleted?: () => void;
+  /** Called when the user reopens a completed day. */
+  onDayReopened?: () => void;
 }
 
-export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStuck, refreshKey, viewDate, isPlanning, isDayCompleted, onDayCompleted }: TodayViewProps) {
+export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStuck, refreshKey, viewDate, isPlanning, isDayCompleted, onDayCompleted, onDayReopened }: TodayViewProps) {
   const [prepDone, setPrepDone] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
@@ -93,12 +95,14 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
         console.error("[TodayView] fetchTasks error:", err);
       }
 
-      if (!isPlanning) {
+      if (isPlanning) {
+        getOverdueTasksForDate(effectiveDate)
+          .then(setOverdueTasks)
+          .catch((err) => console.error("[TodayView] getOverdueTasksForDate error:", err));
+      } else {
         getOverdueTasks()
           .then(setOverdueTasks)
           .catch((err) => console.error("[TodayView] getOverdueTasks error:", err));
-      } else {
-        setOverdueTasks([]);
       }
 
       getStreak().then(setStreak).catch(() => {});
@@ -164,6 +168,14 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
   async function handleMarkDone() {
     await setSetting(dayClosedKey(dayKey), "true");
     onDayCompleted?.();
+  }
+
+  async function handleReopenDay() {
+    await Promise.all([
+      setSetting(dayClosedKey(dayKey), ""),
+      setSetting(dayPrepKey(dayKey), ""),
+    ]);
+    onDayReopened?.();
   }
 
   function completeTimerTask() {
@@ -453,6 +465,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
         <div className={styles.dayCompletedBanner}>
           <span className={styles.dayCompletedIcon}>✓</span>
           <span className={styles.dayCompletedText}>Journée terminée</span>
+          <button className={styles.reopenBtn} onClick={handleReopenDay}>Réouvrir</button>
         </div>
       )}
 

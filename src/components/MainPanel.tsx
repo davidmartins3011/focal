@@ -55,9 +55,19 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
     onTabChange("tomorrow");
   }, [onTabChange]);
 
+  const handleDayReopened = useCallback(() => {
+    setDayClosed(false);
+    onTabChange("today");
+  }, [onTabChange]);
+
   const handleWeekCompleted = useCallback(() => {
     setWeekClosed(true);
     onTabChange("next-week");
+  }, [onTabChange]);
+
+  const handleWeekReopened = useCallback(() => {
+    setWeekClosed(false);
+    onTabChange("week");
   }, [onTabChange]);
 
   const { dayName, dayNum, monthShort, weekNum } = useMemo(() => {
@@ -116,6 +126,7 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
             refreshKey={taskRefreshKey}
             isDayCompleted={dayClosed}
             onDayCompleted={handleDayCompleted}
+            onDayReopened={handleDayReopened}
           />
         )}
         {activeTab === "tomorrow" && dayClosed && (
@@ -136,6 +147,7 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
             dailyPriorityCount={dailyPriorityCount}
             isWeekCompleted={weekClosed}
             onWeekCompleted={handleWeekCompleted}
+            onWeekReopened={handleWeekReopened}
           />
         )}
         {activeTab === "next-week" && weekClosed && (

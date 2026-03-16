@@ -17,6 +17,10 @@ export function getOverdueTasks(): Promise<Task[]> {
   return invoke<Task[]>("get_overdue_tasks");
 }
 
+export function getOverdueTasksForDate(beforeDate: string): Promise<Task[]> {
+  return invoke<Task[]>("get_overdue_tasks_for_date", { beforeDate });
+}
+
 export function getTasksByDateRange(startDate: string, endDate: string): Promise<Task[]> {
   return invoke<Task[]>("get_tasks_by_date_range", { startDate, endDate });
 }
@@ -30,6 +34,7 @@ export function createTask(params: {
   scheduledDate?: string;
   urgency?: number;
   importance?: number;
+  strategyId?: string;
 }): Promise<Task> {
   return invoke<Task>("create_task", params);
 }
@@ -46,6 +51,7 @@ export function updateTask(params: {
   importance?: number;
   viewContext?: string;
   description?: string;
+  strategyId?: string;
 }): Promise<Task> {
   return invoke<Task>("update_task", params);
 }

@@ -5,9 +5,9 @@ use crate::models::{
     AppState,
     StrategyPillar, StrategyReflection, StrategyReview,
     StrategyAction, StrategyGoal, StrategyStrategy, StrategyTactic,
-    PeriodSummary, TagDistribution, TaskHighlight,
+    PeriodSummary, TagDistribution,
     PeriodReflection, StrategyPeriod,
-    GoalStrategyLink,
+    GoalStrategyLink, StrategyProgressItem,
 };
 
 // ── Legacy reviews (pillars / reflections / top3) ──
@@ -418,10 +418,6 @@ pub fn upsert_strategy(
          ON CONFLICT(id) DO UPDATE SET title=?3, description=?4, position=?5",
         params![id, goal_id, title, description, position],
     ).map_err(|e| e.to_string())?;
-    db.execute(
-        "INSERT OR IGNORE INTO goal_strategy_links (goal_id, strategy_id) VALUES (?1, ?2)",
-        params![goal_id, id],
-    ).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -578,22 +574,38 @@ pub fn get_period_summary(
         .filter_map(|r| r.ok())
         .collect();
 
-    let mut hl_stmt = db.prepare(&format!(
-        "SELECT t.name, \
-           (SELECT tt.color FROM task_tags tt WHERE tt.task_id = t.id AND tt.color != 'urgent' ORDER BY tt.position LIMIT 1) \
-         FROM tasks t \
-         WHERE {eff} >= ?1 AND {eff} <= ?2 AND t.done = 1 \
-         ORDER BY CASE WHEN t.priority = 'main' THEN 0 ELSE 1 END, \
-           t.estimated_minutes DESC, t.position \
-         LIMIT 5"
+    Ok(PeriodSummary { tasks_completed, tasks_total, focus_days, total_days, distribution })
+}
+
+#[tauri::command]
+pub fn get_strategy_progress(
+    state: State<'_, AppState>,
+    start_date: String,
+    end_date: String,
+) -> Result<Vec<StrategyProgressItem>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let eff = "COALESCE(scheduled_date, DATE(created_at))";
+
+    let mut stmt = db.prepare(&format!(
+        "SELECT strategy_id, COUNT(*) as total, \
+         SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END) as completed \
+         FROM tasks \
+         WHERE strategy_id IS NOT NULL AND strategy_id != '' \
+         AND {eff} >= ?1 AND {eff} <= ?2 \
+         GROUP BY strategy_id"
     )).map_err(|e| e.to_string())?;
-    let highlights: Vec<TaskHighlight> = hl_stmt
+
+    let items: Vec<StrategyProgressItem> = stmt
         .query_map(params![start_date, end_date], |row| {
-            Ok(TaskHighlight { name: row.get(0)?, tag: row.get(1)? })
+            Ok(StrategyProgressItem {
+                strategy_id: row.get(0)?,
+                total: row.get(1)?,
+                completed: row.get(2)?,
+            })
         })
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
 
-    Ok(PeriodSummary { tasks_completed, tasks_total, focus_days, total_days, distribution, highlights })
+    Ok(items)
 }

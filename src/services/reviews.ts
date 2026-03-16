@@ -107,3 +107,13 @@ export function deleteTactic(id: string): Promise<void> {
 export function getPeriodSummary(startDate: string, endDate: string): Promise<PeriodSummary> {
   return invoke<PeriodSummary>("get_period_summary", { startDate, endDate });
 }
+
+export interface StrategyProgressItem {
+  strategyId: string;
+  total: number;
+  completed: number;
+}
+
+export function getStrategyProgress(startDate: string, endDate: string): Promise<StrategyProgressItem[]> {
+  return invoke<StrategyProgressItem[]>("get_strategy_progress", { startDate, endDate });
+}

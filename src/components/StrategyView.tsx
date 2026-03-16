@@ -20,7 +20,9 @@ import {
   getPeriodSummary,
   getGoalStrategyLinks,
   toggleGoalStrategyLink,
+  getStrategyProgress,
 } from "../services/reviews";
+import type { StrategyProgressItem } from "../services/reviews";
 import type {
   StrategyFrequency,
   StrategyPeriod,
@@ -309,12 +311,17 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
   // ── Bilan state ──
   const [bilan, setBilan] = useState<PeriodSummary | null>(null);
 
+  const [strategyProgress, setStrategyProgress] = useState<StrategyProgressItem[]>([]);
+
   useEffect(() => {
-    if (!selectedPeriod) { setBilan(null); return; }
+    if (!selectedPeriod) { setBilan(null); setStrategyProgress([]); return; }
     const { start, end } = periodDateRange(selectedPeriod);
     getPeriodSummary(start, end)
       .then(setBilan)
       .catch((err) => console.error("[StrategyView] getPeriodSummary error:", err));
+    getStrategyProgress(start, end)
+      .then(setStrategyProgress)
+      .catch((err) => console.error("[StrategyView] getStrategyProgress error:", err));
   }, [selectedPeriod?.id]);
 
   const bilanDistribution = useMemo(() => {
@@ -326,13 +333,41 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
     });
   }, [bilan]);
 
-  const bilanHighlights = useMemo(() => {
-    if (!bilan) return [];
-    return bilan.highlights.map((h) => {
-      const meta = TAG_META[h.tag ?? ""] ?? { icon: "✅" };
-      return { icon: meta.icon, text: h.name };
-    });
-  }, [bilan]);
+  const objectiveProgress = useMemo(() => {
+    if (goals.length === 0 || strategyProgress.length === 0) return [];
+    const progressMap = new Map<string, { total: number; completed: number }>();
+    for (const item of strategyProgress) {
+      progressMap.set(item.strategyId, { total: item.total, completed: item.completed });
+    }
+
+    return goals.flatMap((goal) =>
+      goal.strategies.map((strat) => {
+        const directProgress = progressMap.get(strat.id);
+        let total = directProgress?.total ?? 0;
+        let completed = directProgress?.completed ?? 0;
+
+        const tacticDetails: { id: string; title: string; total: number; completed: number }[] = [];
+        for (const tactic of strat.tactics) {
+          const tp = progressMap.get(tactic.id);
+          if (tp) {
+            total += tp.total;
+            completed += tp.completed;
+            tacticDetails.push({ id: tactic.id, title: tactic.title, total: tp.total, completed: tp.completed });
+          } else {
+            tacticDetails.push({ id: tactic.id, title: tactic.title, total: 0, completed: 0 });
+          }
+        }
+
+        return {
+          id: strat.id,
+          title: strat.title,
+          total,
+          completed,
+          tactics: tacticDetails,
+        };
+      })
+    ).filter((obj) => obj.total > 0 || obj.tactics.some((t) => t.total > 0));
+  }, [goals, strategyProgress]);
 
   // ── Period lifecycle ──
 
@@ -574,7 +609,7 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
   const renderObjectives = () => (
     <>
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionTitle}>Mes objectifs</span>
+        <span className={styles.sectionTitle}>Objectifs de la période</span>
         {goals.length > 0 && (
           <button className={styles.addGoalBtn} onClick={() => handleAddStrategy(goals[0].id, goals[0].strategies.length)}>
             + Objectif
@@ -856,8 +891,65 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
                 </div>
               </div>
 
+              {objectiveProgress.length > 0 && (
+                <div className={styles.objProgressSection}>
+                  <div className={styles.objProgressSectionHeader}>
+                    <span className={styles.objProgressSectionIcon}>🎯</span>
+                    <span className={styles.objProgressSectionTitle}>Par objectif</span>
+                  </div>
+                  {objectiveProgress.map((obj) => {
+                    const pct = obj.total > 0 ? Math.round((obj.completed / obj.total) * 100) : 0;
+                    return (
+                      <div key={obj.id} className={styles.objProgressCard}>
+                        <div className={styles.objProgressHeader}>
+                          <div className={styles.objProgressTitleWrap}>
+                            <span className={styles.objProgressTag}>OBJECTIF</span>
+                            <span className={styles.objProgressTitle}>{obj.title}</span>
+                          </div>
+                          <span className={styles.objProgressCount}>
+                            {obj.completed}<span className={styles.objProgressCountSlash}>/{obj.total}</span>
+                          </span>
+                        </div>
+                        <div className={styles.objProgressBar}>
+                          <div className={styles.objProgressFill} style={{ width: `${pct}%` }} />
+                        </div>
+                        {obj.tactics.length > 0 && (
+                          <div className={styles.tacticProgressList}>
+                            {obj.tactics.map((t) => {
+                              const tPct = t.total > 0 ? Math.round((t.completed / t.total) * 100) : 0;
+                              return (
+                                <div key={t.id} className={styles.tacticProgressItem}>
+                                  <div className={styles.tacticProgressHeader}>
+                                    <span className={styles.tacticProgressTag}>STRATÉGIE</span>
+                                    <span className={styles.tacticProgressTitle}>{t.title}</span>
+                                    {t.total > 0 && (
+                                      <span className={styles.tacticProgressCount}>
+                                        {t.completed}<span className={styles.objProgressCountSlash}>/{t.total}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  {t.total > 0 && (
+                                    <div className={styles.tacticProgressBar}>
+                                      <div className={styles.tacticProgressFill} style={{ width: `${tPct}%` }} />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {bilanDistribution.length > 0 && (
                 <div className={styles.bilanDistribution}>
+                  <div className={styles.bilanDistSectionHeader}>
+                    <span className={styles.bilanDistSectionIcon}>🏷️</span>
+                    <span className={styles.bilanDistSectionTitle}>Par tags</span>
+                  </div>
                   <div className={styles.bilanDistBar}>
                     {bilanDistribution.map((d) => (
                       <div key={d.label} className={styles.bilanDistSegment} style={{ width: `${d.pct}%`, background: d.color }} title={`${d.label} — ${d.pct}%`} />
@@ -875,16 +967,6 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
                 </div>
               )}
 
-              {bilanHighlights.length > 0 && (
-                <div className={styles.bilanHighlights}>
-                  {bilanHighlights.map((h, i) => (
-                    <div key={i} className={styles.bilanHighlight}>
-                      <span className={styles.bilanHighlightIcon}>{h.icon}</span>
-                      <span className={styles.bilanHighlightText}>{h.text}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </>
           ) : (
             <div className={styles.bilanEmpty}>Pas encore de données pour cette période.</div>

@@ -48,11 +48,11 @@ fn load_tasks(db: &rusqlite::Connection, ids: &[String]) -> Result<Vec<Task>, St
 }
 
 fn load_task(db: &rusqlite::Connection, task_id: &str) -> Result<Task, String> {
-    let (id, name, done, est, pri, ai, sched, urg, imp, desc, created): (String, String, bool, Option<i32>, Option<String>, bool, Option<String>, Option<i32>, Option<i32>, Option<String>, Option<String>) = db
+    let (id, name, done, est, pri, ai, sched, urg, imp, desc, created, strat_id): (String, String, bool, Option<i32>, Option<String>, bool, Option<String>, Option<i32>, Option<i32>, Option<String>, Option<String>, Option<String>) = db
         .query_row(
-            "SELECT id, name, done, estimated_minutes, priority, ai_decomposed, scheduled_date, urgency, importance, description, created_at FROM tasks WHERE id = ?1",
+            "SELECT id, name, done, estimated_minutes, priority, ai_decomposed, scheduled_date, urgency, importance, description, created_at, strategy_id FROM tasks WHERE id = ?1",
             params![task_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?, row.get(11)?)),
         )
         .map_err(|e| e.to_string())?;
     let tags = load_tags(db, &id)?;
@@ -72,6 +72,7 @@ fn load_task(db: &rusqlite::Connection, task_id: &str) -> Result<Task, String> {
         importance: imp,
         description,
         created_at: created,
+        strategy_id: strat_id,
     })
 }
 
@@ -165,6 +166,20 @@ pub fn get_overdue_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String
 }
 
 #[tauri::command]
+pub fn get_overdue_tasks_for_date(state: State<'_, AppState>, before_date: String) -> Result<Vec<Task>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = db
+        .prepare("SELECT id FROM tasks WHERE scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position")
+        .map_err(|e| e.to_string())?;
+    let ids: Vec<String> = stmt
+        .query_map(params![before_date], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    load_tasks(&db, &ids)
+}
+
+#[tauri::command]
 pub fn create_task(
     state: State<'_, AppState>,
     name: String,
@@ -175,6 +190,7 @@ pub fn create_task(
     scheduled_date: Option<String>,
     urgency: Option<i32>,
     importance: Option<i32>,
+    strategy_id: Option<String>,
 ) -> Result<Task, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
@@ -189,8 +205,8 @@ pub fn create_task(
         )
         .map_err(|e| e.to_string())?;
     db.execute(
-        "INSERT INTO tasks (id, name, done, estimated_minutes, priority, ai_decomposed, view_context, scheduled_date, position, urgency, importance) VALUES (?1,?2,0,?3,?4,0,?5,?6,?7,?8,?9)",
-        params![id, name, estimated_minutes, priority, ctx, scheduled_date, max_pos + 1, urg, imp],
+        "INSERT INTO tasks (id, name, done, estimated_minutes, priority, ai_decomposed, view_context, scheduled_date, position, urgency, importance, strategy_id) VALUES (?1,?2,0,?3,?4,0,?5,?6,?7,?8,?9,?10)",
+        params![id, name, estimated_minutes, priority, ctx, scheduled_date, max_pos + 1, urg, imp, strategy_id],
     )
     .map_err(|e| e.to_string())?;
     if let Some(tag_list) = &tags {
@@ -219,6 +235,7 @@ pub fn update_task(
     importance: Option<i32>,
     view_context: Option<String>,
     description: Option<String>,
+    strategy_id: Option<String>,
 ) -> Result<Task, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     if let Some(v) = &name {
@@ -262,6 +279,11 @@ pub fn update_task(
     }
     if let Some(v) = &description {
         db.execute("UPDATE tasks SET description = ?1 WHERE id = ?2", params![v, id])
+            .map_err(|e| e.to_string())?;
+    }
+    if strategy_id.is_some() {
+        let val = strategy_id.as_deref().filter(|s| !s.is_empty());
+        db.execute("UPDATE tasks SET strategy_id = ?1 WHERE id = ?2", params![val, id])
             .map_err(|e| e.to_string())?;
     }
     load_task(&db, &id)

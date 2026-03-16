@@ -27,6 +27,7 @@ import {
   getTasks as fetchTasks,
   getTasksByDateRange,
   getOverdueTasks,
+  getOverdueTasksForDate,
   updateTask as updateTaskSvc,
   reorderTasks as reorderTasksSvc,
 } from "../services/tasks";
@@ -95,9 +96,11 @@ interface WeekViewProps {
   isWeekCompleted?: boolean;
   /** Called when the user marks the week as done. */
   onWeekCompleted?: () => void;
+  /** Called when the user reopens a completed week. */
+  onWeekReopened?: () => void;
 }
 
-export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, workingDays = DEFAULT_WORKING_DAYS, dailyPriorityCount = 3, viewMonday, isPlanning, isWeekCompleted, onWeekCompleted }: WeekViewProps) {
+export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, workingDays = DEFAULT_WORKING_DAYS, dailyPriorityCount = 3, viewMonday, isPlanning, isWeekCompleted, onWeekCompleted, onWeekReopened }: WeekViewProps) {
   const [selectedFilter, setSelectedFilter] = useState<"week" | string>("week");
   const [scheduledTasks, setScheduledTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
@@ -146,7 +149,7 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
     Promise.all([
       isPlanning ? Promise.resolve([]) : fetchTasks("week"),
       getTasksByDateRange(mondayStr, toISODate(endDate)),
-      isPlanning ? Promise.resolve([]) : getOverdueTasks(),
+      isPlanning ? getOverdueTasksForDate(toISODate(monday)) : getOverdueTasks(),
     ])
       .then(([weekCtxTasks, dateTasks, overdueAll]) => {
         const dateIds = new Set(dateTasks.map((t) => t.id));
@@ -291,6 +294,15 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
   async function handleMarkWeekDone() {
     await setSetting(weekClosedKey(toISODate(monday)), "true");
     onWeekCompleted?.();
+  }
+
+  async function handleReopenWeek() {
+    const mondayStr = toISODate(monday);
+    await Promise.all([
+      setSetting(weekClosedKey(mondayStr), ""),
+      setSetting(weekPrepKey(mondayStr), ""),
+    ]);
+    onWeekReopened?.();
   }
 
   // --- Drag & Drop ---
@@ -718,6 +730,7 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
         <div className={styles.weekCompletedBanner}>
           <span className={styles.weekCompletedIcon}>✓</span>
           <span className={styles.weekCompletedText}>Semaine terminée</span>
+          <button className={styles.reopenBtn} onClick={handleReopenWeek}>Réouvrir</button>
         </div>
       )}
     </div>

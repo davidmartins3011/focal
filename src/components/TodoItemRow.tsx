@@ -2,6 +2,7 @@ import { useRef, useEffect } from "react";
 import type { Task } from "../types";
 import { formatScheduledDate, formatQuickDateHint, getQuickDates } from "../utils/dateFormat";
 import PriorityBadge from "./PriorityBadge";
+import useStrategies from "../hooks/useStrategies";
 import styles from "./TodoView.module.css";
 
 type PopoverType = "priority" | "schedule";
@@ -47,6 +48,8 @@ export default function TodoItemRow({
 }: TodoItemRowProps) {
   const editRef = useRef<HTMLTextAreaElement>(null);
   const quickDates = getQuickDates();
+  const { getStrategyInfo } = useStrategies();
+  const strategyInfo = getStrategyInfo(task.strategyId);
 
   useEffect(() => {
     if (isEditing && editRef.current) {
@@ -119,6 +122,14 @@ export default function TodoItemRow({
           </div>
         )}
         <div className={styles.todoMeta}>
+          {strategyInfo && (
+            <span
+              className={`${styles.badge} ${styles.strategyBadge}`}
+              title={strategyInfo.strategyId !== strategyInfo.objectiveId ? `${strategyInfo.objectiveTitle} → ${strategyInfo.strategyTitle}` : strategyInfo.strategyTitle}
+            >
+              🧭 {strategyInfo.strategyTitle}
+            </span>
+          )}
           {task.urgency != null && (
             <PriorityBadge
               type="urgency"
