@@ -4,6 +4,7 @@ import { themes, providers } from "../data/settingsData";
 import { validateApiKey, setSetting } from "../services/settings";
 import { sendOnboardingMessage, analyzeProfileUrl } from "../services/chat";
 import { updateProfile } from "../services/profile";
+import { createTask } from "../services/tasks";
 import styles from "./OnboardingView.module.css";
 
 interface OnboardingViewProps {
@@ -53,6 +54,10 @@ export default function OnboardingView({
   const [chatError, setChatError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Step 4 state
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -240,10 +245,9 @@ export default function OnboardingView({
   }, [input, isTyping, messages, profile]);
 
   const finishOnboarding = useCallback(() => {
-    updateProfile(profile).catch(() => {});
     setSetting("onboarding-completed", "true").catch(() => {});
     onComplete();
-  }, [profile, onComplete]);
+  }, [onComplete]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -264,7 +268,7 @@ export default function OnboardingView({
     <div className={styles.header}>
       <div className={styles.logo}>f.</div>
       <div className={styles.dots}>
-        {[1, 2, 3].map((s) => (
+        {[1, 2, 3, 4].map((s) => (
           <div
             key={s}
             className={`${styles.dot} ${step >= s ? styles.dotActive : ""}`}
@@ -477,8 +481,8 @@ export default function OnboardingView({
         <div className={styles.chatInputInner}>
           {onboardingComplete ? (
             <div className={styles.finishBar}>
-              <button className={styles.finishBtn} onClick={finishOnboarding}>
-                Commencer à utiliser focal.
+              <button className={styles.finishBtn} onClick={() => { updateProfile(profile).catch(() => {}); setStep(4); }}>
+                Continuer
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
@@ -520,12 +524,75 @@ export default function OnboardingView({
     </div>
   );
 
+  const importLines = importText.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  const handleImport = useCallback(async () => {
+    if (!importLines.length) return;
+    setImporting(true);
+    for (const line of importLines) {
+      try {
+        await createTask({ name: line });
+      } catch (err) {
+        console.error("[Onboarding] import task error:", err);
+      }
+    }
+    setImporting(false);
+    finishOnboarding();
+  }, [importLines, finishOnboarding]);
+
+  const renderImportStep = () => (
+    <div className={styles.stepWrapper}>
+      <div className={styles.stepContent}>
+        <h1 className={styles.stepTitle}>Tu as déjà des tâches en cours ?</h1>
+        <p className={styles.stepSubtitle}>
+          Colle ta liste de tâches ci-dessous, une par ligne. Tu pourras toujours en importer plus tard depuis les Todos avec le bouton d'import groupé.
+        </p>
+        <textarea
+          className={styles.importTextarea}
+          value={importText}
+          onChange={(e) => setImportText(e.target.value)}
+          placeholder={"Acheter des courses\nEnvoyer le devis\nAppeler le médecin\n…"}
+          rows={8}
+          autoFocus
+        />
+        {importLines.length > 0 && (
+          <div className={styles.importCount}>
+            {importLines.length} tâche{importLines.length > 1 ? "s" : ""} détectée{importLines.length > 1 ? "s" : ""}
+          </div>
+        )}
+        <div className={styles.importActions}>
+          <button
+            className={styles.skipBtn}
+            onClick={finishOnboarding}
+            type="button"
+          >
+            Passer
+          </button>
+          <button
+            className={styles.nextBtn}
+            onClick={handleImport}
+            disabled={!importLines.length || importing}
+            type="button"
+          >
+            {importing ? "Import en cours…" : `Importer${importLines.length ? ` (${importLines.length})` : ""}`}
+            {!importing && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className={styles.container}>
       {renderHeader()}
       {step === 1 && renderThemeStep()}
       {step === 2 && renderApiKeyStep()}
       {step === 3 && renderChatStep()}
+      {step === 4 && renderImportStep()}
     </div>
   );
 }
