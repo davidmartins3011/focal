@@ -27,6 +27,7 @@ export function formatDate(iso: string): string {
   const now = new Date();
   const diff = now.getTime() - d.getTime();
   const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "à l'instant";
   if (mins < 60) return `il y a ${mins}min`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `il y a ${hours}h`;
@@ -34,6 +35,30 @@ export function formatDate(iso: string): string {
   if (days === 1) return "hier";
   if (days < 7) return `il y a ${days}j`;
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+
+export function formatFullDate(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+}
+
+export function formatFullDateTime(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+export function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+export function daysDiff(from: Date, to: Date): number {
+  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
 
 export function toISODate(d: Date): string {

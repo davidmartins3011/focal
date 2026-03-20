@@ -7,6 +7,7 @@ import { getSetting, setSetting } from "../services/settings";
 import { dayClosedKey, dayPrepKey, weekClosedKey, getMondayISO, weekPrepKey, toISODate } from "../utils/dateFormat";
 import { runAnalysisNow } from "../services/memory";
 import { runSuggestionsNow } from "../services/chat";
+import { CheckmarkIcon } from "./icons";
 import { chatHints, slashCommands } from "../data/chatConstants";
 import { providers } from "../data/settingsData";
 import styles from "./ChatPanel.module.css";
@@ -1353,9 +1354,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
                   })()}
                   {addedStepsMsgIds.has(msg.id) && (
                     <div className={styles.stepsAdded}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
+                      <CheckmarkIcon size={12} />
                       Étapes ajoutées
                     </div>
                   )}
@@ -1401,9 +1400,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
               prepHistory.current = [];
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
+            <CheckmarkIcon size={14} strokeWidth={2} />
             {{ daily: "Finir le planning du jour", weekly: "Finir le planning de la semaine", daily_review: "Finir la revue du jour", weekly_review: "Finir la revue de la semaine", period: "Finir la préparation de la période" }[prepMode]}
           </button>
         )}

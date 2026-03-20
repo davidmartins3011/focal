@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { Task, Tag } from "../types";
 import { getTasksByDateRange, toggleTask as toggleTaskSvc, toggleMicroStep as toggleStepSvc, deleteTask as deleteTaskSvc, updateTask as updateTaskSvc, setTaskTags } from "../services/tasks";
 import TaskItem from "./TaskItem";
+import { toISODate, isSameDay, daysDiff } from "../utils/dateFormat";
 import styles from "./CalendarView.module.css";
 
 const DAYS_SHORT = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
@@ -20,23 +21,6 @@ const EMPTY_MESSAGES = [
   "Pas de tâches ici. Ton cerveau te remercie.",
   "Journée ouverte — tu décideras le moment venu.",
 ];
-
-function toKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function daysDiff(from: Date, to: Date): number {
-  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate());
-  return Math.round((b.getTime() - a.getTime()) / 86400000);
-}
 
 function relativeLabel(day: Date, now: Date): string | null {
   const diff = daysDiff(now, day);
@@ -94,7 +78,7 @@ function getWeekStats(tasks: Record<string, Task[]>, now: Date): { done: number;
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(d.getDate() + i);
-    const key = toKey(d);
+    const key = toISODate(d);
     const dayTasks = tasks[key] ?? [];
     total += dayTasks.length;
     done += dayTasks.filter((t) => t.done).length;
@@ -121,8 +105,8 @@ export default function CalendarView() {
 
   useEffect(() => {
     const days = buildCalendarDays(year, month);
-    const startDate = toKey(days[0]);
-    const endDate = toKey(days[days.length - 1]);
+    const startDate = toISODate(days[0]);
+    const endDate = toISODate(days[days.length - 1]);
 
     getTasksByDateRange(startDate, endDate)
       .then((tasks) => {
@@ -305,7 +289,7 @@ export default function CalendarView() {
     };
   }, []);
 
-  const selectedTasks: Task[] = taskMap[toKey(selectedDate)] ?? [];
+  const selectedTasks: Task[] = taskMap[toISODate(selectedDate)] ?? [];
   const totalDone = selectedTasks.filter((t) => t.done).length;
   const totalTasks = selectedTasks.length;
   const allDone = totalTasks > 0 && totalDone === totalTasks;
@@ -362,7 +346,7 @@ export default function CalendarView() {
         <div className={styles.grid}>
           {visibleRows.map((row, ri) =>
             row.map((day) => {
-              const key = toKey(day);
+              const key = toISODate(day);
               const isCurrentMonth = day.getMonth() === month;
               const isDayToday = isSameDay(day, today);
               const isSelected = isSameDay(day, selectedDate);
@@ -414,7 +398,7 @@ export default function CalendarView() {
           )}
         </div>
 
-        <div className={styles.detail} key={toKey(selectedDate)}>
+        <div className={styles.detail} key={toISODate(selectedDate)}>
           <div className={styles.detailHeader}>
             <span className={styles.detailDate}>{formatSelectedDate()}</span>
             {totalTasks > 0 && (

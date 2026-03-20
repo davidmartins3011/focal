@@ -107,6 +107,14 @@ export function ToolboxIcon({ size = 20 }: IconProps) {
   );
 }
 
+export function CheckmarkIcon({ size = 14, strokeWidth = 2.5 }: IconProps & { strokeWidth?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
 export function SendIcon({ size = 13 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

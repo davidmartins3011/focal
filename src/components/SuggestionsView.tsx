@@ -7,6 +7,7 @@ import {
   getLastSuggestionsRun,
 } from "../services/chat";
 import type { Suggestion, SuggestionImpact } from "../types";
+import { formatDate } from "../utils/dateFormat";
 import styles from "./SuggestionsView.module.css";
 
 const IMPACT_LABELS: Record<SuggestionImpact, string> = {
@@ -14,20 +15,6 @@ const IMPACT_LABELS: Record<SuggestionImpact, string> = {
   medium: "Impact moyen",
   low: "Impact faible",
 };
-
-function formatRelativeDate(isoDate: string): string {
-  const date = new Date(isoDate + "Z");
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "à l'instant";
-  if (diffMins < 60) return `il y a ${diffMins}min`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `il y a ${diffHours}h`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return "hier";
-  return `il y a ${diffDays} jours`;
-}
 
 export default function SuggestionsView() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -178,7 +165,7 @@ export default function SuggestionsView() {
           )}
           {lastRun && (
             <div className={styles.lastRunBadge}>
-              Dernière analyse : {formatRelativeDate(lastRun)}
+              Dernière analyse : {formatDate(lastRun)}
             </div>
           )}
         </div>

@@ -107,7 +107,7 @@ export function getLastSuggestionsRun(): Promise<string | null> {
   return invoke<string | null>("get_last_suggestions_run");
 }
 
-export function respondToSuggestion(id: string, status: "accepted" | "rejected"): Promise<void> {
+export function respondToSuggestion(id: string, status: "accepted" | "rejected" | "later"): Promise<void> {
   return invoke<void>("respond_to_suggestion", { id, status });
 }
 

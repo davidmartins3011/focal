@@ -1289,7 +1289,7 @@ pub async fn send_message(
     user_message: String,
 ) -> Result<AiResponse, String> {
     let (provider_id, api_key, model, system_prompt, history, id_map) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let (provider, model) = get_active_provider(&db)?;
         let (system, id_map) = build_system_prompt(&db);
 
@@ -1307,7 +1307,7 @@ pub async fn send_message(
 
     // Save user message
     {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let id = uuid::Uuid::new_v4().to_string();
         db.execute(
             "INSERT INTO chat_messages (id, role, content) VALUES (?1,'user',?2)",
@@ -1325,7 +1325,7 @@ pub async fn send_message(
 
     // Save AI response
     {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let id = uuid::Uuid::new_v4().to_string();
         db.execute(
             "INSERT INTO chat_messages (id, role, content) VALUES (?1,'ai',?2)",
@@ -1354,7 +1354,7 @@ pub async fn decompose_task(
     context: Option<String>,
 ) -> Result<Vec<DecompStep>, String> {
     let (provider_id, api_key, model) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let (provider, model) = get_lightweight_provider(&db)?;
         (provider.id, provider.api_key, model)
     };
@@ -1936,7 +1936,7 @@ pub async fn send_daily_prep_message(
     history: String,
 ) -> Result<DailyPrepResponse, String> {
     let (provider_id, api_key, model, system_prompt, id_map) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let (provider, model) = get_active_provider(&db)?;
         let (system, id_map) = build_daily_prep_prompt(&db);
         (provider.id, provider.api_key, model, system, id_map)
@@ -2330,7 +2330,7 @@ pub async fn send_weekly_prep_message(
     history: String,
 ) -> Result<DailyPrepResponse, String> {
     let (provider_id, api_key, model, system_prompt, id_map) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let (provider, model) = get_active_provider(&db)?;
         let (system, id_map) = build_weekly_prep_prompt(&db);
         (provider.id, provider.api_key, model, system, id_map)
@@ -2633,7 +2633,7 @@ pub async fn send_period_prep_message(
     period_id: String,
 ) -> Result<DailyPrepResponse, String> {
     let (provider_id, api_key, model, system_prompt, id_map) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let (provider, model) = get_active_provider(&db)?;
         let (system, id_map) = build_period_prep_prompt(&db, &period_id);
         (provider.id, provider.api_key, model, system, id_map)
@@ -2761,7 +2761,7 @@ pub async fn send_onboarding_message(
     current_profile: String,
 ) -> Result<OnboardingResponse, String> {
     let (provider_id, api_key, model) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let (provider, model) = get_active_provider(&db)?;
         (provider.id, provider.api_key, model)
     };
@@ -2846,7 +2846,7 @@ pub async fn analyze_profile_url(
     }
 
     let (provider_id, api_key, model) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let (provider, model) = get_lightweight_provider(&db)?;
         (provider.id, provider.api_key, model)
     };

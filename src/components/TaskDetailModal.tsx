@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import type { Task, Tag } from "../types";
+import type { Task, Tag, PriorityScore } from "../types";
 import { updateTask as updateTaskSvc, getAllTags } from "../services/tasks";
 import { TAG_COLORS } from "../data/tagConstants";
 import useStrategies from "../hooks/useStrategies";
+import { CheckmarkIcon } from "./icons";
+import { formatFullDate, formatFullDateTime } from "../utils/dateFormat";
 import styles from "./TaskDetailModal.module.css";
-
-type PriorityScore = 1 | 2 | 3 | 4 | 5;
 
 interface Props {
   task: Task;
@@ -19,20 +19,6 @@ interface Props {
   onDelete?: (id: string) => void;
   onSetTags?: (id: string, tags: Tag[]) => void;
   onTaskUpdated?: (task: Task) => void;
-}
-
-function formatDate(iso: string | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-}
-
-function formatDateTime(iso: string | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 export default function TaskDetailModal({
@@ -196,7 +182,7 @@ export default function TaskDetailModal({
                   />
                 ) : (
                   <span className={task.scheduledDate ? undefined : styles.metaValueEmpty}>
-                    {task.scheduledDate ? formatDate(task.scheduledDate) : "Non planifié"}
+                    {task.scheduledDate ? formatFullDate(task.scheduledDate) : "Non planifié"}
                   </span>
                 )}
               </div>
@@ -487,9 +473,7 @@ export default function TaskDetailModal({
           >
             {task.done ? (
               <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
+                <CheckmarkIcon size={14} />
                 Terminée
               </>
             ) : (
@@ -502,7 +486,7 @@ export default function TaskDetailModal({
           <div className={styles.footer}>
             <div className={styles.footerMeta}>
               {task.createdAt && (
-                <span>Créée le {formatDateTime(task.createdAt)}</span>
+                <span>Créée le {formatFullDateTime(task.createdAt)}</span>
               )}
               {task.aiDecomposed && <span>Décomposée par IA</span>}
             </div>

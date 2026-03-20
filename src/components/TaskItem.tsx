@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
-import type { Task, Tag } from "../types";
+import type { Task, Tag, PriorityScore } from "../types";
 import { getAllTags, updateTask as updateTaskSvc } from "../services/tasks";
 import { TAG_COLORS } from "../data/tagConstants";
 import EditableEstimate from "./EditableEstimate";
@@ -20,8 +20,6 @@ const CELEBRATIONS = [
   "Écrasé ! 👊",
   "Yes ! 🙌",
 ];
-
-type PriorityScore = 1 | 2 | 3 | 4 | 5;
 
 interface Props {
   task: Task;

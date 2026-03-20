@@ -267,3 +267,7 @@ export interface EmailMessage {
   labels: string[];
   source: string;
 }
+
+export type PriorityScore = 1 | 2 | 3 | 4 | 5;
+
+export type PopoverType = "priority" | "schedule";

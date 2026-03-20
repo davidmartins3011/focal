@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import type { PriorityScore } from "../types";
 import styles from "./PriorityBadge.module.css";
 
 type PriorityType = "urgency" | "importance";
-type PriorityScore = 1 | 2 | 3 | 4 | 5;
 
 interface PriorityBadgeProps {
   type: PriorityType;

@@ -4,7 +4,7 @@ use crate::models::{AppState, NotificationHistoryEntry};
 
 #[tauri::command]
 pub fn get_notification_history(state: State<'_, AppState>) -> Result<Vec<NotificationHistoryEntry>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let mut stmt = db
         .prepare("SELECT id, reminder_id, icon, label, description, scheduled_time, fired_at, missed, read_status FROM notification_history ORDER BY fired_at DESC LIMIT 100")
         .map_err(|e| e.to_string())?;
@@ -39,7 +39,7 @@ pub fn add_notification_entry(
     fired_at: String,
     missed: bool,
 ) -> Result<NotificationHistoryEntry, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let id = uuid::Uuid::new_v4().to_string();
     db.execute(
         "INSERT INTO notification_history (id, reminder_id, icon, label, description, scheduled_time, fired_at, missed, read_status) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,0)",
@@ -61,7 +61,7 @@ pub fn add_notification_entry(
 
 #[tauri::command]
 pub fn mark_notification_read(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute(
         "UPDATE notification_history SET read_status = 1 WHERE id = ?1",
         params![id],
@@ -72,7 +72,7 @@ pub fn mark_notification_read(state: State<'_, AppState>, id: String) -> Result<
 
 #[tauri::command]
 pub fn mark_all_notifications_read(state: State<'_, AppState>) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute("UPDATE notification_history SET read_status = 1", [])
         .map_err(|e| e.to_string())?;
     Ok(())

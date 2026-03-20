@@ -5,7 +5,7 @@ use crate::models::AppState;
 
 #[tauri::command]
 pub fn get_setting(state: State<'_, AppState>, key: String) -> Result<Option<String>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     match db.query_row(
         "SELECT value FROM settings WHERE key = ?1",
         params![key],
@@ -19,7 +19,7 @@ pub fn get_setting(state: State<'_, AppState>, key: String) -> Result<Option<Str
 
 #[tauri::command]
 pub fn set_setting(state: State<'_, AppState>, key: String, value: String) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute(
         "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
         params![key, value],
@@ -30,7 +30,7 @@ pub fn set_setting(state: State<'_, AppState>, key: String, value: String) -> Re
 
 #[tauri::command]
 pub fn get_all_settings(state: State<'_, AppState>) -> Result<HashMap<String, String>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let mut stmt = db
         .prepare("SELECT key, value FROM settings")
         .map_err(|e| e.to_string())?;

@@ -5,6 +5,12 @@ pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
 }
 
+impl AppState {
+    pub fn get_db(&self) -> Result<std::sync::MutexGuard<'_, rusqlite::Connection>, String> {
+        self.db.lock().map_err(|e| e.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tag {
     pub label: String,

@@ -369,7 +369,7 @@ fn build_suggestions_context(
 
 #[tauri::command]
 pub fn get_suggestions(state: State<'_, AppState>) -> Result<Vec<AiSuggestion>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let mut stmt = db
         .prepare(
             "SELECT id, icon, title, description, source, impact, category, confidence, status, created_at, responded_at \
@@ -402,7 +402,7 @@ pub fn get_suggestions(state: State<'_, AppState>) -> Result<Vec<AiSuggestion>, 
 
 #[tauri::command]
 pub fn get_last_suggestions_run(state: State<'_, AppState>) -> Result<Option<String>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let result: Option<String> = db
         .query_row(
             "SELECT ran_at FROM ai_suggestions_log ORDER BY ran_at DESC LIMIT 1",
@@ -422,7 +422,7 @@ pub fn respond_to_suggestion(
     if status != "accepted" && status != "rejected" && status != "later" {
         return Err("Le statut doit être 'accepted', 'rejected' ou 'later'.".to_string());
     }
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute(
         "UPDATE ai_suggestions SET status = ?1, responded_at = datetime('now') WHERE id = ?2",
         params![status, id],
@@ -434,7 +434,7 @@ pub fn respond_to_suggestion(
 #[tauri::command]
 pub async fn check_and_run_suggestions(state: State<'_, AppState>) -> Result<bool, String> {
     let should_run = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let last_run: Option<String> = db
             .query_row(
                 "SELECT ran_at FROM ai_suggestions_log ORDER BY ran_at DESC LIMIT 1",
@@ -472,7 +472,7 @@ pub async fn run_suggestions_now(state: State<'_, AppState>) -> Result<bool, Str
 
 async fn run_suggestions_analysis(state: &State<'_, AppState>) -> Result<bool, String> {
     let (provider_id, api_key, model, messages) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
 
         let (provider, model) = get_active_provider(&db)?;
 
@@ -491,7 +491,7 @@ async fn run_suggestions_analysis(state: &State<'_, AppState>) -> Result<bool, S
     let parsed = parse_suggestions_response(&raw)?;
 
     {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         let new_count = parsed.suggestions.len() as i32;
 

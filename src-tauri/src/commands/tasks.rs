@@ -76,9 +76,21 @@ fn load_task(db: &rusqlite::Connection, task_id: &str) -> Result<Task, String> {
     })
 }
 
+/// Query task IDs with a given WHERE clause and params, then load full tasks.
+fn query_task_ids(db: &rusqlite::Connection, where_clause: &str, p: &[&dyn rusqlite::types::ToSql]) -> Result<Vec<String>, String> {
+    let sql = format!("SELECT id FROM tasks WHERE {where_clause}");
+    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
+    let ids: Vec<String> = stmt
+        .query_map(p, |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(ids)
+}
+
 #[tauri::command]
 pub fn get_all_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let mut stmt = db
         .prepare("SELECT id FROM tasks ORDER BY position")
         .map_err(|e| e.to_string())?;
@@ -92,43 +104,20 @@ pub fn get_all_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
 
 #[tauri::command]
 pub fn get_tasks(state: State<'_, AppState>, context: String) -> Result<Vec<Task>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let ids: Vec<String> = if context == "today" {
         let today = Local::now().format("%Y-%m-%d").to_string();
-        let mut stmt = db
-            .prepare("SELECT id FROM tasks WHERE (view_context = ?1 AND scheduled_date IS NULL) OR scheduled_date = ?2 ORDER BY position")
-            .map_err(|e| e.to_string())?;
-        let result: Vec<String> = stmt
-            .query_map(params![context, today], |row| row.get(0))
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-        result
+        query_task_ids(&db, "(view_context = ?1 AND scheduled_date IS NULL) OR scheduled_date = ?2 ORDER BY position", &[&context, &today])?
     } else {
-        let mut stmt = db
-            .prepare("SELECT id FROM tasks WHERE view_context = ?1 ORDER BY position")
-            .map_err(|e| e.to_string())?;
-        let result: Vec<String> = stmt
-            .query_map(params![context], |row| row.get(0))
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-        result
+        query_task_ids(&db, "view_context = ?1 ORDER BY position", &[&context])?
     };
     load_tasks(&db, &ids)
 }
 
 #[tauri::command]
 pub fn get_tasks_by_date(state: State<'_, AppState>, date: String) -> Result<Vec<Task>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = db
-        .prepare("SELECT id FROM tasks WHERE scheduled_date = ?1 ORDER BY position")
-        .map_err(|e| e.to_string())?;
-    let ids: Vec<String> = stmt
-        .query_map(params![date], |row| row.get(0))
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+    let db = state.get_db()?;
+    let ids = query_task_ids(&db, "scheduled_date = ?1 ORDER BY position", &[&date])?;
     load_tasks(&db, &ids)
 }
 
@@ -138,44 +127,23 @@ pub fn get_tasks_by_date_range(
     start_date: String,
     end_date: String,
 ) -> Result<Vec<Task>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = db
-        .prepare("SELECT id FROM tasks WHERE scheduled_date >= ?1 AND scheduled_date <= ?2 ORDER BY scheduled_date, position")
-        .map_err(|e| e.to_string())?;
-    let ids: Vec<String> = stmt
-        .query_map(params![start_date, end_date], |row| row.get(0))
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+    let db = state.get_db()?;
+    let ids = query_task_ids(&db, "scheduled_date >= ?1 AND scheduled_date <= ?2 ORDER BY scheduled_date, position", &[&start_date, &end_date])?;
     load_tasks(&db, &ids)
 }
 
 #[tauri::command]
 pub fn get_overdue_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let today = Local::now().format("%Y-%m-%d").to_string();
-    let mut stmt = db
-        .prepare("SELECT id FROM tasks WHERE scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position")
-        .map_err(|e| e.to_string())?;
-    let ids: Vec<String> = stmt
-        .query_map(params![today], |row| row.get(0))
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+    let ids = query_task_ids(&db, "scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position", &[&today])?;
     load_tasks(&db, &ids)
 }
 
 #[tauri::command]
 pub fn get_overdue_tasks_for_date(state: State<'_, AppState>, before_date: String) -> Result<Vec<Task>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = db
-        .prepare("SELECT id FROM tasks WHERE scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position")
-        .map_err(|e| e.to_string())?;
-    let ids: Vec<String> = stmt
-        .query_map(params![before_date], |row| row.get(0))
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+    let db = state.get_db()?;
+    let ids = query_task_ids(&db, "scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position", &[&before_date])?;
     load_tasks(&db, &ids)
 }
 
@@ -192,7 +160,7 @@ pub fn create_task(
     importance: Option<i32>,
     strategy_id: Option<String>,
 ) -> Result<Task, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let id = uuid::Uuid::new_v4().to_string();
     let ctx = context.as_deref().unwrap_or("today");
     let urg = urgency.unwrap_or(3);
@@ -237,61 +205,70 @@ pub fn update_task(
     description: Option<String>,
     strategy_id: Option<String>,
 ) -> Result<Task, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    if let Some(v) = &name {
-        db.execute("UPDATE tasks SET name = ?1 WHERE id = ?2", params![v, id])
-            .map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
+
+    let mut sets: Vec<String> = Vec::new();
+    let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if let Some(v) = name {
+        sets.push("name = ?".to_string());
+        values.push(Box::new(v));
     }
     if let Some(v) = done {
-        db.execute("UPDATE tasks SET done = ?1 WHERE id = ?2", params![v, id])
-            .map_err(|e| e.to_string())?;
+        sets.push("done = ?".to_string());
+        values.push(Box::new(v));
     }
-    if let Some(v) = &priority {
-        db.execute("UPDATE tasks SET priority = ?1 WHERE id = ?2", params![v, id])
-            .map_err(|e| e.to_string())?;
+    if let Some(v) = priority {
+        sets.push("priority = ?".to_string());
+        values.push(Box::new(v));
     }
     if let Some(v) = estimated_minutes {
-        let val: Option<i32> = if v == 0 { None } else { Some(v) };
-        db.execute("UPDATE tasks SET estimated_minutes = ?1 WHERE id = ?2", params![val, id])
-            .map_err(|e| e.to_string())?;
+        sets.push("estimated_minutes = ?".to_string());
+        values.push(Box::new(if v == 0 { None::<i32> } else { Some(v) }));
     }
     if let Some(v) = ai_decomposed {
-        db.execute("UPDATE tasks SET ai_decomposed = ?1 WHERE id = ?2", params![v, id])
-            .map_err(|e| e.to_string())?;
+        sets.push("ai_decomposed = ?".to_string());
+        values.push(Box::new(v));
     }
-    if let Some(v) = &scheduled_date {
-        db.execute("UPDATE tasks SET scheduled_date = ?1 WHERE id = ?2", params![v, id])
-            .map_err(|e| e.to_string())?;
+    if let Some(v) = scheduled_date {
+        sets.push("scheduled_date = ?".to_string());
+        values.push(Box::new(v));
     }
     if let Some(v) = urgency {
-        let val: Option<i32> = if v == 0 { None } else { Some(v) };
-        db.execute("UPDATE tasks SET urgency = ?1 WHERE id = ?2", params![val, id])
-            .map_err(|e| e.to_string())?;
+        sets.push("urgency = ?".to_string());
+        values.push(Box::new(if v == 0 { None::<i32> } else { Some(v) }));
     }
     if let Some(v) = importance {
-        let val: Option<i32> = if v == 0 { None } else { Some(v) };
-        db.execute("UPDATE tasks SET importance = ?1 WHERE id = ?2", params![val, id])
-            .map_err(|e| e.to_string())?;
+        sets.push("importance = ?".to_string());
+        values.push(Box::new(if v == 0 { None::<i32> } else { Some(v) }));
     }
-    if let Some(v) = &view_context {
-        db.execute("UPDATE tasks SET view_context = ?1 WHERE id = ?2", params![v, id])
-            .map_err(|e| e.to_string())?;
+    if let Some(v) = view_context {
+        sets.push("view_context = ?".to_string());
+        values.push(Box::new(v));
     }
-    if let Some(v) = &description {
-        db.execute("UPDATE tasks SET description = ?1 WHERE id = ?2", params![v, id])
-            .map_err(|e| e.to_string())?;
+    if let Some(v) = description {
+        sets.push("description = ?".to_string());
+        values.push(Box::new(v));
     }
     if strategy_id.is_some() {
-        let val = strategy_id.as_deref().filter(|s| !s.is_empty());
-        db.execute("UPDATE tasks SET strategy_id = ?1 WHERE id = ?2", params![val, id])
-            .map_err(|e| e.to_string())?;
+        sets.push("strategy_id = ?".to_string());
+        let val = strategy_id.filter(|s| !s.is_empty());
+        values.push(Box::new(val));
     }
+
+    if !sets.is_empty() {
+        values.push(Box::new(id.clone()));
+        let sql = format!("UPDATE tasks SET {} WHERE id = ?", sets.join(", "));
+        let params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+        db.execute(&sql, params.as_slice()).map_err(|e| e.to_string())?;
+    }
+
     load_task(&db, &id)
 }
 
 #[tauri::command]
 pub fn get_all_tags(state: State<'_, AppState>) -> Result<Vec<Tag>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let mut stmt = db
         .prepare(
             "SELECT label, color FROM task_tags \
@@ -318,7 +295,7 @@ pub fn set_task_tags(
     task_id: String,
     tags: Vec<Tag>,
 ) -> Result<Task, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute("DELETE FROM task_tags WHERE task_id = ?1", params![task_id])
         .map_err(|e| e.to_string())?;
     let mut seen = std::collections::HashSet::new();
@@ -338,7 +315,7 @@ pub fn set_task_tags(
 
 #[tauri::command]
 pub fn toggle_task(state: State<'_, AppState>, id: String) -> Result<Task, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute("UPDATE tasks SET done = 1 - done WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     load_task(&db, &id)
@@ -346,7 +323,7 @@ pub fn toggle_task(state: State<'_, AppState>, id: String) -> Result<Task, Strin
 
 #[tauri::command]
 pub fn delete_task(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute("DELETE FROM tasks WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -354,7 +331,7 @@ pub fn delete_task(state: State<'_, AppState>, id: String) -> Result<(), String>
 
 #[tauri::command]
 pub fn clear_all_tasks(state: State<'_, AppState>) -> Result<u64, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let count = db
         .execute("DELETE FROM tasks", [])
         .map_err(|e| e.to_string())? as u64;
@@ -363,7 +340,7 @@ pub fn clear_all_tasks(state: State<'_, AppState>) -> Result<u64, String> {
 
 #[tauri::command]
 pub fn clear_today_tasks(state: State<'_, AppState>) -> Result<u64, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let today = Local::now().format("%Y-%m-%d").to_string();
     let count = db
         .execute(
@@ -376,7 +353,7 @@ pub fn clear_today_tasks(state: State<'_, AppState>) -> Result<u64, String> {
 
 #[tauri::command]
 pub fn reorder_tasks(state: State<'_, AppState>, ids: Vec<String>) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     for (i, id) in ids.iter().enumerate() {
         db.execute("UPDATE tasks SET position = ?1 WHERE id = ?2", params![i as i32, id])
             .map_err(|e| e.to_string())?;
@@ -390,7 +367,7 @@ pub fn set_micro_steps(
     task_id: String,
     steps: Vec<MicroStep>,
 ) -> Result<Task, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute("DELETE FROM micro_steps WHERE task_id = ?1", params![task_id])
         .map_err(|e| e.to_string())?;
     for (i, step) in steps.iter().enumerate() {
@@ -412,7 +389,7 @@ pub fn set_micro_steps(
 
 #[tauri::command]
 pub fn toggle_micro_step(state: State<'_, AppState>, id: String) -> Result<MicroStep, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute("UPDATE micro_steps SET done = 1 - done WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     db.query_row(
@@ -432,7 +409,7 @@ pub fn toggle_micro_step(state: State<'_, AppState>, id: String) -> Result<Micro
 
 #[tauri::command]
 pub fn get_streak(state: State<'_, AppState>) -> Result<i32, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let today = Local::now().date_naive();
     let mut streak: i32 = 0;
     let mut consecutive_empty = 0;

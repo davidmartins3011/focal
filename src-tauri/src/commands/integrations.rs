@@ -49,7 +49,7 @@ fn load_integration(db: &rusqlite::Connection, id: &str) -> Result<Integration, 
 
 #[tauri::command]
 pub fn get_integrations(state: State<'_, AppState>) -> Result<Vec<Integration>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let mut stmt = db
         .prepare("SELECT id FROM integrations ORDER BY category, name")
         .map_err(|e| e.to_string())?;
@@ -71,7 +71,7 @@ pub fn update_integration_connection(
     id: String,
     connected: bool,
 ) -> Result<Integration, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute(
         "UPDATE integrations SET connected = ?1 WHERE id = ?2",
         params![connected, id],
@@ -87,7 +87,7 @@ pub fn update_integration_context(
     rules: Vec<IntegrationRule>,
     extra_context: String,
 ) -> Result<Integration, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
 
     db.execute(
         "UPDATE integrations SET extra_context = ?1 WHERE id = ?2",
@@ -119,7 +119,7 @@ pub fn get_oauth_credentials(
     state: State<'_, AppState>,
     provider: String,
 ) -> Result<OAuthCredentialsInfo, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     match oauth::load_credentials(&db, &provider) {
         Ok((client_id, _)) => Ok(OAuthCredentialsInfo {
             provider,
@@ -141,7 +141,7 @@ pub fn set_oauth_credentials(
     client_id: String,
     client_secret: String,
 ) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     oauth::store_credentials(&db, &provider, &client_id, &client_secret)
 }
 
@@ -160,7 +160,7 @@ pub async fn start_oauth(
 
     // 1. Load credentials (under DB lock)
     let (client_id, client_secret) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         oauth::load_credentials(&db, provider)?
     };
 
@@ -193,7 +193,7 @@ pub async fn start_oauth(
 
     // 5. Store tokens per integration and mark as connected
     {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         oauth::store_tokens(&db, &integration_id, &tokens, &account_email)?;
         db.execute(
             "UPDATE integrations SET connected = 1, account_email = ?1 WHERE id = ?2",
@@ -210,7 +210,7 @@ pub fn disconnect_integration(
     state: State<'_, AppState>,
     integration_id: String,
 ) -> Result<Integration, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
 
     db.execute(
         "UPDATE integrations SET connected = 0, account_email = '' WHERE id = ?1",
@@ -269,7 +269,7 @@ async fn resolve_access_token(
     provider: &str,
 ) -> Result<String, String> {
     let (tokens, client_id, client_secret) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let tokens = oauth::load_tokens(&db, integration_id)?;
         let (cid, csec) = oauth::load_credentials(&db, provider)?;
         (tokens, cid, csec)
@@ -279,7 +279,7 @@ async fn resolve_access_token(
         oauth::get_valid_access_token(tokens, provider, &client_id, &client_secret).await?;
 
     if let Some(new_tokens) = refreshed {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
         let account_email: String = db
             .query_row(
                 "SELECT account_email FROM integrations WHERE id = ?1",

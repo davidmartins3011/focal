@@ -17,7 +17,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Task, Tag } from "../types";
+import type { Task, Tag, PopoverType } from "../types";
 import AddTaskInput from "./AddTaskInput";
 import TodoItemRow from "./TodoItemRow";
 import TaskDetailModal from "./TaskDetailModal";
@@ -28,8 +28,6 @@ import styles from "./TodoView.module.css";
 
 type ViewMode = "list" | "calendar";
 type Filter = "all" | "done" | "tag" | "strategy";
-type PopoverType = "priority" | "schedule";
-
 function SortableTodoItemRow(props: React.ComponentProps<typeof TodoItemRow>) {
   const {
     attributes,

@@ -1,13 +1,10 @@
 import { useRef, useEffect } from "react";
-import type { Task } from "../types";
+import type { Task, PriorityScore, PopoverType } from "../types";
 import { formatScheduledDate, formatQuickDateHint, getQuickDates } from "../utils/dateFormat";
 import PriorityBadge from "./PriorityBadge";
+import { CheckmarkIcon } from "./icons";
 import useStrategies from "../hooks/useStrategies";
 import styles from "./TodoView.module.css";
-
-type PopoverType = "priority" | "schedule";
-
-type PriorityScore = 1 | 2 | 3 | 4 | 5;
 
 export interface TodoItemRowProps {
   task: Task;
@@ -82,11 +79,7 @@ export default function TodoItemRow({
         className={`${styles.checkbox} ${task.done ? styles.checked : ""}`}
         onClick={() => onToggle(task.id)}
       >
-        {task.done && (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
+        {task.done && <CheckmarkIcon size={12} strokeWidth={3} />}
       </button>
 
       <div className={styles.todoBody}>

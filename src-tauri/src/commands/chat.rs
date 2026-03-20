@@ -4,7 +4,7 @@ use crate::models::{AppState, ChatMessage, ChatMessageStep};
 
 #[tauri::command]
 pub fn get_chat_messages(state: State<'_, AppState>) -> Result<Vec<ChatMessage>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     let mut stmt = db
         .prepare("SELECT id, role, content FROM chat_messages WHERE cleared = 0 ORDER BY created_at")
         .map_err(|e| e.to_string())?;
@@ -37,7 +37,7 @@ pub fn get_chat_messages(state: State<'_, AppState>) -> Result<Vec<ChatMessage>,
 
 #[tauri::command]
 pub fn clear_chat(state: State<'_, AppState>) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let db = state.get_db()?;
     db.execute("UPDATE chat_messages SET cleared = 1 WHERE cleared = 0", [])
         .map_err(|e| e.to_string())?;
     Ok(())

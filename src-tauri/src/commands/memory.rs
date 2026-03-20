@@ -143,7 +143,7 @@ async fn run_analysis_for_date(
     log_in_history: bool,
 ) -> Result<bool, String> {
     let (provider_id, api_key, model, conversations, existing_insights) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
 
         if log_in_history {
             let already_done: bool = db
@@ -201,7 +201,7 @@ async fn run_analysis_for_date(
     let parsed = parse_analysis_response(&raw)?;
 
     {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let db = state.get_db()?;
 
         for ri in &parsed.insights {
             let existing_id: Option<String> = db
