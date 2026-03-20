@@ -61,6 +61,8 @@ interface PopoverState {
 export default function TodoView() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkText, setBulkText] = useState("");
 
   useEffect(() => {
     getAllTasks()
@@ -105,6 +107,23 @@ export default function TodoView() {
       })
       .catch((err) => console.error("[TodoView] createTask error:", err));
   }, []);
+
+  const handleBulkImport = useCallback(async () => {
+    const lines = bulkText.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return;
+    const created: Task[] = [];
+    for (const line of lines) {
+      try {
+        const task = await createTask({ name: line });
+        created.push(task);
+      } catch (err) {
+        console.error("[TodoView] bulk createTask error:", err);
+      }
+    }
+    setTasks((prev) => [...created, ...prev]);
+    setBulkText("");
+    setShowBulkImport(false);
+  }, [bulkText]);
 
   const toggleDone = (id: string) => {
     setTasks((prev) =>
@@ -373,7 +392,21 @@ export default function TodoView() {
             onDragCancel={() => setActiveId(null)}
           >
             <div className={styles.content}>
-              <AddTaskInput onAdd={handleAddTask} />
+              <div className={styles.addRow}>
+                <AddTaskInput onAdd={handleAddTask} />
+                <button
+                  className={styles.bulkImportBtn}
+                  onClick={() => setShowBulkImport(true)}
+                  title="Importer plusieurs tâches"
+                  aria-label="Import en masse"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </button>
+              </div>
 
               <div className={styles.searchArea}>
                 <svg className={styles.searchIcon} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -550,6 +583,35 @@ export default function TodoView() {
         </>
       ) : (
         <CalendarView />
+      )}
+
+      {showBulkImport && (
+        <div className={styles.bulkOverlay} onClick={() => setShowBulkImport(false)}>
+          <div className={styles.bulkModal} onClick={(e) => e.stopPropagation()}>
+            <h3 className={styles.bulkTitle}>Import en masse</h3>
+            <p className={styles.bulkDesc}>Une tâche par ligne</p>
+            <textarea
+              className={styles.bulkTextarea}
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder={"Faire les courses\nAppeler le médecin\nEnvoyer le devis"}
+              rows={8}
+              autoFocus
+            />
+            <div className={styles.bulkActions}>
+              <button className={styles.bulkCancelBtn} onClick={() => { setShowBulkImport(false); setBulkText(""); }}>
+                Annuler
+              </button>
+              <button
+                className={styles.bulkConfirmBtn}
+                onClick={handleBulkImport}
+                disabled={!bulkText.trim()}
+              >
+                Importer {bulkText.split("\n").filter((l) => l.trim()).length || ""} tâche{bulkText.split("\n").filter((l) => l.trim()).length > 1 ? "s" : ""}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

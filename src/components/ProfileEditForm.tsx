@@ -335,7 +335,7 @@ export default function ProfileEditForm({ editForm, onUpdate, onSave, onCancel }
                 key={opt.id}
                 type="button"
                 className={`${styles.pill} ${editForm.peakProductivityTime === opt.id ? styles.pillActive : ""}`}
-                onClick={() => onUpdate("peakProductivityTime", opt.id)}
+                onClick={() => onUpdate("peakProductivityTime", editForm.peakProductivityTime === opt.id ? undefined : opt.id)}
               >
                 {opt.label}
               </button>
