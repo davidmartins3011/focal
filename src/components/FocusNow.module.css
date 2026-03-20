@@ -1,26 +1,25 @@
 .focusBar {
   position: fixed;
-  bottom: 16px;
-  left: calc(52px + (58vw - 52px) / 2);
-  transform: translateX(-50%);
+  bottom: 12px;
+  left: 62px;
   z-index: 100;
   display: flex;
   align-items: center;
-  gap: 14px;
-  background: rgba(var(--bg-rgb, 20, 18, 30), 0.92);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(var(--accent-rgb), 0.25);
-  border-radius: 100px;
-  padding: 8px 10px 8px 16px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-  animation: slideUp 0.3s ease both;
-  max-width: min(580px, calc(58vw - 52px - 32px));
+  gap: 8px;
+  background: rgba(var(--bg-rgb, 20, 18, 30), 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  border-radius: 8px;
+  padding: 5px 8px 5px 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.25s ease both;
+  max-width: 340px;
 }
 
 .indicator {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--accent);
   flex-shrink: 0;
@@ -28,9 +27,9 @@
 }
 
 .task {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -38,19 +37,20 @@
 }
 
 .time {
-  font-size: 11px;
-  color: var(--text2);
+  font-size: 10px;
+  color: var(--text3, var(--text2));
   white-space: nowrap;
   flex-shrink: 0;
+  opacity: 0.6;
 }
 
 .btn {
   background: var(--accent);
   color: var(--bg);
   border: none;
-  border-radius: 100px;
-  padding: 6px 16px;
-  font-size: 12px;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   font-family: 'Outfit', sans-serif;
@@ -67,11 +67,11 @@
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(10px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
 }
 

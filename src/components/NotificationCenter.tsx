@@ -26,10 +26,20 @@ export default function NotificationCenter({
 }: NotificationCenterProps) {
   const todayStr = toISODate(new Date());
 
-  const todayEntries = history
+  const allUnread = history
     .filter((e) => !e.read && (e.firedAt.slice(0, 10) === todayStr || e.missed))
-    .sort((a, b) => b.firedAt.localeCompare(a.firedAt))
-    .slice(0, 8);
+    .sort((a, b) => b.firedAt.localeCompare(a.firedAt));
+
+  // Deduplicate missed entries: keep only the most recent per reminderId
+  const seenMissedReminders = new Set<string>();
+  const todayEntries: NotificationHistoryEntry[] = [];
+  for (const e of allUnread) {
+    if (e.missed) {
+      if (seenMissedReminders.has(e.reminderId)) continue;
+      seenMissedReminders.add(e.reminderId);
+    }
+    todayEntries.push(e);
+  }
 
   const missedEntries = todayEntries.filter((e) => e.missed);
   const liveEntries = todayEntries.filter((e) => !e.missed);
@@ -72,9 +82,8 @@ export default function NotificationCenter({
                       </span>
                     ) : (
                       <span>
-                        Tu avais {missedEntries.length} rappels prévus
-                        ({missedEntries.map((e) => e.scheduledTime).join(", ")}).
-                        {" "}C'est ok, l'important c'est maintenant.
+                        Tu avais {missedEntries.length} rappels prévus.
+                        {" "}L'important c'est maintenant.
                       </span>
                     )}
                   </div>

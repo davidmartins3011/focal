@@ -51,9 +51,35 @@ export default function App() {
   const [stuckTask, setStuckTask] = useState<{ taskId: string; taskName: string } | null>(null);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
   const [strategyRefreshKey, setStrategyRefreshKey] = useState(0);
+  const [leftWidth, setLeftWidth] = useState(58);
+  const [isDragging, setIsDragging] = useState(false);
   const loaded = useRef(false);
 
   const notif = useNotifications(workingDays);
+
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const pct = (ev.clientX / window.innerWidth) * 100;
+      const clamped = Math.min(Math.max(pct, 25), 80);
+      setLeftWidth(clamped);
+    };
+
+    const onMouseUp = () => {
+      setIsDragging(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, []);
 
   useEffect(() => {
     getAllSettings()
@@ -361,7 +387,7 @@ export default function App() {
 
   return (
     <div className={styles.app}>
-      <div className={styles.left}>
+      <div className={styles.left} style={{ width: `${leftWidth}%` }}>
         <div className={styles.leftInner}>
           <Sidebar
             activePage={activePage}
@@ -373,6 +399,10 @@ export default function App() {
           {renderPage()}
         </div>
       </div>
+      <div
+        className={`${styles.divider} ${isDragging ? styles.dividerActive : ""}`}
+        onMouseDown={handleDividerMouseDown}
+      />
       <div className={styles.right}>
         <ChatPanel
           onStartOnboarding={handleStartOnboarding}

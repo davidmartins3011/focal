@@ -366,12 +366,22 @@ export function useNotifications(workingDays: WeekDayId[]) {
   }, []);
 
   const todayStr = toISODate(new Date());
-  const unreadNotifs = useMemo(
-    () => notifHistory.filter(
-      (e) => !e.read && (e.firedAt.slice(0, 10) === todayStr || e.missed)
-    ),
-    [notifHistory, todayStr],
-  );
+  const unreadNotifs = useMemo(() => {
+    const all = notifHistory
+      .filter((e) => !e.read && (e.firedAt.slice(0, 10) === todayStr || e.missed))
+      .sort((a, b) => b.firedAt.localeCompare(a.firedAt));
+    // Deduplicate missed: keep only the most recent per reminderId
+    const seenMissed = new Set<string>();
+    const result: NotificationHistoryEntry[] = [];
+    for (const e of all) {
+      if (e.missed) {
+        if (seenMissed.has(e.reminderId)) continue;
+        seenMissed.add(e.reminderId);
+      }
+      result.push(e);
+    }
+    return result;
+  }, [notifHistory, todayStr]);
   const hasUnreadNotifs = unreadNotifs.length > 0;
   const unreadCount = unreadNotifs.length;
 

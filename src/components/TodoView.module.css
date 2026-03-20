@@ -103,53 +103,6 @@
   padding: 20px 32px 32px;
 }
 
-/* ─── Add area ─── */
-
-.addArea {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-
-.addInput {
-  flex: 1;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border2);
-  background: var(--bg2);
-  color: var(--text);
-  font-size: 13px;
-  font-family: 'Outfit', sans-serif;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.addInput::placeholder {
-  color: var(--text3);
-}
-
-.addInput:focus {
-  border-color: var(--accent);
-}
-
-.addBtn {
-  padding: 8px 18px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(var(--accent-rgb), 0.2);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: 'Outfit', sans-serif;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-
-.addBtn:hover {
-  background: rgba(var(--accent-rgb), 0.18);
-}
-
 /* ─── Search ─── */
 
 .searchArea {

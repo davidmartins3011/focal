@@ -7,16 +7,25 @@
 
 ## Providers supportés
 
-| Provider | Modèles disponibles | Modèle par défaut | Endpoint | Header d'auth |
-|----------|--------------------|--------------------|----------|----------------|
-| OpenAI | `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini` | `gpt-4o` | `https://api.openai.com/v1/chat/completions` | `Authorization: Bearer {key}` |
-| Anthropic | `claude-4-opus`, `claude-4-sonnet` | `claude-sonnet-4-20250514` | `https://api.anthropic.com/v1/messages` | `x-api-key: {key}` + `anthropic-version: 2023-06-01` |
-| Mistral | `mistral-large`, `mistral-medium`, `codestral` | `mistral-large-latest` | `https://api.mistral.ai/v1/chat/completions` | `Authorization: Bearer {key}` |
+| Provider | Modèles disponibles | Modèle par défaut | Modèle léger (background) | Endpoint | Header d'auth |
+|----------|--------------------|--------------------|--------------------------|----------|----------------|
+| OpenAI | `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano` | `gpt-5.4-mini` | `gpt-5.4-nano` | `https://api.openai.com/v1/chat/completions` | `Authorization: Bearer {key}` |
+| Anthropic | `claude-sonnet-4.6`, `claude-opus-4.6`, `claude-haiku-4.5` | `claude-sonnet-4-6` | `claude-haiku-4-5` | `https://api.anthropic.com/v1/messages` | `x-api-key: {key}` + `anthropic-version: 2023-06-01` |
+| Mistral | `mistral-large`, `mistral-medium`, `codestral` | `mistral-large-latest` | `mistral-medium-latest` | `https://api.mistral.ai/v1/chat/completions` | `Authorization: Bearer {key}` |
 
-L'utilisateur choisit un modèle spécifique dans le dropdown du ChatPanel. `resolve_api_model()` convertit l'ID frontend en ID d'API (ex : `claude-4-sonnet` → `claude-sonnet-4-20250514`).
+L'utilisateur choisit un modèle spécifique dans le dropdown du ChatPanel. `resolve_api_model()` convertit l'ID frontend en ID d'API (ex : `claude-sonnet-4.6` → `claude-sonnet-4-6`).
 
 OpenAI et Mistral utilisent le même format d'API (OpenAI-compatible), gérés par `call_openai_compatible()`.
 Anthropic a son propre format, géré par `call_anthropic()`.
+
+### Stratégie hybride de modèles
+
+Pour optimiser les coûts, l'app utilise deux niveaux de modèles :
+
+- **Modèle principal** (`get_active_provider`) : le modèle sélectionné par l'utilisateur, utilisé pour les interactions user-facing (chat, préparations jour/semaine/période, onboarding).
+- **Modèle léger** (`get_lightweight_provider`) : le modèle le moins cher du même provider, utilisé automatiquement pour les tâches background/simples (décomposition de tâches, mémoire IA, analyse de profil URL).
+
+`resolve_lightweight_model()` retourne le modèle économique par provider : `gpt-5.4-nano` pour OpenAI, `claude-haiku-4-5` pour Anthropic, `mistral-medium-latest` pour Mistral.
 
 ---
 
@@ -44,7 +53,7 @@ La logique est dans `get_active_provider()` qui retourne `(ProviderConfig, Strin
     { "id": "anthropic", "enabled": false, "apiKey": "sk-ant-..." },
     { "id": "mistral", "enabled": false, "apiKey": "" }
   ],
-  "selectedModel": "gpt-4o"
+  "selectedModel": "gpt-5.4-mini"
 }
 ```
 
@@ -267,12 +276,13 @@ Un `id_map` (construit à partir du system prompt) résout les IDs courts (ex: `
 ## Points d'attention pour l'IA qui code
 
 1. **Clés API en backend uniquement** : jamais exposées côté frontend
-2. **Un seul modèle utilisé par requête** : déterminé par `selectedModel` dans les settings
+2. **Deux niveaux de modèles** : le modèle sélectionné par l'utilisateur pour le chat/preps (via `get_active_provider`), et un modèle léger automatique pour les tâches background (via `get_lightweight_provider`)
 3. **Le system prompt est dynamique** : il change selon le profil, les tâches du jour/semaine/inbox et la mémoire IA
 4. **Les messages sont persistés** : l'historique est stocké en SQLite
-5. **La décomposition est séparée du chat** : `decompose_task` a son propre prompt optimisé
+5. **La décomposition utilise le modèle léger** : `decompose_task` a son propre prompt optimisé et utilise le modèle économique
 6. **Les micro-étapes sont persistées** : après décomposition, elles sont sauvées via `set_micro_steps`
 7. **Pas de streaming** : les réponses sont reçues en bloc (pas de SSE)
 8. **L'IA peut agir sur les tâches** : le chat peut ajouter, supprimer, modifier, cocher et réordonner des tâches
 9. **Les préparations sont conversationnelles** : jour/semaine/période utilisent un historique d'échange dédié
-10. **La mémoire est cumulative** : les insights sont enrichis à chaque analyse
+10. **La mémoire est cumulative** : les insights sont enrichis à chaque analyse, via le modèle léger
+11. **L'analyse de profil URL utilise le modèle léger** : tâche one-shot simple, pas besoin du modèle principal

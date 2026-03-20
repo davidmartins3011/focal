@@ -293,9 +293,9 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
 
   const applyTaskActions = useCallback(
     async (actions: {
-      tasksToAdd?: { name: string; estimatedMinutes?: number; priority?: string; scheduledDate?: string; urgency?: number; importance?: number; tags?: Tag[] }[];
+      tasksToAdd?: { name: string; estimatedMinutes?: number; priority?: string; scheduledDate?: string; urgency?: number; importance?: number; strategyId?: string; tags?: Tag[] }[];
       tasksToRemove?: string[];
-      tasksToUpdate?: { id: string; name?: string; done?: boolean; priority?: string; scheduledDate?: string; estimatedMinutes?: number; urgency?: number; importance?: number; description?: string }[];
+      tasksToUpdate?: { id: string; name?: string; done?: boolean; priority?: string; scheduledDate?: string; estimatedMinutes?: number; urgency?: number; importance?: number; description?: string; strategyId?: string }[];
       tasksToToggle?: string[];
       tasksToReorder?: string[];
       tagsToSet?: TagAction[];
@@ -320,7 +320,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       for (const t of actions.tasksToAdd ?? []) {
         if (localTasks.some((ex) => ex.name.toLowerCase() === t.name.toLowerCase())) continue;
         try {
-          const created = await createTask({ name: t.name, context: "today", estimatedMinutes: t.estimatedMinutes, priority: t.priority, scheduledDate: t.scheduledDate, urgency: t.urgency, importance: t.importance, tags: t.tags });
+          const created = await createTask({ name: t.name, context: "today", estimatedMinutes: t.estimatedMinutes, priority: t.priority, scheduledDate: t.scheduledDate, urgency: t.urgency, importance: t.importance, strategyId: t.strategyId, tags: t.tags });
           localTasks.push(created);
           setTodayTasks((prev) => [...prev, created]);
           modified = true;
@@ -363,7 +363,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
           console.log("[ChatPanel] auto-set scheduledDate to today for overdue task:", resolvedId);
         }
         try {
-          const updated = await updateTask({ id: resolvedId, name: upd.name, done: upd.done, priority: upd.priority, scheduledDate: effectiveScheduledDate, estimatedMinutes: upd.estimatedMinutes, urgency: upd.urgency, importance: upd.importance, description: upd.description });
+          const updated = await updateTask({ id: resolvedId, name: upd.name, done: upd.done, priority: upd.priority, scheduledDate: effectiveScheduledDate, estimatedMinutes: upd.estimatedMinutes, urgency: upd.urgency, importance: upd.importance, description: upd.description, strategyId: upd.strategyId });
           const localIdx = localTasks.findIndex((t) => t.id === resolvedId);
           if (localIdx !== -1) {
             localTasks[localIdx] = updated;

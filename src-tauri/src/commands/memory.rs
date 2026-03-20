@@ -2,7 +2,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::commands::ai::{call_llm, get_active_provider};
+use crate::commands::ai::{call_llm, get_lightweight_provider};
 use crate::models::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,7 +184,7 @@ async fn run_analysis_for_date(
             return Ok(false);
         }
 
-        let (provider, model) = match get_active_provider(&db) {
+        let (provider, model) = match get_lightweight_provider(&db) {
             Ok(v) => v,
             Err(_) => return Ok(false),
         };

@@ -32,6 +32,8 @@ pub struct ChatTaskUpdate {
     pub importance: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,21 +156,35 @@ struct AiSettings {
 
 fn resolve_api_model(provider_id: &str, selected_model: Option<&str>) -> String {
     match selected_model {
-        Some("gpt-4o") => "gpt-4o",
-        Some("gpt-4o-mini") => "gpt-4o-mini",
-        Some("o1") => "o1",
-        Some("o3-mini") => "o3-mini",
-        Some("claude-4-opus") => "claude-opus-4-20250514",
-        Some("claude-4-sonnet") => "claude-sonnet-4-20250514",
+        Some("gpt-5.4") => "gpt-5.4",
+        Some("gpt-5.4-mini") => "gpt-5.4-mini",
+        Some("gpt-5.4-nano") => "gpt-5.4-nano",
+        Some("claude-sonnet-4.6") => "claude-sonnet-4-6",
+        Some("claude-opus-4.6") => "claude-opus-4-6",
+        Some("claude-haiku-4.5") => "claude-haiku-4-5",
         Some("mistral-large") => "mistral-large-latest",
         Some("mistral-medium") => "mistral-medium-latest",
         Some("codestral") => "codestral-latest",
+        // Legacy model IDs → remap to current defaults
+        Some("gpt-4o" | "gpt-4o-mini" | "o1" | "o3-mini") => "gpt-5.4-mini",
+        Some("claude-4-opus" | "claude-4-sonnet") => "claude-sonnet-4-6",
         _ => match provider_id {
-            "openai" => "gpt-4o",
-            "anthropic" => "claude-sonnet-4-20250514",
+            "openai" => "gpt-5.4-mini",
+            "anthropic" => "claude-sonnet-4-6",
             "mistral" => "mistral-large-latest",
-            _ => "gpt-4o",
+            _ => "gpt-5.4-mini",
         },
+    }
+    .to_string()
+}
+
+/// Returns the cheapest model for a given provider (used for background/simple tasks).
+fn resolve_lightweight_model(provider_id: &str) -> String {
+    match provider_id {
+        "openai" => "gpt-5.4-nano",
+        "anthropic" => "claude-haiku-4-5",
+        "mistral" => "mistral-medium-latest",
+        _ => "gpt-5.4-nano",
     }
     .to_string()
 }
@@ -200,6 +216,9 @@ pub fn get_active_provider(db: &rusqlite::Connection) -> Result<(ProviderConfig,
 
     if let Some(model_id) = selected {
         let provider_for_model = match model_id {
+            "gpt-5.4" | "gpt-5.4-mini" | "gpt-5.4-nano" => Some("openai"),
+            "claude-sonnet-4.6" | "claude-opus-4.6" | "claude-haiku-4.5" => Some("anthropic"),
+            // Legacy IDs still map to correct provider
             "gpt-4o" | "gpt-4o-mini" | "o1" | "o3-mini" => Some("openai"),
             "claude-4-opus" | "claude-4-sonnet" => Some("anthropic"),
             "mistral-large" | "mistral-medium" | "codestral" => Some("mistral"),
@@ -216,6 +235,14 @@ pub fn get_active_provider(db: &rusqlite::Connection) -> Result<(ProviderConfig,
     let provider = ready.into_iter().next().unwrap();
     let api_model = resolve_api_model(&provider.id, selected);
     Ok((provider, api_model))
+}
+
+/// Same as get_active_provider but forces the cheapest model for the provider.
+/// Used for background tasks (memory analysis, decomposition, profile URL).
+pub fn get_lightweight_provider(db: &rusqlite::Connection) -> Result<(ProviderConfig, String), String> {
+    let (provider, _) = get_active_provider(db)?;
+    let model = resolve_lightweight_model(&provider.id);
+    Ok((provider, model))
 }
 
 fn get_user_profile(db: &rusqlite::Connection) -> Option<serde_json::Value> {
@@ -563,7 +590,7 @@ fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, St
                 .map(|(id, name, done, pri, est, sched, urg, imp)| {
                     let short = assign_short_id(&mut id_counter, &id, &mut id_map);
                     let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
-                    format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
+                    format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags, None)
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -594,7 +621,7 @@ fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, St
                 .map(|(id, name, done, pri, est, urg, imp)| {
                     let short = assign_short_id(&mut id_counter, &id, &mut id_map);
                     let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
-                    format_task_line(&short, &name, done, pri.as_deref(), est, None, urg, imp, task_tags)
+                    format_task_line(&short, &name, done, pri.as_deref(), est, None, urg, imp, task_tags, None)
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -626,7 +653,7 @@ fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, St
                 .map(|(id, name, done, pri, est, sched, urg, imp)| {
                     let short = assign_short_id(&mut id_counter, &id, &mut id_map);
                     let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
-                    format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
+                    format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags, None)
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -682,7 +709,7 @@ struct OpenAIResponseFormat {
 struct OpenAIRequest {
     model: String,
     messages: Vec<OpenAIMessage>,
-    max_tokens: Option<u32>,
+    max_completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<OpenAIResponseFormat>,
 }
@@ -797,7 +824,7 @@ async fn call_openai_compatible(
     let body = OpenAIRequest {
         model: model.to_string(),
         messages: msgs,
-        max_tokens: Some(4096),
+        max_completion_tokens: Some(4096),
         response_format,
     };
 
@@ -906,6 +933,7 @@ fn parse_tasks_to_add(v: &serde_json::Value) -> Vec<DailyPrepTask> {
                             urgency: None,
                             importance: None,
                             tags: vec![],
+                            strategy_id: None,
                         });
                     }
                     let tags = t.get("tags")
@@ -925,6 +953,7 @@ fn parse_tasks_to_add(v: &serde_json::Value) -> Vec<DailyPrepTask> {
                         urgency: parse_opt_int(t, "urgency", "urgency"),
                         importance: parse_opt_int(t, "importance", "importance"),
                         tags,
+                        strategy_id: t.get("strategyId").or_else(|| t.get("strategy_id")).and_then(|v| v.as_str()).map(|s| s.to_string()),
                     })
                 })
                 .collect()
@@ -948,6 +977,7 @@ fn parse_tasks_to_update(v: &serde_json::Value) -> Vec<ChatTaskUpdate> {
                         urgency: parse_opt_int(t, "urgency", "urgency"),
                         importance: parse_opt_int(t, "importance", "importance"),
                         description: t.get("description").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        strategy_id: t.get("strategyId").or_else(|| t.get("strategy_id")).and_then(|v| v.as_str()).map(|s| s.to_string()),
                     })
                 })
                 .collect()
@@ -1232,7 +1262,7 @@ pub async fn validate_api_key(provider_id: String, api_key: String) -> Result<bo
                 .header("x-api-key", &api_key)
                 .header("anthropic-version", "2023-06-01")
                 .header("content-type", "application/json")
-                .body(r#"{"model":"claude-sonnet-4-20250514","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}"#)
+                .body(r#"{"model":"claude-sonnet-4-6","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}"#)
                 .send()
                 .await
                 .map_err(|e| format!("Erreur réseau: {e}"))?;
@@ -1325,7 +1355,7 @@ pub async fn decompose_task(
 ) -> Result<Vec<DecompStep>, String> {
     let (provider_id, api_key, model) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        let (provider, model) = get_active_provider(&db)?;
+        let (provider, model) = get_lightweight_provider(&db)?;
         (provider.id, provider.api_key, model)
     };
 
@@ -1424,6 +1454,8 @@ pub struct DailyPrepTask {
     pub importance: Option<i32>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<Tag>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy_id: Option<String>,
 }
 
 
@@ -1492,6 +1524,7 @@ fn format_task_line(
     urg: Option<i32>,
     imp: Option<i32>,
     tags: &[Tag],
+    strategy_name: Option<&str>,
 ) -> String {
     let check = if done { "✓" } else { "○" };
     let tag = pri.map_or(String::new(), |p| format!(" [priorité: {p}]"));
@@ -1505,7 +1538,8 @@ fn format_task_line(
         let labels: Vec<&str> = tags.iter().map(|t| t.label.as_str()).collect();
         format!(" #[{}]", labels.join(", "))
     };
-    format!("  {check} [{display_id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}{tags_str}")
+    let strat_str = strategy_name.map_or(String::new(), |s| format!(" → objectif: {s}"));
+    format!("  {check} [{display_id}] {name}{tag}{urg_str}{imp_str}{est_str}{sched_str}{tags_str}{strat_str}")
 }
 
 fn load_all_tags_map(db: &rusqlite::Connection) -> HashMap<String, Vec<Tag>> {
@@ -1577,6 +1611,7 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String
         String::new(),
         "PRIORISATION :".to_string(),
         format!("- Maximum {max_priority} tâche(s) dans ⚡ Priorités du jour (priority = \"main\"). C'est la limite configurée par l'utilisateur."),
+        "- RÈGLE STRICTE : ⚡ Priorités du jour ne contient QUE les tâches avec priority = \"main\". Les tâches \"secondary\" ou sans priorité vont UNIQUEMENT dans 📋 Aussi prévu. Ne JAMAIS mélanger les deux sections.".to_string(),
         format!("- Si le nombre de priorités dépasse {max_priority}, SIGNALE-LE IMMÉDIATEMENT dans ton premier message (ex: \"Tu as X priorités, le max est {max_priority}. On en enlève ?\")."),
         "- Propose des choix binaires : \"Entre [tâche A] et [tâche B], laquelle est la plus urgente ?\"".to_string(),
         "- Les tâches du reliquat qui ÉTAIENT PRIORITAIRES (priorité: main) sont de fortes candidates à redevenir priorités du jour — propose-le en premier.".to_string(),
@@ -1667,7 +1702,7 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String
                 let (id, name, done, pri, est, sched, urg, imp) = row;
                 let short = assign_short_id(&mut id_counter, &id, &mut id_map);
                 let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
-                let line = format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags);
+                let line = format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags, None);
                 if pri.as_deref() == Some("main") {
                     if !done { priority_count += 1; }
                     main_lines.push(line);
@@ -1719,7 +1754,7 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String
                 .map(|(id, name, pri, est, sched, urg, imp)| {
                     let short = assign_short_id(&mut id_counter, &id, &mut id_map);
                     let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
-                    format_task_line(&short, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
+                    format_task_line(&short, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags, None)
                 })
                 .collect();
             if !overdue_lines.is_empty() {
@@ -1794,7 +1829,17 @@ fn parse_daily_prep_response(raw: &str, id_map: &HashMap<String, String>) -> Res
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let tasks_to_add = parse_tasks_to_add(&parsed);
+    let tasks_to_add: Vec<DailyPrepTask> = parse_tasks_to_add(&parsed)
+        .into_iter()
+        .map(|mut t| {
+            if let Some(ref sid) = t.strategy_id {
+                if let Some(real) = id_map.get(sid) {
+                    t.strategy_id = Some(real.clone());
+                }
+            }
+            t
+        })
+        .collect();
     eprintln!("[daily_prep] tasksToAdd parsed: {:?}", tasks_to_add);
 
     let tasks_to_remove: Vec<String> = parse_string_list(&parsed, "tasksToRemove", "tasks_to_remove")
@@ -1808,6 +1853,11 @@ fn parse_daily_prep_response(raw: &str, id_map: &HashMap<String, String>) -> Res
         .map(|mut upd| {
             if let Some(real) = id_map.get(&upd.id) {
                 upd.id = real.clone();
+            }
+            if let Some(ref sid) = upd.strategy_id {
+                if let Some(real) = id_map.get(sid) {
+                    upd.strategy_id = Some(real.clone());
+                }
             }
             upd
         })
@@ -1946,8 +1996,10 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         "4. Explore les engagements : réunions, deadlines, livrables importants.".to_string(),
         "5. RÉPARTITION : aide activement à répartir les tâches sur les jours de la semaine (voir section RÉPARTITION DE LA CHARGE).".to_string(),
         "6. SCORES : incite à ajouter des urgences/importances sur les tâches qui n'en ont pas (voir section SCORES).".to_string(),
-        "7. Propose d'estimer les durées si pertinent.".to_string(),
-        "8. Confirme le plan et lance la semaine (prepComplete: true). IMPORTANT : quand tu mets prepComplete à true, ne remets PAS les tâches déjà ajoutées dans tasksToAdd.".to_string(),
+        "7. ESTIMATIONS DE TEMPS : propose d'estimer les durées des tâches qui n'ont pas d'estimation (voir section ESTIMATIONS).".to_string(),
+        "8. RATTACHEMENT AUX OBJECTIFS : incite à rattacher les tâches orphelines à un objectif/stratégie (voir section RATTACHEMENT).".to_string(),
+        "9. BACKLOG : parcours les tâches non planifiées et propose d'en intégrer certaines dans la semaine (voir section TÂCHES NON PLANIFIÉES).".to_string(),
+        "10. Confirme le plan et lance la semaine (prepComplete: true). IMPORTANT : quand tu mets prepComplete à true, ne remets PAS les tâches déjà ajoutées dans tasksToAdd.".to_string(),
         String::new(),
         "PRIORISATION :".to_string(),
         "- L'objectif est de garder 3-5 priorités hebdo max et un nombre réaliste de tâches par jour.".to_string(),
@@ -1981,6 +2033,35 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         "- Dans la LISTE des tâches, n'affiche un score QUE s'il est élevé (4/5 ou 5/5), format : [Urgence: 5/5]. N'affiche jamais les scores moyens (3/5 ou moins) dans la liste.".to_string(),
         "- Signale les incohérences : tâche prioritaire avec scores faibles, ou tâche non-prioritaire avec scores élevés.".to_string(),
         String::new(),
+        "ESTIMATIONS DE TEMPS :".to_string(),
+        "- INCITATION PROACTIVE : si des tâches n'ont pas d'estimation de temps (~X min), PROPOSE de les estimer.".to_string(),
+        "- Pose la question naturellement : \"Cette tâche, ça te prendrait combien de temps environ ?\" ou \"On estime les durées pour mieux répartir ta semaine ?\"".to_string(),
+        "- Si BEAUCOUP de tâches n'ont pas d'estimation, signale-le une fois : \"Plusieurs tâches n'ont pas d'estimation de temps. On fait un rapide tour ? Ça m'aidera à mieux répartir ta charge sur la semaine.\"".to_string(),
+        "- Quand l'utilisateur donne une estimation, applique-la immédiatement via tasksToUpdate (estimatedMinutes).".to_string(),
+        "- Les estimations sont essentielles pour la répartition de la charge — insiste gentiment si l'utilisateur les ignore.".to_string(),
+        String::new(),
+        "RATTACHEMENT AUX OBJECTIFS/STRATÉGIES :".to_string(),
+        "- Les objectifs/stratégies de la période active sont listés plus haut avec des IDs courts (s1, s2...).".to_string(),
+        "- INCITATION PROACTIVE : si des tâches ne sont pas rattachées à un objectif (pas de \"→ objectif:\" dans leur ligne), PROPOSE de les rattacher.".to_string(),
+        "- Pose la question naturellement : \"Cette tâche, elle se rattache à quel objectif ?\" ou \"On associe tes tâches aux objectifs pour mieux suivre ton avancement ?\"".to_string(),
+        "- Si BEAUCOUP de tâches ne sont pas rattachées, signale-le une fois : \"Plusieurs tâches ne sont pas rattachées à un objectif. On fait un rapide tour ? Ça te permettra de voir ta progression par objectif.\"".to_string(),
+        "- Quand l'utilisateur choisit un objectif, applique-le immédiatement via tasksToUpdate avec strategyId (l'ID court de l'objectif, ex: \"s1\").".to_string(),
+        "- Une tâche qui n'est rattachée à aucun objectif n'est pas forcément un problème — certaines tâches sont purement opérationnelles. Ne force pas le rattachement.".to_string(),
+        String::new(),
+        "TÂCHES NON PLANIFIÉES (backlog/todo) :".to_string(),
+        "- Ces tâches existent dans le todo/inbox mais n'ont pas de date planifiée. Elles sont listées dans la section 📥.".to_string(),
+        "- RÔLE CLÉ : analyse ces tâches et PROPOSE d'en planifier certaines cette semaine. Utilise ton jugement basé sur :".to_string(),
+        "  • Les scores d'urgence/importance (une tâche urgente 4-5/5 devrait être planifiée)".to_string(),
+        "  • Le rattachement à un objectif/stratégie (si la tâche contribue à un objectif actif, elle mérite d'être planifiée)".to_string(),
+        "  • Le nom et le contexte de la tâche (certains noms suggèrent une urgence ou une deadline implicite)".to_string(),
+        "  • La charge de la semaine (ne pas surcharger si la semaine est déjà pleine)".to_string(),
+        "  • La connaissance de l'utilisateur et ses priorités habituelles".to_string(),
+        "- PRÉSENTATION : dans ton résumé initial, après les sections habituelles, mentionne les tâches non planifiées les plus pertinentes et propose de les intégrer.".to_string(),
+        "- NE PROPOSE PAS toutes les tâches — sélectionne les 3-5 plus pertinentes à planifier cette semaine.".to_string(),
+        "- Pour planifier une tâche non planifiée : utilise tasksToUpdate avec l'ID court + scheduledDate pour lui attribuer un jour.".to_string(),
+        "- Si la liste est longue, propose aussi de faire le tri : supprimer les tâches obsolètes, reporter celles qui ne sont plus pertinentes.".to_string(),
+        "- Formulation naturelle : \"J'ai aussi repéré quelques tâches dans ton backlog qui pourraient mériter une place cette semaine...\" ou \"Tu as X tâches non planifiées. Certaines semblent pertinentes pour cette semaine, on regarde ?\"".to_string(),
+        String::new(),
         "RELIQUAT :".to_string(),
         "- Ne culpabilise JAMAIS. Normalise le report.".to_string(),
         "- 3 options par tâche : garder cette semaine, reporter (tasksToUpdate + scheduledDate), supprimer (tasksToRemove).".to_string(),
@@ -1992,9 +2073,9 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         "ACTIONS SUR LES TÂCHES (INCLURE OBLIGATOIREMENT dans le JSON quand une action est effectuée) :".to_string(),
         "- tasksToAdd : ajouter quand l'utilisateur le demande ou confirme. Jamais inventer. Une seule fois par tâche dans toute la conversation.".to_string(),
         format!("  Par défaut, scheduledDate = \"{monday_str}\" (lundi). Adapte selon le contexte."),
-        "  Champs : name (requis), estimatedMinutes, priority (\"main\"/\"secondary\"), scheduledDate (YYYY-MM-DD), tags ([{label, color}]).".to_string(),
+        "  Champs : name (requis), estimatedMinutes, priority (\"main\"/\"secondary\"), scheduledDate (YYYY-MM-DD), urgency (1-5), importance (1-5), strategyId (ID court de l'objectif, ex: \"s1\"), tags ([{label, color}]).".to_string(),
         "- tasksToRemove : tableau d'IDs courts (ex: [\"t1\", \"t3\"]) à supprimer. Utilise l'ID exact de la liste. Confirme dans ton message.".to_string(),
-        "- tasksToUpdate : modifier name, priority, scheduledDate, estimatedMinutes, urgency (1-5), importance (1-5), description (texte libre) par ID court. Chaque champ sauf id est optionnel.".to_string(),
+        "- tasksToUpdate : modifier name, priority, scheduledDate, estimatedMinutes, urgency (1-5), importance (1-5), strategyId (ID court de l'objectif), description (texte libre) par ID court. Chaque champ sauf id est optionnel.".to_string(),
         format!("  Pour reporter à la semaine prochaine : scheduledDate = \"{next_monday_str}\"."),
         r#"- tagsToSet : ajouter/modifier/supprimer les tags d'une tâche. Ex: [{"taskId": "t1", "tags": [{"label": "Snowflake", "color": "data"}]}]. Couleurs : "crm", "data", "roadmap", "saas", "urgent". Pour ajouter un tag, inclure les tags existants + le nouveau."#.to_string(),
         r#"- stepsToSet : attacher des micro-étapes à une tâche. Ex: [{"taskId": "t1", "steps": ["Étape 1", "Étape 2"]}]."#.to_string(),
@@ -2013,11 +2094,66 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
 
     let mut id_map: HashMap<String, String> = HashMap::new();
     let mut id_counter = 1i32;
+    let mut strat_counter = 1i32;
     let tags_map = load_all_tags_map(db);
     let empty_tags: Vec<Tag> = vec![];
 
+    // Load strategy name map for displaying strategy links on tasks
+    let mut strategy_names: HashMap<String, String> = HashMap::new();
+    if let Ok(mut stmt) = db.prepare("SELECT id, title FROM strategy_strategies") {
+        if let Ok(rows) = stmt.query_map([], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+        ))) {
+            for r in rows.filter_map(|r| r.ok()) {
+                strategy_names.insert(r.0, r.1);
+            }
+        }
+    }
+
+    // Load goals and strategies context for the AI
+    {
+        let mut has_goals = false;
+        if let Ok(mut stmt) = db.prepare(
+            "SELECT g.id, g.title FROM strategy_goals g JOIN strategy_periods p ON g.period_id = p.id WHERE p.active = 1 ORDER BY g.position",
+        ) {
+            if let Ok(goals) = stmt.query_map([], |row| Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+            ))) {
+                let goal_data: Vec<_> = goals.filter_map(|r| r.ok()).collect();
+                if !goal_data.is_empty() {
+                    has_goals = true;
+                    parts.push("🎯 OBJECTIFS ET STRATÉGIES DE LA PÉRIODE ACTIVE (pour rattacher les tâches) :".to_string());
+                    for (gid, title) in &goal_data {
+                        parts.push(format!("  Cap : {title}"));
+
+                        if let Ok(mut sstmt) = db.prepare(
+                            "SELECT s.id, s.title FROM strategy_strategies s JOIN goal_strategy_links l ON l.strategy_id = s.id WHERE l.goal_id = ?1 ORDER BY s.position",
+                        ) {
+                            if let Ok(strats) = sstmt.query_map(params![gid], |row| Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, String>(1)?,
+                            ))) {
+                                for s in strats.filter_map(|r| r.ok()) {
+                                    let s_short = assign_period_short_id("s", &mut strat_counter, &s.0, &mut id_map);
+                                    parts.push(format!("    [{s_short}] {}", s.1));
+                                }
+                            }
+                        }
+                    }
+                    parts.push(String::new());
+                }
+            }
+        }
+        if !has_goals {
+            parts.push("Aucun objectif/stratégie défini pour la période active.".to_string());
+            parts.push(String::new());
+        }
+    }
+
     if let Ok(mut stmt) = db.prepare(
-        "SELECT id, name, done, priority, estimated_minutes, urgency, importance FROM tasks WHERE view_context = 'week' ORDER BY position",
+        "SELECT id, name, done, priority, estimated_minutes, urgency, importance, strategy_id FROM tasks WHERE view_context = 'week' ORDER BY position",
     ) {
         if let Ok(tasks) = stmt.query_map([], |row| {
             Ok((
@@ -2028,15 +2164,17 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
                 row.get::<_, Option<i32>>(4)?,
                 row.get::<_, Option<i32>>(5)?,
                 row.get::<_, Option<i32>>(6)?,
+                row.get::<_, Option<String>>(7)?,
             ))
         }) {
             let task_data: Vec<_> = tasks.filter_map(|r| r.ok()).collect();
             let task_lines: Vec<String> = task_data
                 .into_iter()
-                .map(|(id, name, done, pri, est, urg, imp)| {
+                .map(|(id, name, done, pri, est, urg, imp, strat_id)| {
                     let short = assign_short_id(&mut id_counter, &id, &mut id_map);
                     let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
-                    format_task_line(&short, &name, done, pri.as_deref(), est, None, urg, imp, task_tags)
+                    let strat_name = strat_id.as_deref().and_then(|sid| strategy_names.get(sid)).map(|s| s.as_str());
+                    format_task_line(&short, &name, done, pri.as_deref(), est, None, urg, imp, task_tags, strat_name)
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -2048,7 +2186,7 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
     }
 
     if let Ok(mut stmt) = db.prepare(
-        "SELECT id, name, done, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE scheduled_date >= ?1 AND scheduled_date <= ?2 ORDER BY scheduled_date, position",
+        "SELECT id, name, done, priority, estimated_minutes, scheduled_date, urgency, importance, strategy_id FROM tasks WHERE scheduled_date >= ?1 AND scheduled_date <= ?2 ORDER BY scheduled_date, position",
     ) {
         if let Ok(tasks) = stmt.query_map(params![monday_str, friday_str], |row| {
             Ok((
@@ -2060,15 +2198,17 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
                 row.get::<_, Option<String>>(5)?,
                 row.get::<_, Option<i32>>(6)?,
                 row.get::<_, Option<i32>>(7)?,
+                row.get::<_, Option<String>>(8)?,
             ))
         }) {
             let task_data: Vec<_> = tasks.filter_map(|r| r.ok()).collect();
             let task_lines: Vec<String> = task_data
                 .into_iter()
-                .map(|(id, name, done, pri, est, sched, urg, imp)| {
+                .map(|(id, name, done, pri, est, sched, urg, imp, strat_id)| {
                     let short = assign_short_id(&mut id_counter, &id, &mut id_map);
                     let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
-                    format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
+                    let strat_name = strat_id.as_deref().and_then(|sid| strategy_names.get(sid)).map(|s| s.as_str());
+                    format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags, strat_name)
                 })
                 .collect();
             if !task_lines.is_empty() {
@@ -2083,7 +2223,7 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
     }
 
     if let Ok(mut stmt) = db.prepare(
-        "SELECT id, name, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position",
+        "SELECT id, name, priority, estimated_minutes, scheduled_date, urgency, importance, strategy_id FROM tasks WHERE scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position",
     ) {
         if let Ok(overdue) = stmt.query_map(params![monday_str], |row| {
             Ok((
@@ -2094,21 +2234,60 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, Option<i32>>(5)?,
                 row.get::<_, Option<i32>>(6)?,
+                row.get::<_, Option<String>>(7)?,
             ))
         }) {
             let overdue_data: Vec<_> = overdue.filter_map(|r| r.ok()).collect();
             let overdue_lines: Vec<String> = overdue_data
                 .into_iter()
-                .map(|(id, name, pri, est, sched, urg, imp)| {
+                .map(|(id, name, pri, est, sched, urg, imp, strat_id)| {
                     let short = assign_short_id(&mut id_counter, &id, &mut id_map);
                     let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
-                    format_task_line(&short, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags)
+                    let strat_name = strat_id.as_deref().and_then(|sid| strategy_names.get(sid)).map(|s| s.as_str());
+                    format_task_line(&short, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags, strat_name)
                 })
                 .collect();
             if !overdue_lines.is_empty() {
                 let n = overdue_lines.len();
                 parts.push(format!("⏳ RELIQUAT DE LA SEMAINE PASSÉE ({n} tâche(s) non terminée(s)) :"));
                 parts.extend(overdue_lines);
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // Load unscheduled tasks (today view without scheduled_date + inbox) for scheduling suggestions
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, name, priority, estimated_minutes, urgency, importance, strategy_id, view_context FROM tasks WHERE done = 0 AND scheduled_date IS NULL AND view_context IN ('today', 'inbox') ORDER BY view_context, position",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<i32>>(3)?,
+                row.get::<_, Option<i32>>(4)?,
+                row.get::<_, Option<i32>>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, String>(7)?,
+            ))
+        }) {
+            let unscheduled: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+            if !unscheduled.is_empty() {
+                let n = unscheduled.len();
+                parts.push(format!("📥 TÂCHES NON PLANIFIÉES ({n} tâche(s) dans le backlog/todo — pas encore schedulées sur un jour) :"));
+                let unscheduled_lines: Vec<String> = unscheduled
+                    .into_iter()
+                    .map(|(id, name, pri, est, urg, imp, strat_id, ctx)| {
+                        let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                        let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                        let strat_name = strat_id.as_deref().and_then(|sid| strategy_names.get(sid)).map(|s| s.as_str());
+                        let ctx_label = if ctx == "inbox" { " [inbox]" } else { "" };
+                        let base = format_task_line(&short, &name, false, pri.as_deref(), est, None, urg, imp, task_tags, strat_name);
+                        format!("{base}{ctx_label}")
+                    })
+                    .collect();
+                parts.extend(unscheduled_lines);
                 parts.push(String::new());
             }
         }
@@ -2122,7 +2301,7 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
     parts.push("- Utilise les scores dans ton TEXTE d'analyse pour justifier tes suggestions, mais pas dans la liste des tâches.".to_string());
     parts.push("- Sections séparées par des phrases naturelles, PAS par des titres markdown.".to_string());
     parts.push("- Ton conversationnel et chaleureux. Phrases courtes.".to_string());
-    parts.push("- Utilise les labels de section exacts : \"Priorités de la semaine\", \"Tâches planifiées cette semaine\", \"En reliquat de la semaine passée\".".to_string());
+    parts.push("- Utilise les labels de section exacts : \"Priorités de la semaine\", \"Tâches planifiées cette semaine\", \"En reliquat de la semaine passée\", \"Tâches non planifiées\".".to_string());
     parts.push("- Pour le reliquat : utilise ⚡ devant le nom si la tâche était prioritaire (priorité: main dans les données), sinon pas de label.".to_string());
     parts.push("- Pour les tâches planifiées : indique le jour entre parenthèses (ex: \"(lundi)\", \"(aujourd'hui)\").".to_string());
     parts.push("- Exemple de format attendu :".to_string());
@@ -2132,9 +2311,9 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
     parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
     parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tasksToToggle": [], "tasksToReorder": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
     parts.push("- content : ton message texte. N'INCLUS JAMAIS le JSON dans le content. Pas de blocs de code JSON dans le content.".to_string());
-    parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{monday_str}", "urgency": 4, "importance": 3, "tags": [{{"label": "CRM", "color": "crm"}}]}}] — urgency, importance et tags sont optionnels."#));
+    parts.push(format!(r#"- tasksToAdd : [{{"name": "...", "estimatedMinutes": 30, "priority": "main", "scheduledDate": "{monday_str}", "urgency": 4, "importance": 3, "strategyId": "s1", "tags": [{{"label": "CRM", "color": "crm"}}]}}] — urgency, importance, strategyId et tags sont optionnels."#));
     parts.push("- tasksToRemove : [\"t1\", \"t3\"] — utilise les IDs courts tels que fournis dans la liste".to_string());
-    parts.push(format!(r#"- tasksToUpdate : [{{"id": "t2", "name": "nouveau nom", "priority": "secondary", "scheduledDate": "{next_monday_str}", "description": "notes..."}}] — chaque champ sauf id est optionnel"#));
+    parts.push(format!(r#"- tasksToUpdate : [{{"id": "t2", "name": "nouveau nom", "priority": "secondary", "scheduledDate": "{next_monday_str}", "strategyId": "s1", "estimatedMinutes": 45, "urgency": 4, "importance": 5, "description": "notes..."}}] — chaque champ sauf id est optionnel"#));
     parts.push("- tasksToToggle : [\"t1\", \"t3\"] — cocher/décocher des tâches par ID court".to_string());
     parts.push("- tasksToReorder : [\"t3\", \"t1\", \"t2\"] — réorganiser les tâches dans le nouvel ordre souhaité".to_string());
     parts.push(r#"- tagsToSet : [{"taskId": "t1", "tags": [{"label": "...", "color": "data"}]}] — couleurs : "crm", "data", "roadmap", "saas", "urgent""#.to_string());
@@ -2668,7 +2847,7 @@ pub async fn analyze_profile_url(
 
     let (provider_id, api_key, model) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        let (provider, model) = get_active_provider(&db)?;
+        let (provider, model) = get_lightweight_provider(&db)?;
         (provider.id, provider.api_key, model)
     };
 

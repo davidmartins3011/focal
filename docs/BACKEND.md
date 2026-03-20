@@ -77,6 +77,7 @@ pub struct Task {
     pub importance: Option<i32>,         // 1-5
     pub description: Option<String>,
     pub created_at: Option<String>,
+    pub strategy_id: Option<String>,  // Rattachement à une stratégie
 }
 ```
 
@@ -208,6 +209,16 @@ pub struct PeriodReflection {
 }
 ```
 
+### StrategyProgressItem
+
+```rust
+pub struct StrategyProgressItem {
+    pub strategy_id: String,
+    pub total: i32,
+    pub completed: i32,
+}
+```
+
 ### PeriodSummary / TagDistribution / TaskHighlight
 
 ```rust
@@ -321,7 +332,7 @@ pub struct DecompStep {
 
 Toutes les commandes reçoivent un `State<'_, AppState>` et retournent `Result<T, String>`.
 
-### Tasks (commands/tasks.rs) — 17 commandes
+### Tasks (commands/tasks.rs) — 19 commandes
 
 | Commande | Paramètres | Retour | Description |
 |----------|-----------|--------|-------------|
@@ -329,7 +340,8 @@ Toutes les commandes reçoivent un `State<'_, AppState>` et retournent `Result<T
 | `get_tasks` | `context: String` | `Vec<Task>` | Tâches par contexte (today/week/calendar/inbox) |
 | `get_tasks_by_date` | `date: String` | `Vec<Task>` | Tâches pour une date précise (YYYY-MM-DD) |
 | `get_tasks_by_date_range` | `start_date, end_date` | `Vec<Task>` | Tâches sur une plage de dates |
-| `get_overdue_tasks` | — | `Vec<Task>` | Tâches en retard (date passée, non terminées) |
+| `get_overdue_tasks` | — | `Vec<Task>` | Tâches en retard (scheduled_date < aujourd'hui, non terminées) |
+| `get_overdue_tasks_for_date` | `before_date: String` | `Vec<Task>` | Tâches en retard avant une date donnée (scheduled_date < before_date, non terminées). Utilisé pour afficher les reliquats dans les vues "Demain" et "Semaine prochaine". |
 | `create_task` | `name, context?, priority?, tags?, estimated_minutes?, scheduled_date?, urgency?, importance?` | `Task` | Crée une tâche |
 | `update_task` | `id, name?, done?, priority?, estimated_minutes?, ai_decomposed?, scheduled_date?, urgency?, importance?, view_context?, description?` | `Task` | Met à jour une tâche |
 | `toggle_task` | `id` | `Task` | Bascule l'état done |
@@ -370,9 +382,11 @@ Toutes les commandes reçoivent un `State<'_, AppState>` et retournent `Result<T
 - `last-active` — ISO datetime de la dernière activité (pour détecter les notifications manquées)
 - `daily-prep-YYYY-MM-DD` — "done" si la préparation du jour est faite
 - `weekly-prep-YYYY-WNN` — "done" si la préparation hebdomadaire est faite
+- `day-closed-YYYY-MM-DD` — "true" si la journée est marquée comme terminée
+- `week-closed-YYYY-MM-DD` — "true" si la semaine est marquée comme terminée (clé = date du lundi)
 - `onboarding-completed` — Onboarding terminé (true/false)
 
-### Reviews (commands/reviews.rs) — 21 commandes
+### Reviews (commands/reviews.rs) — 22 commandes
 
 | Commande | Paramètres | Retour | Description |
 |----------|-----------|--------|-------------|
@@ -397,6 +411,7 @@ Toutes les commandes reçoivent un `State<'_, AppState>` et retournent `Result<T
 | `delete_action` | `id` | `()` | Supprime une action |
 | `toggle_action` | `id` | `bool` | Toggle l'état done d'une action |
 | `get_period_summary` | `start_date, end_date` | `PeriodSummary` | Résumé statistique d'une période |
+| `get_strategy_progress` | `start_date, end_date` | `Vec<StrategyProgressItem>` | Nombre de tâches total/complétées par stratégie sur une période |
 
 ### Chat (commands/chat.rs) — 2 commandes
 

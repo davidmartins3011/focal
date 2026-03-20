@@ -30,10 +30,10 @@ focal/
 │   ├── main.tsx             # Point d'entrée React
 │   ├── components/          # 34 composants React (.tsx + .module.css)
 │   ├── services/            # Couche d'accès aux commandes Tauri
-│   ├── hooks/               # Hooks React réutilisables
+│   ├── hooks/               # Hooks React réutilisables (useNotifications, useTaskActions, useStrategies)
 │   ├── types/               # Interfaces TypeScript centralisées
 │   ├── data/                # Constantes et données de configuration
-│   ├── utils/               # Utilitaires (formatage de dates)
+│   ├── utils/               # Utilitaires (dateFormat, taskUtils)
 │   └── styles/              # Variables CSS, thèmes
 ├── src-tauri/               # Backend Rust (Tauri)
 │   ├── Cargo.toml           # Dépendances Rust

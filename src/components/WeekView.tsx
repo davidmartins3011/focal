@@ -18,6 +18,7 @@ import {
   arrayMove,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
+import AddTaskInput from "./AddTaskInput";
 import PrepBanner from "./PrepBanner";
 import SortableTaskItem from "./SortableTaskItem";
 import TaskItem from "./TaskItem";
@@ -30,6 +31,7 @@ import {
   getOverdueTasksForDate,
   updateTask as updateTaskSvc,
   reorderTasks as reorderTasksSvc,
+  createTask,
 } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { toISODate, weekClosedKey, weekPrepKey, getMondayDate } from "../utils/dateFormat";
@@ -111,6 +113,21 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
   const monday = useMemo(() => viewMonday ? new Date(viewMonday + "T12:00:00") : getMondayDate(new Date()), [viewMonday]);
   const todayStr = useMemo(() => toISODate(new Date()), []);
   const isWeekMode = selectedFilter === "week";
+
+  const handleAddTask = useCallback((text: string) => {
+    const targetDate = isWeekMode ? todayStr : (selectedFilter as string);
+    createTask({ name: text, scheduledDate: targetDate })
+      .then((task) => {
+        setScheduledTasks((prev) => {
+          const dayTasks = prev.filter((t) => t.scheduledDate === targetDate);
+          const mainCount = dayTasks.filter((t) => t.priority === "main").length;
+          const priority: "main" | "secondary" = mainCount < dailyPriorityCount ? "main" : "secondary";
+          updateTaskSvc({ id: task.id, priority }).catch(() => {});
+          return [...prev, { ...task, scheduledDate: targetDate, priority }];
+        });
+      })
+      .catch((err) => console.error("[WeekView] createTask error:", err));
+  }, [isWeekMode, todayStr, selectedFilter, dailyPriorityCount]);
 
   const { decomposingId, updateTaskState, findTask, getDecomposingStepId, taskCallbacks } =
     useTaskActions({ tasks: scheduledTasks, overdueTasks, setTasks: setScheduledTasks, setOverdueTasks, onStuck, tag: "WeekView" });
@@ -585,6 +602,11 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
             />
           ))}
         </div>
+
+        <AddTaskInput
+          onAdd={handleAddTask}
+          placeholder={isWeekMode ? undefined : `Ajouter une tâche pour ${selectedDayLabel}…`}
+        />
 
         {isWeekMode ? (
           <>

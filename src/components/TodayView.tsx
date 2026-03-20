@@ -15,6 +15,7 @@ import {
   arrayMove,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
+import AddTaskInput from "./AddTaskInput";
 import PrepBanner from "./PrepBanner";
 import FocusNow from "./FocusNow";
 import FocusTimer from "./FocusTimer";
@@ -23,7 +24,7 @@ import SortableTaskItem from "./SortableTaskItem";
 import TaskItem from "./TaskItem";
 import DroppableEmptyZone from "./DroppableEmptyZone";
 import type { Task } from "../types";
-import { getTasks as fetchTasks, getTasksByDate, getOverdueTasks, getOverdueTasksForDate, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, getStreak } from "../services/tasks";
+import { getTasks as fetchTasks, getTasksByDate, getOverdueTasks, getOverdueTasksForDate, updateTask as updateTaskSvc, reorderTasks as reorderTasksSvc, getStreak, createTask } from "../services/tasks";
 import { getSetting, setSetting } from "../services/settings";
 import { dayClosedKey, dayPrepKey, toISODate } from "../utils/dateFormat";
 import { sortOverdueTasks } from "../utils/taskUtils";
@@ -80,6 +81,19 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
   }, [dayKey]);
 
   const effectiveDate = viewDate ?? dayKey;
+
+  const handleAddTask = useCallback((text: string) => {
+    createTask({ name: text, scheduledDate: effectiveDate })
+      .then((task) => {
+        setTasks((prev) => {
+          const mainCount = prev.filter((t) => t.priority === "main").length;
+          const priority: "main" | "secondary" = mainCount < dailyPriorityCount ? "main" : "secondary";
+          updateTaskSvc({ id: task.id, priority }).catch(() => {});
+          return [...prev, { ...task, priority }];
+        });
+      })
+      .catch((err) => console.error("[TodayView] createTask error:", err));
+  }, [effectiveDate, dailyPriorityCount]);
 
   const { decomposingId, updateTaskState, getDecomposingStepId, taskCallbacks } =
     useTaskActions({ tasks, overdueTasks, setTasks, setOverdueTasks, onStuck, tag: "TodayView" });
@@ -322,6 +336,8 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
       )}
 
       <ProgressBar done={doneCount} total={tasks.length} streak={streak} />
+
+      <AddTaskInput onAdd={handleAddTask} />
 
       <DndContext
         sensors={sensors}

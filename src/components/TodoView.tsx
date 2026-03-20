@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Task, Tag } from "../types";
+import AddTaskInput from "./AddTaskInput";
 import TodoItemRow from "./TodoItemRow";
 import TaskDetailModal from "./TaskDetailModal";
 import CalendarView from "./CalendarView";
@@ -26,7 +27,7 @@ import useStrategies from "../hooks/useStrategies";
 import styles from "./TodoView.module.css";
 
 type ViewMode = "list" | "calendar";
-type Filter = "all" | "done" | "prioritized" | "unscheduled";
+type Filter = "all" | "done" | "tag" | "strategy";
 type PopoverType = "priority" | "schedule";
 
 function SortableTodoItemRow(props: React.ComponentProps<typeof TodoItemRow>) {
@@ -62,7 +63,6 @@ interface PopoverState {
 export default function TodoView() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [newText, setNewText] = useState("");
 
   useEffect(() => {
     getAllTasks()
@@ -80,6 +80,7 @@ export default function TodoView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [strategyFilter, setStrategyFilter] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const { getStrategyInfo, pickerObjectives } = useStrategies();
 
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -99,16 +100,13 @@ export default function TodoView() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const addTask = () => {
-    const text = newText.trim();
-    if (!text) return;
-    setNewText("");
+  const handleAddTask = useCallback((text: string) => {
     createTask({ name: text })
       .then((task) => {
         setTasks((prev) => [task, ...prev]);
       })
       .catch((err) => console.error("[TodoView] createTask error:", err));
-  };
+  }, []);
 
   const toggleDone = (id: string) => {
     setTasks((prev) =>
@@ -188,6 +186,38 @@ export default function TodoView() {
 
   const showDone = filter === "done";
 
+  const availableTags = useMemo(() => {
+    const activeTasks = tasks.filter((t) => !t.done);
+    const tagMap = new Map<string, number>();
+    for (const t of activeTasks) {
+      if (t.tags) {
+        for (const tag of t.tags) {
+          tagMap.set(tag.label, (tagMap.get(tag.label) ?? 0) + 1);
+        }
+      }
+    }
+    return Array.from(tagMap.entries()).map(([label, count]) => ({ label, count }));
+  }, [tasks]);
+
+  const availableStrategies = useMemo(() => {
+    const activeTasks = tasks.filter((t) => !t.done && t.strategyId);
+    const idSet = new Set(activeTasks.map((t) => t.strategyId!));
+    const options: { id: string; label: string; count: number }[] = [];
+    for (const obj of pickerObjectives) {
+      if (idSet.has(obj.id)) {
+        const count = activeTasks.filter((t) => t.strategyId === obj.id).length;
+        options.push({ id: obj.id, label: obj.title, count });
+      }
+      for (const s of obj.strategies) {
+        if (idSet.has(s.id)) {
+          const count = activeTasks.filter((t) => t.strategyId === s.id).length;
+          options.push({ id: s.id, label: `${obj.title} → ${s.title}`, count });
+        }
+      }
+    }
+    return options;
+  }, [tasks, pickerObjectives]);
+
   const doneStrategyOptions = useMemo(() => {
     if (!showDone) return [];
     const doneTasks = tasks.filter((t) => t.done && t.strategyId);
@@ -209,19 +239,29 @@ export default function TodoView() {
   }, [showDone, tasks, pickerObjectives]);
 
   const filtered = tasks.filter((t) => {
-    const matchesFilter = (() => {
+    const matchesBase = (() => {
       switch (filter) {
         case "done":
           return t.done;
-        case "prioritized":
-          return (t.urgency != null || t.importance != null) && !t.done;
-        case "unscheduled":
-          return !t.scheduledDate && !t.done;
+        case "tag":
+        case "strategy":
+        case "all":
         default:
           return !t.done;
       }
     })();
-    if (!matchesFilter) return false;
+    if (!matchesBase) return false;
+    if (filter === "tag" && tagFilter) {
+      if (!t.tags?.some((tag) => tag.label === tagFilter)) return false;
+    }
+    if (filter === "strategy" && strategyFilter) {
+      const info = getStrategyInfo(t.strategyId);
+      if (strategyFilter === "__none__") {
+        if (t.strategyId) return false;
+      } else {
+        if (t.strategyId !== strategyFilter && info?.objectiveId !== strategyFilter) return false;
+      }
+    }
     if (showDone && strategyFilter) {
       const info = getStrategyInfo(t.strategyId);
       if (strategyFilter === "__none__") {
@@ -236,12 +276,11 @@ export default function TodoView() {
 
   const totalActive = tasks.filter((t) => !t.done).length;
   const totalDone = tasks.filter((t) => t.done).length;
-  const totalUnscheduled = tasks.filter((t) => !t.scheduledDate && !t.done).length;
 
   const filters: { key: Filter; label: string }[] = [
     { key: "all", label: "Tous" },
-    { key: "unscheduled", label: "Non planifiés" },
-    { key: "prioritized", label: "Avec priorité" },
+    { key: "tag", label: "Tags" },
+    { key: "strategy", label: "Objectifs / Stratégies" },
     { key: "done", label: `Terminés (${totalDone})` },
   ];
 
@@ -321,11 +360,6 @@ export default function TodoView() {
               <span className={styles.stat}>
                 <strong>{totalDone}</strong> terminé{totalDone > 1 ? "s" : ""}
               </span>
-              {totalUnscheduled > 0 && (
-                <span className={styles.stat}>
-                  <strong>{totalUnscheduled}</strong> non planifié{totalUnscheduled > 1 ? "s" : ""}
-                </span>
-              )}
             </div>
           </>
         )}
@@ -341,18 +375,7 @@ export default function TodoView() {
             onDragCancel={() => setActiveId(null)}
           >
             <div className={styles.content}>
-              <div className={styles.addArea}>
-                <input
-                  className={styles.addInput}
-                  value={newText}
-                  onChange={(e) => setNewText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addTask()}
-                  placeholder="Ajouter une tâche…"
-                />
-                <button className={styles.addBtn} onClick={addTask}>
-                  Ajouter
-                </button>
-              </div>
+              <AddTaskInput onAdd={handleAddTask} />
 
               <div className={styles.searchArea}>
                 <svg className={styles.searchIcon} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -381,12 +404,58 @@ export default function TodoView() {
                   <button
                     key={f.key}
                     className={`${styles.filterBtn} ${filter === f.key ? styles.active : ""}`}
-                    onClick={() => { setFilter(f.key); if (f.key !== "done") setStrategyFilter(null); }}
+                    onClick={() => { setFilter(f.key); setStrategyFilter(null); setTagFilter(null); }}
                   >
                     {f.label}
                   </button>
                 ))}
               </div>
+
+              {filter === "tag" && availableTags.length > 0 && (
+                <div className={styles.strategyFilters}>
+                  <button
+                    className={`${styles.strategyFilterBtn} ${tagFilter === null ? styles.strategyFilterActive : ""}`}
+                    onClick={() => setTagFilter(null)}
+                  >
+                    Tous
+                  </button>
+                  {availableTags.map((t) => (
+                    <button
+                      key={t.label}
+                      className={`${styles.strategyFilterBtn} ${tagFilter === t.label ? styles.strategyFilterActive : ""}`}
+                      onClick={() => setTagFilter(t.label)}
+                    >
+                      {t.label} <span className={styles.strategyFilterCount}>{t.count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {filter === "strategy" && availableStrategies.length > 0 && (
+                <div className={styles.strategyFilters}>
+                  <button
+                    className={`${styles.strategyFilterBtn} ${strategyFilter === null ? styles.strategyFilterActive : ""}`}
+                    onClick={() => setStrategyFilter(null)}
+                  >
+                    Tous
+                  </button>
+                  {availableStrategies.map((opt) => (
+                    <button
+                      key={opt.id}
+                      className={`${styles.strategyFilterBtn} ${strategyFilter === opt.id ? styles.strategyFilterActive : ""}`}
+                      onClick={() => setStrategyFilter(opt.id)}
+                    >
+                      {opt.label} <span className={styles.strategyFilterCount}>{opt.count}</span>
+                    </button>
+                  ))}
+                  <button
+                    className={`${styles.strategyFilterBtn} ${strategyFilter === "__none__" ? styles.strategyFilterActive : ""}`}
+                    onClick={() => setStrategyFilter("__none__")}
+                  >
+                    Sans objectif
+                  </button>
+                </div>
+              )}
 
               {showDone && doneStrategyOptions.length > 0 && (
                 <div className={styles.strategyFilters}>

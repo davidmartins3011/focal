@@ -16,7 +16,7 @@
 ### App.tsx — Orchestrateur
 
 Gère l'état global de l'application :
-- **Navigation** : `activePage` (sidebar) et `activeTab` (today/week/strategy)
+- **Navigation** : `activePage` (sidebar) et `activeTab` (today/tomorrow/week/next-week/strategy)
 - **Paramètres** : thème, AI settings, priorités, fréquence stratégique, jours ouvrés, onboarding
 - **Notifications** : via le hook `useNotifications`
 - **Mémoire IA** : appelle `checkAndRunAnalysis()` au démarrage et périodiquement (toutes les 24h)
@@ -40,8 +40,8 @@ Un `loaded` ref empêche les écritures parasites avant l'hydratation initiale.
 ```
 
 - `Sidebar.tsx` : Navigation latérale (icônes), badge notifications
-- `MainPanel.tsx` : Conteneur à onglets (Aujourd'hui / Cette semaine / Prise de recul)
-- `ChatPanel.tsx` : Panneau de chat IA (toujours visible à droite)
+- `MainPanel.tsx` : Conteneur à onglets (Aujourd'hui / [Demain] / Cette semaine / [Semaine prochaine] / Prise de recul). Gère les états `dayClosed` / `weekClosed` et affiche conditionnellement les onglets "Demain" et "Semaine prochaine" quand le jour/semaine est marqué terminé.
+- `ChatPanel.tsx` : Panneau de chat IA (toujours visible à droite). Commandes slash : `/help`, `/start-onboarding`, `/reset-day`, `/reset-week`, `/clear`, `/clear-db-tasks`
 
 ---
 
@@ -54,16 +54,26 @@ Un `loaded` ref empêche les écritures parasites avant l'hydratation initiale.
 - Une fois terminé, bascule vers l'app principale
 
 ### TodayView.tsx
-- Affiche les priorités du jour (nombre configurable)
+- Affiche les priorités du jour (nombre configurable) et les tâches secondaires
 - Bannière de préparation quotidienne (`PrepBanner`) avec échange IA
 - Décomposition IA des tâches en micro-étapes (appel LLM réel)
 - Re-décomposition et décomposition de sous-étapes
 - Barre de progression et streak
+- Section "Reliquat des jours précédents" (tâches en retard non terminées)
+- Revue du soir et bouton "Marquer comme terminée"
+- Bandeau "Journée terminée" avec bouton "Réouvrir"
+- Mode planning (`isPlanning`) : utilisé pour la vue "Demain", sans actions de clôture/revue mais avec les reliquats
+- Rattachement des tâches aux stratégies (badge stratégie)
 
 ### WeekView.tsx
-- Vue hebdomadaire avec jour par jour
+- Vue hebdomadaire avec jour par jour (jours ouvrés configurables)
 - Bannière de préparation hebdomadaire
-- Barre de progression globale de la semaine
+- Double mode : vue semaine globale (priorités de la semaine) ou vue jour détaillée (clic sur un jour)
+- Section "Reliquat de la semaine passée" (tâches en retard non terminées)
+- Revue de la semaine et bouton "Marquer comme terminée"
+- Bandeau "Semaine terminée" avec bouton "Réouvrir"
+- Mode planning (`isPlanning`) : utilisé pour la vue "Semaine prochaine", sans actions de clôture/revue mais avec les reliquats
+- Drag & drop inter-jours (déplacer une tâche sur une carte jour)
 
 ### StrategyView.tsx
 - Vue "Prise de recul" avec périodes stratégiques configurables
@@ -133,6 +143,7 @@ Un `loaded` ref empêche les écritures parasites avant l'hydratation initiale.
 | `ProfileEditForm.tsx` | Formulaire d'édition de profil (sous-composant) |
 | `ProfileField.tsx` | Champ de profil avec label et valeur |
 | `ContextPanel.tsx` | Panel de configuration contextuelle (intégrations) |
+| `DroppableEmptyZone.tsx` | Zone de drop vide (DnD) avec label et survol stylé |
 | `NotificationToast.tsx` | Toast de notification flottant |
 | `NotificationCenter.tsx` | Centre de notifications (historique) |
 | `UpdateNotification.tsx` | Popup de mise à jour de l'application |
@@ -155,9 +166,9 @@ export function getTasks(context: string): Promise<Task[]> {
 
 | Fichier | Fonctions exportées | Backend correspondant |
 |---------|--------------------|-----------------------|
-| `tasks.ts` | `getAllTasks`, `getTasks`, `getTasksByDate`, `getOverdueTasks`, `getTasksByDateRange`, `createTask`, `updateTask`, `toggleTask`, `deleteTask`, `clearAllTasks`, `clearTodayTasks`, `reorderTasks`, `getAllTags`, `setTaskTags`, `setMicroSteps`, `toggleMicroStep`, `getStreak` | commands/tasks.rs |
+| `tasks.ts` | `getAllTasks`, `getTasks`, `getTasksByDate`, `getOverdueTasks`, `getOverdueTasksForDate`, `getTasksByDateRange`, `createTask`, `updateTask`, `toggleTask`, `deleteTask`, `clearAllTasks`, `clearTodayTasks`, `reorderTasks`, `getAllTags`, `setTaskTags`, `setMicroSteps`, `toggleMicroStep`, `getStreak` | commands/tasks.rs |
 | `settings.ts` | `getSetting`, `setSetting`, `getAllSettings` | commands/settings.rs |
-| `reviews.ts` | `getStrategyPeriods`, `createStrategyPeriod`, `updateStrategyPeriod`, `closeStrategyPeriod`, `reopenStrategyPeriod`, `upsertPeriodReflection`, `carryOverGoals`, `getStrategyGoals`, `upsertStrategyGoal`, `deleteStrategyGoal`, `upsertStrategy`, `deleteStrategy`, `getGoalStrategyLinks`, `toggleGoalStrategyLink`, `upsertTactic`, `deleteTactic`, `getPeriodSummary` | commands/reviews.rs |
+| `reviews.ts` | `getStrategyPeriods`, `createStrategyPeriod`, `updateStrategyPeriod`, `closeStrategyPeriod`, `reopenStrategyPeriod`, `upsertPeriodReflection`, `carryOverGoals`, `getStrategyGoals`, `upsertStrategyGoal`, `deleteStrategyGoal`, `upsertStrategy`, `deleteStrategy`, `getGoalStrategyLinks`, `toggleGoalStrategyLink`, `upsertTactic`, `deleteTactic`, `upsertAction`, `deleteAction`, `toggleAction`, `getPeriodSummary`, `getStrategyProgress` | commands/reviews.rs |
 | `chat.ts` | `getChatMessages`, `clearChat`, `sendMessage`, `decomposeTask`, `generateSuggestions`, `sendDailyPrepMessage`, `sendWeeklyPrepMessage`, `sendPeriodPrepMessage`, `sendOnboardingMessage`, `analyzeProfileUrl` | commands/chat.rs + commands/ai.rs |
 | `integrations.ts` | `getIntegrations`, `updateIntegrationConnection`, `updateIntegrationContext`, `getOAuthCredentials`, `setOAuthCredentials`, `startOAuth`, `disconnectIntegration`, `fetchCalendarEvents`, `fetchEmails` | commands/integrations.rs |
 | `profile.ts` | `getProfile`, `updateProfile` | commands/profile.rs |
@@ -212,7 +223,7 @@ Interfaces centralisées, alignées 1:1 avec les modèles Rust (grâce à serde 
 
 | Type | Champs clés | Usage |
 |------|-------------|-------|
-| `Task` | id, name, done, tags, microSteps?, aiDecomposed?, estimatedMinutes?, priority?, scheduledDate?, urgency?, importance?, description?, createdAt? | Tâches (tous contextes) |
+| `Task` | id, name, done, tags, microSteps?, aiDecomposed?, estimatedMinutes?, priority?, scheduledDate?, urgency?, importance?, description?, createdAt?, strategyId? | Tâches (tous contextes) |
 | `MicroStep` | id, text, done, estimatedMinutes? | Sous-étapes d'une tâche |
 | `Tag` | label, color | Tags de tâche |
 | `ChatMessage` | id, role, content, steps? | Messages du chat |
@@ -240,12 +251,13 @@ Interfaces centralisées, alignées 1:1 avec les modèles Rust (grâce à serde 
 | `EmailMessage` | id, subject, from, to, snippet, date, isRead, labels, source | Email |
 | `OAuthCredentialsInfo` | provider, clientId, configured | Info credentials OAuth |
 | `Suggestion` | id, icon, title, description, source, impact, category, confidence | Suggestion IA |
+| `StrategyProgressItem` | strategyId, total, completed | Progression par stratégie sur une période |
 
 ### Types de navigation
 
 | Type | Valeurs | Usage |
 |------|---------|-------|
-| `ViewTab` | "today", "week", "strategy" | Onglets du MainPanel |
+| `ViewTab` | "today", "tomorrow", "week", "next-week", "strategy" | Onglets du MainPanel |
 | `SidebarPage` | "main", "suggestions", "todos", "toolbox", "integrations", "settings", "profile" | Pages de la sidebar |
 | `ThemeId` | 10 valeurs (default, clair, sombre, zen, hyperfocus, aurore, ocean, sakura, nord, solaire) | Thèmes visuels |
 
@@ -266,6 +278,30 @@ Hook complexe gérant le système de notifications :
 
 **Retourne** : `notifSettings`, `setNotifSettings`, `notifHistory`, `notifCenterOpen`, `setNotifCenterOpen`, `handleTestNotification`, `handleDismissNotif`, `handleDismissAll`, `hasUnreadNotifs`, `unreadCount`, `pendingNavigation`, `clearPendingNavigation`
 
+### useTaskActions
+
+Hook centralisant toutes les opérations CRUD sur les tâches, partagé entre `TodayView` et `WeekView` :
+- Toggle tâche/micro-étape (avec persistance backend)
+- Suppression, renommage, changement de priorité, tags
+- Mise à jour des estimations (tâche et sous-étapes)
+- Décomposition et re-décomposition IA (appel `decomposeTask`)
+- Décomposition de sous-étapes individuelles
+- Gestion de l'état `decomposingId` / `decomposingStepKey` / `isBusy`
+- Callback `onStuck` pour signaler un blocage
+
+**Paramètres** : `tasks`, `overdueTasks`, `setTasks`, `setOverdueTasks`, `onStuck?`, `tag?`
+
+**Retourne** : `decomposingId`, `isBusy`, `updateTaskState`, `findTask`, `getDecomposingStepId`, `taskCallbacks` (objet regroupant tous les handlers)
+
+### useStrategies
+
+Hook centralisant le chargement et la résolution des objectifs/stratégies :
+- Charge les objectifs de la période active et tous les objectifs (cache en mémoire)
+- Construit un `pickerObjectives` pour le sélecteur de stratégie
+- Construit un `strategyMap` pour résoudre un `strategyId` en titre d'objectif/stratégie
+
+**Retourne** : `pickerObjectives`, `getStrategyInfo(strategyId)`, `reload()`
+
 ---
 
 ## Données et constantes (src/data/)
@@ -275,7 +311,8 @@ Ces fichiers contiennent des constantes d'affichage et de configuration.
 | Fichier | Exports | Description |
 |---------|---------|-------------|
 | `settingsData.ts` | `themes`, `defaultReminders`, `providers` | Thèmes visuels, rappels par défaut, métadonnées des providers IA |
-| `chatConstants.ts` | `chatHints`, `slashCommands` | Suggestions de prompts et commandes slash pour le chat |
+| `chatConstants.ts` | `chatHints`, `slashCommands` | Suggestions de prompts et commandes slash (`/help`, `/start-onboarding`, `/reset-day`, `/reset-week`, `/clear`, `/clear-db-tasks`) |
+| `tagConstants.ts` | `TAG_COLORS` | Palette de couleurs pour les tags de tâches |
 | `integrationConstants.ts` | `categoryLabels`, `categoryOrder` | Labels et ordre des catégories d'intégrations |
 | `strategyConstants.ts` | `MONTH_NAMES` | Noms des mois en français |
 | `settingsConstants.ts` | `DAY_LABELS`, `FREQUENCY_OPTIONS`, `getOccurrenceOptions`, cycles, `getActiveMonths`, `strategyPeriodLabel`, etc. | Constantes et utilitaires pour les settings |
@@ -287,10 +324,22 @@ Ces fichiers contiennent des constantes d'affichage et de configuration.
 
 ### dateFormat.ts
 
-Fonctions de formatage de dates en français :
-- Formatage de la date du jour
-- Calcul du numéro de semaine
-- Formatage des noms de jours et mois
+Fonctions de formatage et manipulation de dates :
+- `toISODate(d)` — Convertit un `Date` en `YYYY-MM-DD` local (évite le bug timezone de `toISOString().slice(0,10)`)
+- `getISOWeekNumber(d)` — Numéro de semaine ISO
+- `formatScheduledDate(dateStr)` — Affichage relatif ("Aujourd'hui", "Demain", "lun. dernier", etc.)
+- `formatDate(iso)` — Affichage relatif temporel ("il y a 5min", "hier", etc.)
+- `getMondayDate(d)` / `getMondayISO(d)` — Lundi de la semaine (Date ou ISO string)
+- `getNextDay(isoDate)` / `getNextMonday(mondayIso)` — Calcul du jour/lundi suivant
+- `dayPrepKey(date)` / `weekPrepKey(mondayIso)` — Clés de settings pour la préparation
+- `dayClosedKey(date)` / `weekClosedKey(mondayIso)` — Clés de settings pour la clôture jour/semaine
+- `getQuickDates()` — Raccourcis de dates (aujourd'hui, demain, lundi prochain, etc.)
+
+### taskUtils.ts
+
+Fonctions utilitaires partagées pour les tâches :
+- `sortOverdueTasks(tasks)` — Tri des tâches en retard (priorités main d'abord, puis score urgence/importance)
+- `parseDecomposingStepId(key, taskId)` — Parse la clé de décomposition pour identifier la sous-étape en cours
 
 ---
 
