@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::models::{AppState, Tag};
+use crate::providers::CalendarEvent;
 
 #[derive(Deserialize)]
 struct HistoryMsg {
@@ -253,6 +254,294 @@ fn get_user_profile(db: &rusqlite::Connection) -> Option<serde_json::Value> {
     )
     .ok()
     .and_then(|json| serde_json::from_str(&json).ok())
+}
+
+/// Append user profile section to prompt parts.
+/// `detail` controls verbosity: "name" = first name only, "light" = name + job + adhd + blockers,
+/// "full" = all profile fields with human-readable labels.
+fn append_user_profile(db: &rusqlite::Connection, parts: &mut Vec<String>, detail: &str) {
+    let Some(profile) = get_user_profile(db) else { return };
+
+    if detail == "name" {
+        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
+            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
+            parts.push(String::new());
+        }
+        return;
+    }
+
+    let header = if detail == "full" { "PROFIL DE L'UTILISATEUR :" } else { "PROFIL UTILISATEUR :" };
+    let mut ctx = vec![header.to_string()];
+
+    if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
+        ctx.push(format!("- Prénom : {name}"));
+    }
+
+    if detail == "full" {
+        if let Some(main_ctx) = profile.get("mainContext").and_then(|v| v.as_str()) {
+            let label = match main_ctx {
+                "travail_salarie" => "Travail salarié",
+                "independant" => "Indépendant / freelance",
+                "etudes" => "Études",
+                "parent" => "Parent au foyer",
+                "mix" => "Mix de contextes",
+                _ => main_ctx,
+            };
+            ctx.push(format!("- Contexte principal : {label}"));
+        }
+        if let Some(other) = profile.get("mainContextOther").and_then(|v| v.as_str()) {
+            if !other.is_empty() { ctx.push(format!("  Précision : {other}")); }
+        }
+    }
+
+    if let Some(job) = profile.get("jobActivity").and_then(|v| v.as_str()) {
+        if !job.is_empty() { ctx.push(format!("- Activité / métier : {job}")); }
+    }
+
+    if let Some(adhd) = profile.get("adhdRecognition").and_then(|v| v.as_str()) {
+        if detail == "full" {
+            let label = match adhd {
+                "diagnostique" => "Diagnostiqué",
+                "fortement" => "Fortement suspecté",
+                "un_peu" => "Légèrement suspecté",
+                "non" => "Pas de TDAH identifié",
+                _ => adhd,
+            };
+            ctx.push(format!("- TDAH : {label}"));
+        } else {
+            ctx.push(format!("- TDAH : {adhd}"));
+        }
+    }
+
+    if let Some(blockers) = profile.get("blockers").and_then(|v| v.as_array()) {
+        let labels: Vec<&str> = blockers.iter().filter_map(|v| v.as_str()).map(|b| {
+            if detail == "full" {
+                match b {
+                    "commencer" => "Difficulté à commencer",
+                    "oublier" => "Oublis fréquents",
+                    "agir" => "Difficulté à passer à l'action",
+                    "finir" => "Difficulté à finir",
+                    "trop_head" => "Trop de choses en tête",
+                    "motivation" => "Manque de motivation",
+                    other => other,
+                }
+            } else {
+                b
+            }
+        }).collect();
+        if !labels.is_empty() { ctx.push(format!("- Blocages principaux : {}", labels.join(", "))); }
+    }
+
+    if detail == "full" {
+        if let Some(horizon) = profile.get("organizationHorizon").and_then(|v| v.as_str()) {
+            let label = match horizon {
+                "aujourdhui" => "Vit au jour le jour",
+                "semaine" => "Planifie à la semaine",
+                "projets_longs" => "Gère des projets longs",
+                "mix" => "Mix selon les projets",
+                _ => horizon,
+            };
+            ctx.push(format!("- Horizon d'organisation : {label}"));
+        }
+        if let Some(expect) = profile.get("mainExpectation").and_then(|v| v.as_str()) {
+            let label = match expect {
+                "me_dire_quoi_faire" => "Qu'on lui dise quoi faire",
+                "prioriser" => "Aide à prioriser",
+                "allege_tete" => "Alléger la charge mentale",
+                "avancer_sans_pression" => "Avancer sans pression",
+                "cadrer" => "Un cadre structurant",
+                _ => expect,
+            };
+            ctx.push(format!("- Attente principale envers focal. : {label}"));
+        }
+        if let Some(extra) = profile.get("extraInfo").and_then(|v| v.as_str()) {
+            if !extra.is_empty() { ctx.push(format!("- Info complémentaire : {extra}")); }
+        }
+        if let Some(summary) = profile.get("publicProfileSummary").and_then(|v| v.as_str()) {
+            if !summary.is_empty() { ctx.push(format!("- Résumé du profil public : {summary}")); }
+        }
+    }
+
+    if ctx.len() > 1 {
+        parts.push(ctx.join("\n"));
+        parts.push(String::new());
+    }
+}
+
+/// Append AI memory insights section to prompt parts.
+fn append_memory_insights(db: &rusqlite::Connection, parts: &mut Vec<String>, hint: Option<&str>) {
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            let memory_lines: Vec<String> = rows
+                .filter_map(|r| r.ok())
+                .map(|(cat, insight)| {
+                    let label = match cat.as_str() {
+                        "prioritization" => "Priorisation",
+                        "work_patterns" => "Rythme de travail",
+                        "organization" => "Organisation",
+                        "blockers" => "Blocages",
+                        "psychology" => "Psychologie",
+                        "habits" => "Habitudes",
+                        other => other,
+                    };
+                    format!("- {label} : {insight}")
+                })
+                .collect();
+            if !memory_lines.is_empty() {
+                parts.push("MÉMOIRE — CE QUE TU SAIS DE L'UTILISATEUR :".to_string());
+                if let Some(h) = hint {
+                    parts.push(format!("({h})"));
+                }
+                parts.extend(memory_lines);
+                parts.push(String::new());
+            }
+        }
+    }
+}
+
+/// Append period goals/strategies/tactics/reflections + previous reflections to prompt parts.
+fn append_period_hierarchy(
+    db: &rusqlite::Connection,
+    parts: &mut Vec<String>,
+    period_id: &str,
+    id_map: &mut HashMap<String, String>,
+    goal_counter: &mut i32,
+    strat_counter: &mut i32,
+    tactic_counter: &mut i32,
+    refl_counter: &mut i32,
+) {
+    // Goals with linked strategies
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, title, target, deadline FROM strategy_goals WHERE period_id = ?1 ORDER BY position",
+    ) {
+        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, Option<String>>(3)?,
+        ))) {
+            let goals: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+            if !goals.is_empty() {
+                parts.push("CAPS À TENIR (utilise les IDs courts pour les actions) :".to_string());
+                for (id, title, target, deadline) in &goals {
+                    let short = assign_period_short_id("g", goal_counter, id, id_map);
+                    let mut line = format!("[{short}] **{title}**");
+                    if !target.is_empty() { line.push_str(&format!(" — {target}")); }
+                    if let Some(d) = deadline { line.push_str(&format!(" (échéance: {d})")); }
+                    parts.push(line);
+
+                    if let Ok(mut sstmt) = db.prepare(
+                        "SELECT s.id, s.title FROM strategy_strategies s JOIN goal_strategy_links l ON l.strategy_id = s.id WHERE l.goal_id = ?1 ORDER BY s.position",
+                    ) {
+                        if let Ok(strats) = sstmt.query_map(params![id], |row| Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                        ))) {
+                            for s in strats.filter_map(|r| r.ok()) {
+                                let s_short = id_map.iter().find(|(_, v)| **v == s.0).map(|(k, _)| k.clone())
+                                    .unwrap_or_else(|| assign_period_short_id("s", strat_counter, &s.0, id_map));
+                                parts.push(format!("   ↳ objectif [{s_short}] {}", s.1));
+                            }
+                        }
+                    }
+                }
+                parts.push(String::new());
+            } else {
+                parts.push("AUCUN CAP À TENIR défini pour cette période.".to_string());
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // Strategies with tactics
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT s.id, s.title, s.description, s.goal_id FROM strategy_strategies s JOIN strategy_goals g ON s.goal_id = g.id WHERE g.period_id = ?1 ORDER BY s.position",
+    ) {
+        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+        ))) {
+            let strats: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+            if !strats.is_empty() {
+                parts.push("OBJECTIFS CONCRETS :".to_string());
+                for (sid, title, _desc, goal_id) in &strats {
+                    let s_short = id_map.iter().find(|(_, v)| *v == sid).map(|(k, _)| k.clone())
+                        .unwrap_or_else(|| assign_period_short_id("s", strat_counter, sid, id_map));
+                    let g_short = id_map.iter().find(|(_, v)| *v == goal_id).map(|(k, _)| k.clone()).unwrap_or_default();
+                    let parent = if g_short.is_empty() { String::new() } else { format!(" (cap [{g_short}])") };
+                    parts.push(format!("[{s_short}] {title}{parent}"));
+
+                    if let Ok(mut tstmt) = db.prepare(
+                        "SELECT id, title FROM strategy_tactics WHERE strategy_id = ?1 ORDER BY position",
+                    ) {
+                        if let Ok(tactics) = tstmt.query_map(params![sid], |row| Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                        ))) {
+                            for t in tactics.filter_map(|r| r.ok()) {
+                                let tc_short = assign_period_short_id("tc", tactic_counter, &t.0, id_map);
+                                parts.push(format!("   → stratégie [{tc_short}] {}", t.1));
+                            }
+                        }
+                    }
+                }
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // Current period reflections
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, prompt, answer FROM period_reflections WHERE period_id = ?1 ORDER BY position",
+    ) {
+        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))) {
+            let refls: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+            if !refls.is_empty() {
+                parts.push("RÉFLEXIONS de cette période :".to_string());
+                for (rid, prompt, answer) in &refls {
+                    let r_short = assign_period_short_id("r", refl_counter, rid, id_map);
+                    let ans = if answer.is_empty() { "(vide)".to_string() } else { format!("\"{}\"", answer) };
+                    parts.push(format!("[{r_short}] {prompt} → {ans}"));
+                }
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // Previous period reflections
+    if let Ok(prev_id) = db.query_row(
+        "SELECT id FROM strategy_periods WHERE status = 'closed' ORDER BY end_year DESC, end_month DESC LIMIT 1",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        if let Ok(mut stmt) = db.prepare(
+            "SELECT prompt, answer FROM period_reflections WHERE period_id = ?1 AND answer != '' ORDER BY position",
+        ) {
+            if let Ok(rows) = stmt.query_map(params![prev_id], |row| Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+            ))) {
+                let refls: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+                if !refls.is_empty() {
+                    parts.push("RÉFLEXIONS DE LA PÉRIODE PRÉCÉDENTE :".to_string());
+                    for (prompt, answer) in &refls {
+                        parts.push(format!("- {} → \"{}\"", prompt, answer));
+                    }
+                    parts.push(String::new());
+                }
+            }
+        }
+    }
 }
 
 fn assign_period_short_id(prefix: &str, counter: &mut i32, real_id: &str, id_map: &mut HashMap<String, String>) -> String {
@@ -512,58 +801,8 @@ fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, St
         String::new(),
     ];
 
-    if let Some(profile) = get_user_profile(db) {
-        let mut ctx = vec!["PROFIL UTILISATEUR :".to_string()];
-        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
-            ctx.push(format!("- Prénom : {name}"));
-        }
-        if let Some(job) = profile.get("jobActivity").and_then(|v| v.as_str()) {
-            ctx.push(format!("- Activité : {job}"));
-        }
-        if let Some(adhd) = profile.get("adhdRecognition").and_then(|v| v.as_str()) {
-            ctx.push(format!("- TDAH : {adhd}"));
-        }
-        if let Some(blockers) = profile.get("blockers").and_then(|v| v.as_array()) {
-            let b: Vec<&str> = blockers.iter().filter_map(|v| v.as_str()).collect();
-            if !b.is_empty() {
-                ctx.push(format!("- Blocages principaux : {}", b.join(", ")));
-            }
-        }
-        if ctx.len() > 1 {
-            parts.push(ctx.join("\n"));
-            parts.push(String::new());
-        }
-    }
-
-    if let Ok(mut stmt) = db.prepare(
-        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
-    ) {
-        if let Ok(rows) = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        }) {
-            let memory_lines: Vec<String> = rows
-                .filter_map(|r| r.ok())
-                .map(|(cat, insight)| {
-                    let label = match cat.as_str() {
-                        "prioritization" => "Priorisation",
-                        "work_patterns" => "Rythme de travail",
-                        "organization" => "Organisation",
-                        "blockers" => "Blocages",
-                        "psychology" => "Psychologie",
-                        "habits" => "Habitudes",
-                        other => other,
-                    };
-                    format!("- {label} : {insight}")
-                })
-                .collect();
-            if !memory_lines.is_empty() {
-                parts.push("MÉMOIRE — CE QUE TU SAIS DE L'UTILISATEUR :".to_string());
-                parts.push("(Observations apprises au fil des conversations passées. Utilise ces infos pour mieux t'adapter.)".to_string());
-                parts.extend(memory_lines);
-                parts.push(String::new());
-            }
-        }
-    }
+    append_user_profile(db, &mut parts, "light");
+    append_memory_insights(db, &mut parts, Some("Observations apprises au fil des conversations passées. Utilise ces infos pour mieux t'adapter."));
 
     let mut id_map: HashMap<String, String> = HashMap::new();
     let mut id_counter = 1i32;
@@ -1568,9 +1807,12 @@ fn assign_short_id(counter: &mut i32, real_id: &str, id_map: &mut HashMap<String
     short
 }
 
-fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, String>) {
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let tomorrow = (chrono::Local::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+fn build_daily_prep_prompt(db: &rusqlite::Connection, target_date: Option<&str>) -> (String, HashMap<String, String>) {
+    let today = target_date.map(|d| d.to_string()).unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
+    let tomorrow = target_date
+        .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+        .map(|d| (d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|| (chrono::Local::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string());
     let max_priority = get_daily_priority_limit(db);
 
     let mut parts = vec![
@@ -1632,10 +1874,10 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String
         String::new(),
         "CONSEILS D'ORGANISATION (distille naturellement, un conseil par message max) :".to_string(),
         "- CHARGE : si les tâches ont des estimations de temps, calcule le total. Si > 5-6h, propose de reporter la moins urgente.".to_string(),
-        "- ORDRE SUGGÉRÉ au moment de confirmer le plan :".to_string(),
+        "- ORDRE SUGGÉRÉ au moment de confirmer le plan (adapte selon le moment le plus productif de l'utilisateur, si renseigné) :".to_string(),
         "  • Quick win d'abord (tâche courte ≤ 15 min + urgente) pour créer du momentum.".to_string(),
-        "  • Tâche importante/difficile ensuite tant que l'énergie est haute.".to_string(),
-        "  • Tâches secondaires/mécaniques en fin de journée.".to_string(),
+        "  • Tâche importante/difficile au moment le plus productif de l'utilisateur.".to_string(),
+        "  • Tâches secondaires/mécaniques aux moments de moindre énergie.".to_string(),
         "  • Tâche > 60 min → suggérer de décomposer ou prévoir une pause.".to_string(),
         "- ESTIMATIONS MANQUANTES : proposer d'en ajouter (\"Ça te prendrait combien de temps ?\").".to_string(),
         "- REGROUPEMENT : plusieurs tâches courtes similaires → suggérer un bloc (\"batch\").".to_string(),
@@ -1665,9 +1907,19 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String
         String::new(),
     ];
 
+    append_user_profile(db, &mut parts, "name");
+
+    // Inject peak productivity time preference into daily prep
     if let Some(profile) = get_user_profile(db) {
-        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
-            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
+        if let Some(peak) = profile.get("peakProductivityTime").and_then(|v| v.as_str()) {
+            let label = match peak {
+                "morning" => "le matin",
+                "afternoon" => "l'après-midi",
+                "evening" => "le soir",
+                _ => peak,
+            };
+            parts.push(format!("MOMENT LE PLUS PRODUCTIF DE L'UTILISATEUR : {label}"));
+            parts.push(format!("→ Place les tâches les plus difficiles/importantes {label} dans tes suggestions d'ordre."));
             parts.push(String::new());
         }
     }
@@ -1936,11 +2188,12 @@ pub async fn send_daily_prep_message(
     state: State<'_, AppState>,
     user_message: String,
     history: String,
+    target_date: Option<String>,
 ) -> Result<DailyPrepResponse, String> {
     let (provider_id, api_key, model, system_prompt, id_map) = {
         let db = state.get_db()?;
         let (provider, model) = get_active_provider(&db)?;
-        let (system, id_map) = build_daily_prep_prompt(&db);
+        let (system, id_map) = build_daily_prep_prompt(&db, target_date.as_deref());
         (provider.id, provider.api_key, model, system, id_map)
     };
 
@@ -2011,43 +2264,8 @@ fn build_daily_review_prompt(db: &rusqlite::Connection) -> (String, HashMap<Stri
         String::new(),
     ];
 
-    if let Some(profile) = get_user_profile(db) {
-        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
-            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
-            parts.push(String::new());
-        }
-    }
-
-    // Memory insights
-    if let Ok(mut stmt) = db.prepare(
-        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
-    ) {
-        if let Ok(rows) = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        }) {
-            let memory_lines: Vec<String> = rows
-                .filter_map(|r| r.ok())
-                .map(|(cat, insight)| {
-                    let label = match cat.as_str() {
-                        "prioritization" => "Priorisation",
-                        "work_patterns" => "Rythme de travail",
-                        "organization" => "Organisation",
-                        "blockers" => "Blocages",
-                        "psychology" => "Psychologie",
-                        "habits" => "Habitudes",
-                        other => other,
-                    };
-                    format!("- {label} : {insight}")
-                })
-                .collect();
-            if !memory_lines.is_empty() {
-                parts.push("MÉMOIRE — CE QUE TU SAIS DE L'UTILISATEUR :".to_string());
-                parts.push("(Utilise ces infos pour personnaliser la revue et mieux célébrer les accomplissements.)".to_string());
-                parts.extend(memory_lines);
-                parts.push(String::new());
-            }
-        }
-    }
+    append_user_profile(db, &mut parts, "name");
+    append_memory_insights(db, &mut parts, Some("Utilise ces infos pour personnaliser la revue et mieux célébrer les accomplissements."));
 
     // Active period goals (lightweight, just names for context)
     if let Ok(mut stmt) = db.prepare(
@@ -2264,42 +2482,8 @@ fn build_weekly_review_prompt(db: &rusqlite::Connection) -> (String, HashMap<Str
         String::new(),
     ];
 
-    if let Some(profile) = get_user_profile(db) {
-        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
-            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
-            parts.push(String::new());
-        }
-    }
-
-    // Memory insights
-    if let Ok(mut stmt) = db.prepare(
-        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
-    ) {
-        if let Ok(rows) = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        }) {
-            let memory_lines: Vec<String> = rows
-                .filter_map(|r| r.ok())
-                .map(|(cat, insight)| {
-                    let label = match cat.as_str() {
-                        "prioritization" => "Priorisation",
-                        "work_patterns" => "Rythme de travail",
-                        "organization" => "Organisation",
-                        "blockers" => "Blocages",
-                        "psychology" => "Psychologie",
-                        "habits" => "Habitudes",
-                        other => other,
-                    };
-                    format!("- {label} : {insight}")
-                })
-                .collect();
-            if !memory_lines.is_empty() {
-                parts.push("MÉMOIRE — CE QUE TU SAIS DE L'UTILISATEUR :".to_string());
-                parts.extend(memory_lines);
-                parts.push(String::new());
-            }
-        }
-    }
+    append_user_profile(db, &mut parts, "name");
+    append_memory_insights(db, &mut parts, None);
 
     // Active period goals
     if let Ok(mut stmt) = db.prepare(
@@ -2438,16 +2622,28 @@ pub async fn send_weekly_review_message(
 
 // ── Weekly Prep ──
 
-fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, String>) {
+fn build_weekly_prep_prompt(db: &rusqlite::Connection, target_monday: Option<&str>, calendar_events: Option<Vec<CalendarEvent>>) -> (String, HashMap<String, String>) {
     let now = chrono::Local::now();
     let today = now.format("%Y-%m-%d").to_string();
-    let weekday = now.weekday().num_days_from_monday() as i64;
-    let monday = now - chrono::Duration::days(weekday);
-    let friday = monday + chrono::Duration::days(4);
-    let monday_str = monday.format("%Y-%m-%d").to_string();
-    let friday_str = friday.format("%Y-%m-%d").to_string();
-    let next_monday = monday + chrono::Duration::days(7);
-    let next_monday_str = next_monday.format("%Y-%m-%d").to_string();
+    let (monday_str, friday_str, next_monday_str) = if let Some(tm) = target_monday {
+        if let Ok(mon) = chrono::NaiveDate::parse_from_str(tm, "%Y-%m-%d") {
+            let fri = mon + chrono::Duration::days(4);
+            let next_mon = mon + chrono::Duration::days(7);
+            (tm.to_string(), fri.format("%Y-%m-%d").to_string(), next_mon.format("%Y-%m-%d").to_string())
+        } else {
+            let weekday = now.weekday().num_days_from_monday() as i64;
+            let monday = now - chrono::Duration::days(weekday);
+            let friday = monday + chrono::Duration::days(4);
+            let next_monday = monday + chrono::Duration::days(7);
+            (monday.format("%Y-%m-%d").to_string(), friday.format("%Y-%m-%d").to_string(), next_monday.format("%Y-%m-%d").to_string())
+        }
+    } else {
+        let weekday = now.weekday().num_days_from_monday() as i64;
+        let monday = now - chrono::Duration::days(weekday);
+        let friday = monday + chrono::Duration::days(4);
+        let next_monday = monday + chrono::Duration::days(7);
+        (monday.format("%Y-%m-%d").to_string(), friday.format("%Y-%m-%d").to_string(), next_monday.format("%Y-%m-%d").to_string())
+    };
 
     let mut parts = vec![
         "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
@@ -2479,7 +2675,7 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         "1. Résumé structuré : présente d'abord les ⚡ Priorités de la semaine, puis les 📋 Tâches planifiées cette semaine (groupées par jour), puis le ⏳ Reliquat.".to_string(),
         "2. Demande à l'utilisateur s'il veut ajuster, ajouter ou retirer quelque chose.".to_string(),
         "3. Aide à identifier 3-5 priorités clés de la semaine.".to_string(),
-        "4. Explore les engagements : réunions, deadlines, livrables importants.".to_string(),
+        "4. Si l'agenda Google Calendar est disponible (section 📅), analyse les réunions de la semaine et propose de créer des tâches de préparation si nécessaire.".to_string(),
         "5. RÉPARTITION : aide activement à répartir les tâches sur les jours de la semaine (voir section RÉPARTITION DE LA CHARGE).".to_string(),
         "6. SCORES : incite à ajouter des urgences/importances sur les tâches qui n'en ont pas (voir section SCORES).".to_string(),
         "7. ESTIMATIONS DE TEMPS : propose d'estimer les durées des tâches qui n'ont pas d'estimation (voir section ESTIMATIONS).".to_string(),
@@ -2504,6 +2700,19 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         "- Tâches lourdes (> 2h) → ne pas en empiler plusieurs le même jour.".to_string(),
         "- PROPOSE un planning jour par jour si la semaine est chargée : \"Voici comment je verrais la répartition : ...\"".to_string(),
         "- Quand tu déplaces une tâche vers un autre jour, utilise tasksToUpdate avec scheduledDate.".to_string(),
+        "- TIENS COMPTE DE L'AGENDA : si des événements de calendrier sont disponibles (section 📅), intègre-les dans la répartition. Un jour avec beaucoup de réunions = moins de capacité pour des tâches longues.".to_string(),
+        String::new(),
+        "AGENDA / GOOGLE CALENDAR :".to_string(),
+        "- Si la section 📅 AGENDA est présente, tu as accès aux événements du calendrier de l'utilisateur.".to_string(),
+        "- DANS TON RÉSUMÉ INITIAL : mentionne les réunions/meetings importants de la semaine, groupés par jour.".to_string(),
+        "- PRÉPARATION DE MEETINGS : pour les réunions importantes (avec des participants, des sujets de fond), PROPOSE de créer une tâche de préparation.".to_string(),
+        "  Exemples : \"Préparer le meeting de jeudi avec X\", \"Préparer la présentation pour le comité de vendredi\".".to_string(),
+        "  Planifie la tâche de préparation 1-2 jours AVANT le meeting (pas le jour même).".to_string(),
+        "  Estimation de temps : 15-30 min pour un simple meeting, 30-60 min pour une présentation ou un comité important.".to_string(),
+        "- NE PROPOSE PAS de préparer les réunions triviales : les 1-1 récurrents, les standup, les points rapides.".to_string(),
+        "- IMPACT SUR LA CHARGE : intègre les heures de réunions dans ton calcul de charge quotidien. Un jour avec 3h de meetings n'a que ~4-5h disponibles pour les tâches.".to_string(),
+        "- Formulation naturelle : \"Je vois que tu as un meeting avec X jeudi — tu aurais besoin de le préparer en amont ?\" ou \"Tu as pas mal de réunions mardi, je te décharge un peu ce jour-là ?\"".to_string(),
+        "- Si le calendrier n'est pas connecté (pas de section 📅), continue normalement sans mentionner le calendrier.".to_string(),
         String::new(),
         "SCORES D'URGENCE ET D'IMPORTANCE :".to_string(),
         "- Certaines tâches ont des scores sur 5. Utilise-les ACTIVEMENT pour guider tes recommandations.".to_string(),
@@ -2571,12 +2780,7 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         String::new(),
     ];
 
-    if let Some(profile) = get_user_profile(db) {
-        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
-            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
-            parts.push(String::new());
-        }
-    }
+    append_user_profile(db, &mut parts, "name");
 
     let mut id_map: HashMap<String, String> = HashMap::new();
     let mut id_counter = 1i32;
@@ -2601,7 +2805,7 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
     {
         let mut has_goals = false;
         if let Ok(mut stmt) = db.prepare(
-            "SELECT g.id, g.title FROM strategy_goals g JOIN strategy_periods p ON g.period_id = p.id WHERE p.active = 1 ORDER BY g.position",
+            "SELECT g.id, g.title FROM strategy_goals g JOIN strategy_periods p ON g.period_id = p.id WHERE p.status = 'active' ORDER BY g.position",
         ) {
             if let Ok(goals) = stmt.query_map([], |row| Ok((
                 row.get::<_, String>(0)?,
@@ -2634,6 +2838,45 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
         }
         if !has_goals {
             parts.push("Aucun objectif/stratégie défini pour la période active.".to_string());
+            parts.push(String::new());
+        }
+    }
+
+    // Insert calendar events if available
+    if let Some(events) = calendar_events {
+        if !events.is_empty() {
+            let day_names = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+            parts.push("📅 AGENDA DE LA SEMAINE (événements Google Calendar) :".to_string());
+            for ev in &events {
+                // Parse start datetime to extract day and time
+                let day_label = chrono::NaiveDate::parse_from_str(&ev.start[..10], "%Y-%m-%d")
+                    .ok()
+                    .map(|d| day_names[d.weekday().num_days_from_monday() as usize])
+                    .unwrap_or("?");
+                let time_part = if ev.start.len() > 10 {
+                    // Extract HH:MM from ISO datetime (e.g. "2026-03-23T09:00:00+01:00")
+                    ev.start.get(11..16).unwrap_or("")
+                } else {
+                    "journée entière"
+                };
+                let end_time = if ev.end.len() > 10 {
+                    ev.end.get(11..16).map(|t| format!("-{t}")).unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                let attendees_str = if !ev.attendees.is_empty() {
+                    let n = ev.attendees.len();
+                    if n <= 3 {
+                        format!(" — participants : {}", ev.attendees.join(", "))
+                    } else {
+                        format!(" — {} participants", n)
+                    }
+                } else {
+                    String::new()
+                };
+                let location_str = ev.location.as_deref().map(|l| format!(" — lieu : {l}")).unwrap_or_default();
+                parts.push(format!("  • {day_label} {time_part}{end_time} : **{}**{attendees_str}{location_str}", ev.title));
+            }
             parts.push(String::new());
         }
     }
@@ -2815,11 +3058,55 @@ pub async fn send_weekly_prep_message(
     state: State<'_, AppState>,
     user_message: String,
     history: String,
+    target_monday: Option<String>,
 ) -> Result<DailyPrepResponse, String> {
+    // Check if Google Calendar is connected and fetch events for the week
+    let calendar_connected = {
+        let db = state.get_db()?;
+        db.query_row(
+            "SELECT connected FROM integrations WHERE id = 'google-calendar'",
+            [],
+            |row| row.get::<_, bool>(0),
+        ).unwrap_or(false)
+    };
+
+    let calendar_events = if calendar_connected {
+        // Compute the week range (monday to sunday) for calendar fetching
+        let now = chrono::Local::now();
+        let (cal_monday, cal_sunday) = if let Some(ref tm) = target_monday {
+            if let Ok(mon) = chrono::NaiveDate::parse_from_str(tm, "%Y-%m-%d") {
+                let sun = mon + chrono::Duration::days(6);
+                (tm.clone(), sun.format("%Y-%m-%d").to_string())
+            } else {
+                let weekday = now.weekday().num_days_from_monday() as i64;
+                let mon = now - chrono::Duration::days(weekday);
+                let sun = mon + chrono::Duration::days(6);
+                (mon.format("%Y-%m-%d").to_string(), sun.format("%Y-%m-%d").to_string())
+            }
+        } else {
+            let weekday = now.weekday().num_days_from_monday() as i64;
+            let mon = now - chrono::Duration::days(weekday);
+            let sun = mon + chrono::Duration::days(6);
+            (mon.format("%Y-%m-%d").to_string(), sun.format("%Y-%m-%d").to_string())
+        };
+
+        // Timeout after 5 seconds — don't let a slow calendar block the chat
+        let fetch_future = async {
+            let token = super::integrations::resolve_access_token(&state, "google-calendar", "google").await?;
+            crate::providers::google::fetch_calendar_events(&token, &cal_monday, &cal_sunday).await
+        };
+        match tokio::time::timeout(std::time::Duration::from_secs(5), fetch_future).await {
+            Ok(Ok(events)) => Some(events),
+            _ => None, // Timeout, token error, or fetch error — continue without calendar
+        }
+    } else {
+        None
+    };
+
     let (provider_id, api_key, model, system_prompt, id_map) = {
         let db = state.get_db()?;
         let (provider, model) = get_active_provider(&db)?;
-        let (system, id_map) = build_weekly_prep_prompt(&db);
+        let (system, id_map) = build_weekly_prep_prompt(&db, target_monday.as_deref(), calendar_events);
         (provider.id, provider.api_key, model, system, id_map)
     };
 
@@ -2875,240 +3162,10 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> (Stri
     let mut strat_counter = 1i32;
     let mut tactic_counter = 1i32;
     let mut refl_counter = 1i32;
+    append_period_hierarchy(db, &mut parts, period_id, &mut id_map, &mut goal_counter, &mut strat_counter, &mut tactic_counter, &mut refl_counter);
 
-    if let Ok(mut stmt) = db.prepare(
-        "SELECT id, title, target, deadline FROM strategy_goals WHERE period_id = ?1 ORDER BY position",
-    ) {
-        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, Option<String>>(3)?,
-        ))) {
-            let goals: Vec<_> = rows.filter_map(|r| r.ok()).collect();
-            if !goals.is_empty() {
-                parts.push("CAPS À TENIR (utilise les IDs courts pour les actions) :".to_string());
-                for (id, title, target, deadline) in &goals {
-                    let short = assign_period_short_id("g", &mut goal_counter, id, &mut id_map);
-                    let mut line = format!("[{short}] **{title}**");
-                    if !target.is_empty() { line.push_str(&format!(" — {target}")); }
-                    if let Some(d) = deadline { line.push_str(&format!(" (échéance: {d})")); }
-                    parts.push(line);
-
-                    if let Ok(mut sstmt) = db.prepare(
-                        "SELECT s.id, s.title FROM strategy_strategies s JOIN goal_strategy_links l ON l.strategy_id = s.id WHERE l.goal_id = ?1 ORDER BY s.position",
-                    ) {
-                        if let Ok(strats) = sstmt.query_map(params![id], |row| Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                        ))) {
-                            for s in strats.filter_map(|r| r.ok()) {
-                                let s_short = id_map.iter().find(|(_, v)| **v == s.0).map(|(k, _)| k.clone())
-                                    .unwrap_or_else(|| assign_period_short_id("s", &mut strat_counter, &s.0, &mut id_map));
-                                parts.push(format!("   ↳ objectif [{s_short}] {}", s.1));
-                            }
-                        }
-                    }
-                }
-                parts.push(String::new());
-            } else {
-                parts.push("AUCUN CAP À TENIR défini pour cette période.".to_string());
-                parts.push(String::new());
-            }
-        }
-    }
-
-    if let Ok(mut stmt) = db.prepare(
-        "SELECT s.id, s.title, s.description, s.goal_id FROM strategy_strategies s JOIN strategy_goals g ON s.goal_id = g.id WHERE g.period_id = ?1 ORDER BY s.position",
-    ) {
-        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, String>(3)?,
-        ))) {
-            let strats: Vec<_> = rows.filter_map(|r| r.ok()).collect();
-            if !strats.is_empty() {
-                parts.push("OBJECTIFS CONCRETS :".to_string());
-                for (sid, title, _desc, goal_id) in &strats {
-                    let s_short = id_map.iter().find(|(_, v)| *v == sid).map(|(k, _)| k.clone())
-                        .unwrap_or_else(|| assign_period_short_id("s", &mut strat_counter, sid, &mut id_map));
-                    let g_short = id_map.iter().find(|(_, v)| *v == goal_id).map(|(k, _)| k.clone()).unwrap_or_default();
-                    let parent = if g_short.is_empty() { String::new() } else { format!(" (cap [{g_short}])") };
-                    parts.push(format!("[{s_short}] {title}{parent}"));
-
-                    if let Ok(mut tstmt) = db.prepare(
-                        "SELECT id, title FROM strategy_tactics WHERE strategy_id = ?1 ORDER BY position",
-                    ) {
-                        if let Ok(tactics) = tstmt.query_map(params![sid], |row| Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                        ))) {
-                            for t in tactics.filter_map(|r| r.ok()) {
-                                let tc_short = assign_period_short_id("tc", &mut tactic_counter, &t.0, &mut id_map);
-                                parts.push(format!("   → stratégie [{tc_short}] {}", t.1));
-                            }
-                        }
-                    }
-                }
-                parts.push(String::new());
-            }
-        }
-    }
-
-    if let Ok(mut stmt) = db.prepare(
-        "SELECT id, prompt, answer FROM period_reflections WHERE period_id = ?1 ORDER BY position",
-    ) {
-        if let Ok(rows) = stmt.query_map(params![period_id], |row| Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-        ))) {
-            let refls: Vec<_> = rows.filter_map(|r| r.ok()).collect();
-            if !refls.is_empty() {
-                parts.push("RÉFLEXIONS de cette période :".to_string());
-                for (rid, prompt, answer) in &refls {
-                    let r_short = assign_period_short_id("r", &mut refl_counter, rid, &mut id_map);
-                    let ans = if answer.is_empty() { "(vide)".to_string() } else { format!("\"{}\"", answer) };
-                    parts.push(format!("[{r_short}] {prompt} → {ans}"));
-                }
-                parts.push(String::new());
-            }
-        }
-    }
-
-    if let Ok(prev_id) = db.query_row(
-        "SELECT id FROM strategy_periods WHERE status = 'closed' ORDER BY end_year DESC, end_month DESC LIMIT 1",
-        [],
-        |row| row.get::<_, String>(0),
-    ) {
-        if let Ok(mut stmt) = db.prepare(
-            "SELECT prompt, answer FROM period_reflections WHERE period_id = ?1 AND answer != '' ORDER BY position",
-        ) {
-            if let Ok(rows) = stmt.query_map(params![prev_id], |row| Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-            ))) {
-                let refls: Vec<_> = rows.filter_map(|r| r.ok()).collect();
-                if !refls.is_empty() {
-                    parts.push("RÉFLEXIONS DE LA PÉRIODE PRÉCÉDENTE :".to_string());
-                    for (prompt, answer) in &refls {
-                        parts.push(format!("- {} → \"{}\"", prompt, answer));
-                    }
-                    parts.push(String::new());
-                }
-            }
-        }
-    }
-
-    // ── Profil utilisateur complet ──
-    if let Some(profile) = get_user_profile(db) {
-        let mut ctx = vec!["PROFIL DE L'UTILISATEUR :".to_string()];
-        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
-            ctx.push(format!("- Prénom : {name}"));
-        }
-        if let Some(main_ctx) = profile.get("mainContext").and_then(|v| v.as_str()) {
-            let label = match main_ctx {
-                "travail_salarie" => "Travail salarié",
-                "independant" => "Indépendant / freelance",
-                "etudes" => "Études",
-                "parent" => "Parent au foyer",
-                "mix" => "Mix de contextes",
-                _ => main_ctx,
-            };
-            ctx.push(format!("- Contexte principal : {label}"));
-        }
-        if let Some(other) = profile.get("mainContextOther").and_then(|v| v.as_str()) {
-            if !other.is_empty() { ctx.push(format!("  Précision : {other}")); }
-        }
-        if let Some(job) = profile.get("jobActivity").and_then(|v| v.as_str()) {
-            if !job.is_empty() { ctx.push(format!("- Activité / métier : {job}")); }
-        }
-        if let Some(adhd) = profile.get("adhdRecognition").and_then(|v| v.as_str()) {
-            let label = match adhd {
-                "diagnostique" => "Diagnostiqué",
-                "fortement" => "Fortement suspecté",
-                "un_peu" => "Légèrement suspecté",
-                "non" => "Pas de TDAH identifié",
-                _ => adhd,
-            };
-            ctx.push(format!("- TDAH : {label}"));
-        }
-        if let Some(blockers) = profile.get("blockers").and_then(|v| v.as_array()) {
-            let labels: Vec<&str> = blockers.iter().filter_map(|v| v.as_str()).map(|b| match b {
-                "commencer" => "Difficulté à commencer",
-                "oublier" => "Oublis fréquents",
-                "agir" => "Difficulté à passer à l'action",
-                "finir" => "Difficulté à finir",
-                "trop_head" => "Trop de choses en tête",
-                "motivation" => "Manque de motivation",
-                other => other,
-            }).collect();
-            if !labels.is_empty() { ctx.push(format!("- Blocages principaux : {}", labels.join(", "))); }
-        }
-        if let Some(horizon) = profile.get("organizationHorizon").and_then(|v| v.as_str()) {
-            let label = match horizon {
-                "aujourdhui" => "Vit au jour le jour",
-                "semaine" => "Planifie à la semaine",
-                "projets_longs" => "Gère des projets longs",
-                "mix" => "Mix selon les projets",
-                _ => horizon,
-            };
-            ctx.push(format!("- Horizon d'organisation : {label}"));
-        }
-        if let Some(expect) = profile.get("mainExpectation").and_then(|v| v.as_str()) {
-            let label = match expect {
-                "me_dire_quoi_faire" => "Qu'on lui dise quoi faire",
-                "prioriser" => "Aide à prioriser",
-                "allege_tete" => "Alléger la charge mentale",
-                "avancer_sans_pression" => "Avancer sans pression",
-                "cadrer" => "Un cadre structurant",
-                _ => expect,
-            };
-            ctx.push(format!("- Attente principale envers focal. : {label}"));
-        }
-        if let Some(extra) = profile.get("extraInfo").and_then(|v| v.as_str()) {
-            if !extra.is_empty() { ctx.push(format!("- Info complémentaire : {extra}")); }
-        }
-        if let Some(summary) = profile.get("publicProfileSummary").and_then(|v| v.as_str()) {
-            if !summary.is_empty() { ctx.push(format!("- Résumé du profil public : {summary}")); }
-        }
-        if ctx.len() > 1 {
-            parts.push(ctx.join("\n"));
-            parts.push(String::new());
-        }
-    }
-
-    // ── Mémoire AI (observations des conversations passées) ──
-    if let Ok(mut stmt) = db.prepare(
-        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
-    ) {
-        if let Ok(rows) = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        }) {
-            let memory_lines: Vec<String> = rows
-                .filter_map(|r| r.ok())
-                .map(|(cat, insight)| {
-                    let label = match cat.as_str() {
-                        "prioritization" => "Priorisation",
-                        "work_patterns" => "Rythme de travail",
-                        "organization" => "Organisation",
-                        "blockers" => "Blocages",
-                        "psychology" => "Psychologie",
-                        "habits" => "Habitudes",
-                        other => other,
-                    };
-                    format!("- {label} : {insight}")
-                })
-                .collect();
-            if !memory_lines.is_empty() {
-                parts.push("MÉMOIRE — CE QUE TU SAIS DE L'UTILISATEUR :".to_string());
-                parts.push("(Observations apprises au fil des conversations passées. Utilise ces infos pour personnaliser ton accompagnement.)".to_string());
-                parts.extend(memory_lines);
-                parts.push(String::new());
-            }
-        }
-    }
+    append_user_profile(db, &mut parts, "full");
+    append_memory_insights(db, &mut parts, Some("Observations apprises au fil des conversations passées. Utilise ces infos pour personnaliser ton accompagnement."));
 
     // ── Ton rôle et posture ──
     parts.push("TON RÔLE :".to_string());
@@ -3297,6 +3354,278 @@ pub async fn send_period_prep_message(
         let db = state.get_db()?;
         let (provider, model) = get_active_provider(&db)?;
         let (system, id_map) = build_period_prep_prompt(&db, &period_id);
+        (provider.id, provider.api_key, model, system, id_map)
+    };
+
+    let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
+    let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
+    msgs.push(("user".to_string(), user_message));
+
+    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs, true).await?;
+    parse_period_prep_response(&raw, &id_map)
+}
+
+// ── Period Review ──
+
+fn build_period_review_prompt(db: &rusqlite::Connection, period_id: &str) -> (String, HashMap<String, String>) {
+    let now = chrono::Local::now();
+    let today = now.format("%Y-%m-%d").to_string();
+
+    let mut id_map: HashMap<String, String> = HashMap::new();
+
+    let mut parts = vec![
+        "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
+        "Tu es en mode REVUE DE LA PÉRIODE : tu aides l'utilisateur à faire le bilan de sa période stratégique et à préparer la suivante.".to_string(),
+        format!("Date d'aujourd'hui : {today}"),
+        String::new(),
+    ];
+
+    // ── Period metadata ──
+    let mut start_date = String::new();
+    let mut end_date = String::new();
+    if let Ok(row) = db.query_row(
+        "SELECT start_month, start_year, end_month, end_year, frequency FROM strategy_periods WHERE id = ?1",
+        params![period_id],
+        |row| Ok((
+            row.get::<_, i32>(0)?,
+            row.get::<_, i32>(1)?,
+            row.get::<_, i32>(2)?,
+            row.get::<_, i32>(3)?,
+            row.get::<_, String>(4)?,
+        )),
+    ) {
+        let months = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+        let sm = months.get(row.0 as usize).unwrap_or(&"?");
+        let em = months.get(row.2 as usize).unwrap_or(&"?");
+        let freq_label = match row.4.as_str() {
+            "monthly" => "mensuelle",
+            "bimonthly" => "bimestrielle",
+            "quarterly" => "trimestrielle",
+            "biannual" => "semestrielle",
+            _ => "périodique",
+        };
+        parts.push(format!("PÉRIODE EN REVUE : {sm} {sy} — {em} {ey} (fréquence {freq_label})", sy = row.1, ey = row.3));
+        parts.push(String::new());
+
+        // Compute start/end dates for bilan
+        start_date = format!("{:04}-{:02}-01", row.1, row.0 + 1);
+        let end_month = row.2 + 1;
+        let end_year = row.3;
+        let last_day = if end_month == 12 {
+            chrono::NaiveDate::from_ymd_opt(end_year + 1, 1, 1)
+        } else {
+            chrono::NaiveDate::from_ymd_opt(end_year, (end_month + 1) as u32, 1)
+        }.map(|d| d.pred_opt().unwrap_or(d)).unwrap_or_default();
+        end_date = last_day.format("%Y-%m-%d").to_string();
+    }
+
+    // ── Bilan chiffré ──
+    if !start_date.is_empty() && !end_date.is_empty() {
+        let eff = "COALESCE(scheduled_date, DATE(created_at))";
+
+        let tasks_total: i32 = db.query_row(
+            &format!("SELECT COUNT(*) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2"),
+            params![start_date, end_date], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let tasks_completed: i32 = db.query_row(
+            &format!("SELECT COUNT(*) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2 AND done = 1"),
+            params![start_date, end_date], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let priority_total: i32 = db.query_row(
+            &format!("SELECT COUNT(*) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2 AND priority = 'main'"),
+            params![start_date, end_date], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let priority_completed: i32 = db.query_row(
+            &format!("SELECT COUNT(*) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2 AND priority = 'main' AND done = 1"),
+            params![start_date, end_date], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let tasks_linked: i32 = db.query_row(
+            &format!("SELECT COUNT(*) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2 AND strategy_id IS NOT NULL AND strategy_id != ''"),
+            params![start_date, end_date], |row| row.get(0),
+        ).unwrap_or(0);
+
+        let focus_days: i32 = db.query_row(
+            &format!("SELECT COUNT(DISTINCT {eff}) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2 AND done = 1"),
+            params![start_date, end_date], |row| row.get(0),
+        ).unwrap_or(0);
+
+        parts.push("BILAN CHIFFRÉ DE LA PÉRIODE :".to_string());
+        parts.push(format!("- Tâches terminées : {tasks_completed}/{tasks_total}"));
+        if tasks_total > 0 {
+            let pct = (tasks_completed as f64 / tasks_total as f64 * 100.0).round() as i32;
+            parts.push(format!("  ({pct}% de complétion)"));
+        }
+        parts.push(format!("- Priorités terminées : {priority_completed}/{priority_total}"));
+        parts.push(format!("- Tâches rattachées à un objectif : {tasks_linked}"));
+        parts.push(format!("- Jours actifs : {focus_days}"));
+        parts.push(String::new());
+
+        // Progress per strategy
+        if let Ok(mut stmt) = db.prepare(&format!(
+            "SELECT strategy_id, COUNT(*) as total, \
+             COALESCE(SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END), 0) as completed \
+             FROM tasks \
+             WHERE strategy_id IS NOT NULL AND strategy_id != '' \
+             AND {eff} >= ?1 AND {eff} <= ?2 \
+             GROUP BY strategy_id"
+        )) {
+            if let Ok(rows) = stmt.query_map(params![start_date, end_date], |row| Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, i32>(2)?,
+            ))) {
+                let progress: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+                if !progress.is_empty() {
+                    parts.push("AVANCEMENT PAR OBJECTIF/STRATÉGIE :".to_string());
+                    for (sid, total, completed) in &progress {
+                        let title: String = db.query_row(
+                            "SELECT title FROM strategy_strategies WHERE id = ?1",
+                            params![sid], |row| row.get(0),
+                        ).or_else(|_| db.query_row(
+                            "SELECT title FROM strategy_tactics WHERE id = ?1",
+                            params![sid], |row| row.get(0),
+                        )).unwrap_or_else(|_| sid.clone());
+                        let pct = if *total > 0 { (*completed as f64 / *total as f64 * 100.0).round() as i32 } else { 0 };
+                        parts.push(format!("- {title} : {completed}/{total} tâches ({pct}%)"));
+                    }
+                    parts.push(String::new());
+                }
+            }
+        }
+    }
+
+    let mut goal_counter = 1i32;
+    let mut strat_counter = 1i32;
+    let mut tactic_counter = 1i32;
+    let mut refl_counter = 1i32;
+    append_period_hierarchy(db, &mut parts, period_id, &mut id_map, &mut goal_counter, &mut strat_counter, &mut tactic_counter, &mut refl_counter);
+
+    append_user_profile(db, &mut parts, "full");
+    append_memory_insights(db, &mut parts, None);
+
+    // ── Role and instructions ──
+    parts.push("TON RÔLE :".to_string());
+    parts.push("Tu es un coach stratégique personnel. La revue de période est le moment de bilan et de transition. L'utilisateur prend du recul sur ce qu'il a accompli et prépare ses engagements pour la suite.".to_string());
+    parts.push("Tu n'es PAS un simple assistant qui liste des données. Tu es un partenaire de réflexion qui :".to_string());
+    parts.push("- Célèbre les accomplissements et progrès, même partiels".to_string());
+    parts.push("- Aide à tirer des leçons de ce qui a fonctionné ou pas".to_string());
+    parts.push("- Challenge les justifications superficielles (\"j'ai pas eu le temps\" → \"qu'est-ce qui a pris la place ?\")".to_string());
+    parts.push("- Aide à formuler des engagements concrets pour la période suivante".to_string());
+    parts.push("- S'appuie sur le profil et les blocages de l'utilisateur pour adapter ses questions".to_string());
+    parts.push(String::new());
+
+    parts.push("CONTEXTE TDAH — PRINCIPES FONDAMENTAUX :".to_string());
+    parts.push("- Le cerveau TDAH a tendance à ne voir que ce qui n'est PAS fait. Ton rôle est d'abord de valoriser ce qui A été fait.".to_string());
+    parts.push("- Les objectifs non atteints génèrent de la culpabilité. Normalise : réajuster n'est PAS échouer, c'est apprendre.".to_string());
+    parts.push("- Trop d'autocritique paralyse. Trop de complaisance empêche de progresser. Trouve le juste milieu bienveillant.".to_string());
+    parts.push("- Les insights les plus utiles viennent de questions simples, pas de longs questionnaires.".to_string());
+    parts.push(String::new());
+
+    parts.push("RÈGLES DE CONVERSATION :".to_string());
+    parts.push("- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string());
+    parts.push("- Messages COURTS. 3-5 phrases max hors récap.".to_string());
+    parts.push("- Tutoie l'utilisateur. Sois chaleureux, bienveillant, encourageant et concis.".to_string());
+    parts.push("- Ne fais jamais la morale. Pas de jugement.".to_string());
+    parts.push("- Donne ton avis et fais des suggestions concrètes.".to_string());
+    parts.push(String::new());
+
+    parts.push("INDICATEUR DE PROGRESSION :".to_string());
+    parts.push("Chaque message DOIT commencer par un indicateur d'étape discret :".to_string());
+    parts.push("  \"📊 **Bilan**\\n\\n...\" — pour l'étape bilan chiffré".to_string());
+    parts.push("  \"🔍 **Analyse**\\n\\n...\" — pour l'analyse par cap/objectif".to_string());
+    parts.push("  \"💡 **Leçons**\\n\\n...\" — pour les apprentissages et insights".to_string());
+    parts.push("  \"✍️ **Réflexions**\\n\\n...\" — pour remplir les réflexions".to_string());
+    parts.push("  \"✅ **Clôture**\\n\\n...\" — pour le récap final".to_string());
+    parts.push(String::new());
+
+    parts.push("DÉROULEMENT DE LA REVUE :".to_string());
+    parts.push("Tu suis 4 étapes dans l'ordre. Chaque étape = un ou plusieurs échanges courts.".to_string());
+    parts.push(String::new());
+
+    parts.push("ÉTAPE 1 — 📊 BILAN (premier message) :".to_string());
+    parts.push("Ton premier message est CRUCIAL. Il doit être :".to_string());
+    parts.push("- Court (5-6 phrases max)".to_string());
+    parts.push("- Personnel (utilise le prénom)".to_string());
+    parts.push("- Ancré dans du concret : présente 2-3 chiffres clés du bilan (taux de complétion, priorités terminées, jours actifs)".to_string());
+    parts.push("- Valorisant d'abord : commence par ce qui a été accompli".to_string());
+    parts.push("- Termine par UNE question ouverte sur le ressenti : \"Comment tu as vécu cette période ?\" ou \"De quoi tu es le plus fier ?\"".to_string());
+    parts.push(String::new());
+
+    parts.push("ÉTAPE 2 — 🔍 ANALYSE PAR CAP :".to_string());
+    parts.push("- Passe en revue chaque cap UN PAR UN. Pour chacun :".to_string());
+    parts.push("  • Rappelle le cap et son target".to_string());
+    parts.push("  • Montre l'avancement des objectifs/stratégies liés (données chiffrées)".to_string());
+    parts.push("  • Demande à l'utilisateur son analyse : est-ce qu'il a avancé comme il le voulait ?".to_string());
+    parts.push("  • Si un objectif n'a pas avancé, explore pourquoi sans juger : \"Qu'est-ce qui s'est mis en travers ?\"".to_string());
+    parts.push("  • Si un objectif a super bien marché, explore aussi : \"Qu'est-ce qui a fait que ça a marché ?\"".to_string());
+    parts.push(String::new());
+
+    parts.push("ÉTAPE 3 — 💡 LEÇONS & ✍️ RÉFLEXIONS :".to_string());
+    parts.push("- Synthétise les apprentissages clés de la période.".to_string());
+    parts.push("- Propose de remplir les réflexions de la période : ce qu'il veut commencer, arrêter, continuer.".to_string());
+    parts.push("- Utilise les insights de la conversation pour pré-remplir les réflexions et demander validation.".to_string());
+    parts.push("- Mets à jour les réflexions via reflectionsToUpdate.".to_string());
+    parts.push(String::new());
+
+    parts.push("ÉTAPE 4 — ✅ CLÔTURE :".to_string());
+    parts.push("- Récapitule les insights clés et les engagements pour la suite.".to_string());
+    parts.push("- Message motivant et tourné vers l'avenir.".to_string());
+    parts.push("- Mets prepComplete à true.".to_string());
+    parts.push(String::new());
+
+    parts.push("GESTION DU RYTHME :".to_string());
+    parts.push("- Si l'utilisateur veut aller vite : respecte son rythme. Propose un raccourci (\"OK, on va à l'essentiel\").".to_string());
+    parts.push("- Si l'utilisateur bloque : propose des options concrètes plutôt que des questions ouvertes.".to_string());
+    parts.push(String::new());
+
+    parts.push("IMPORTANT :".to_string());
+    parts.push("- Tu PEUX modifier les réflexions via reflectionsToUpdate.".to_string());
+    parts.push("- Tu PEUX aussi modifier les caps, objectifs, stratégies si l'utilisateur le demande (par exemple supprimer un objectif abandonné).".to_string());
+    parts.push("- Confirme toujours dans ton message ce que tu fais.".to_string());
+    parts.push("- N'inclus JAMAIS les IDs courts dans le texte du content.".to_string());
+    parts.push("- Si l'utilisateur dit \"c'est bon\" APRÈS l'étape de clôture, mets prepComplete à true.".to_string());
+    parts.push(String::new());
+
+    parts.push("ACTIONS DISPONIBLES :".to_string());
+    parts.push(r#"- goalsToUpdate : [{"id": "g1", "title": "...", "target": "..."}]"#.to_string());
+    parts.push(r#"- goalsToRemove : ["g1"]"#.to_string());
+    parts.push(r#"- strategiesToUpdate : [{"id": "s1", "title": "..."}]"#.to_string());
+    parts.push(r#"- strategiesToRemove : ["s1"]"#.to_string());
+    parts.push(r#"- tacticsToUpdate : [{"id": "tc1", "title": "..."}]"#.to_string());
+    parts.push(r#"- tacticsToRemove : ["tc1"]"#.to_string());
+    parts.push(r#"- reflectionsToUpdate : [{"id": "r1", "answer": "..."}]"#.to_string());
+    parts.push(String::new());
+
+    parts.push("STYLE DU CONTENU (content) — RESPECTE STRICTEMENT CE FORMAT :".to_string());
+    parts.push("- INTERDIT : titres markdown (#, ##, ###). Jamais de headers.".to_string());
+    parts.push("- Autorisé : **gras** pour les noms importants, listes numérotées (1. 2. 3.), \\n pour les sauts de ligne.".to_string());
+    parts.push("- Ton conversationnel et chaleureux. Phrases courtes.".to_string());
+    parts.push(String::new());
+
+    parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
+    parts.push(r#"{"content": "...", "prepComplete": false, "reflectionsToUpdate": [], ...}"#.to_string());
+    parts.push("- content : ton message texte.".to_string());
+    parts.push("- prepComplete : true UNIQUEMENT quand la revue est terminée et l'utilisateur confirme.".to_string());
+    parts.push("- Tous les champs d'action sont optionnels. N'inclus que ceux nécessaires.".to_string());
+
+    (parts.join("\n"), id_map)
+}
+
+#[tauri::command]
+pub async fn send_period_review_message(
+    state: State<'_, AppState>,
+    user_message: String,
+    history: String,
+    period_id: String,
+) -> Result<DailyPrepResponse, String> {
+    let (provider_id, api_key, model, system_prompt, id_map) = {
+        let db = state.get_db()?;
+        let (provider, model) = get_active_provider(&db)?;
+        let (system, id_map) = build_period_review_prompt(&db, &period_id);
         (provider.id, provider.api_key, model, system, id_map)
     };
 

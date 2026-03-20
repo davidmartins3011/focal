@@ -62,6 +62,12 @@ export interface UserProfile {
   extraInfo?: string;
   /** Résumé généré par l'IA à partir des profils publics (LinkedIn, site web…) */
   publicProfileSummary?: string;
+  /** Préférence de planification journalière : matin ou soir */
+  dayPrepPreference?: "morning" | "evening";
+  /** Préférence de planification hebdomadaire : début ou fin de semaine */
+  weekPrepPreference?: "start" | "end";
+  /** Moment le plus productif de la journée */
+  peakProductivityTime?: "morning" | "afternoon" | "evening";
 }
 
 export type ThemeId = "default" | "clair" | "sombre" | "zen" | "hyperfocus" | "aurore" | "ocean" | "sakura" | "nord" | "solaire";

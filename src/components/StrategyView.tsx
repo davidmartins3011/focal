@@ -180,10 +180,11 @@ interface StrategyViewProps {
   frequency: StrategyFrequency;
   cycleStart: number;
   onLaunchPeriodPrep?: (periodId: string) => void;
+  onLaunchPeriodReview?: (periodId: string) => void;
   refreshKey?: number;
 }
 
-export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep, refreshKey }: StrategyViewProps) {
+export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep, onLaunchPeriodReview, refreshKey }: StrategyViewProps) {
   // ── Periods state ──
   const [periods, setPeriods] = useState<StrategyPeriod[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
@@ -251,7 +252,7 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
 
   // ── Prep banner state ──
   const [prepDismissed, setPrepDismissed] = useState(true);
-  const reflectionsRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     if (!selectedPeriodId) return;
@@ -1010,7 +1011,7 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
           )}
 
           {/* Reflections */}
-          <div ref={reflectionsRef} className={styles.sectionHeader}>
+          <div className={styles.sectionHeader}>
             <span className={styles.sectionTitle}>Réflexion {frequencyLabel(selectedPeriod.frequency)}</span>
           </div>
           <div className={styles.reflections}>
@@ -1042,7 +1043,7 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
             <div className={styles.closePeriodSection}>
               <button
                 className={styles.reviewPeriodBtn}
-                onClick={() => reflectionsRef.current?.scrollIntoView({ behavior: "smooth" })}
+                onClick={() => onLaunchPeriodReview?.(selectedPeriodId)}
               >
                 Lancer la revue de la période
               </button>

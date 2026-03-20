@@ -41,10 +41,6 @@ interface SettingsViewProps {
   onStrategyCycleStartChange: (start: number) => void;
   workingDays: WeekDayId[];
   onWorkingDaysChange: (days: WeekDayId[]) => void;
-  dayPrepPreference: "morning" | "evening";
-  onDayPrepPreferenceChange: (pref: "morning" | "evening") => void;
-  weekPrepPreference: "start" | "end";
-  onWeekPrepPreferenceChange: (pref: "start" | "end") => void;
 }
 
 export default function SettingsView({
@@ -65,10 +61,6 @@ export default function SettingsView({
   onStrategyCycleStartChange,
   workingDays,
   onWorkingDaysChange,
-  dayPrepPreference,
-  onDayPrepPreferenceChange,
-  weekPrepPreference,
-  onWeekPrepPreferenceChange,
 }: SettingsViewProps) {
   const [visibleKeys, setVisibleKeys] = useState<Record<AIProviderId, boolean>>({
     openai: false,
@@ -282,46 +274,6 @@ export default function SettingsView({
                   </button>
                 );
               })}
-            </div>
-          </div>
-
-          <div className={styles.settingRow}>
-            <div className={styles.settingInfo}>
-              <div className={styles.settingLabel}>Préparation de la journée</div>
-              <div className={styles.settingDesc}>
-                Quand préfères-tu planifier ta journée ?
-              </div>
-            </div>
-            <div className={styles.freqPills}>
-              {([{ id: "morning" as const, label: "Le matin" }, { id: "evening" as const, label: "Le soir" }]).map((opt) => (
-                <button
-                  key={opt.id}
-                  className={`${styles.freqPill} ${dayPrepPreference === opt.id ? styles.freqActive : ""}`}
-                  onClick={() => onDayPrepPreferenceChange(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className={styles.settingRow}>
-            <div className={styles.settingInfo}>
-              <div className={styles.settingLabel}>Préparation de la semaine</div>
-              <div className={styles.settingDesc}>
-                Quand préfères-tu planifier ta semaine ?
-              </div>
-            </div>
-            <div className={styles.freqPills}>
-              {([{ id: "start" as const, label: "En début" }, { id: "end" as const, label: "En fin" }]).map((opt) => (
-                <button
-                  key={opt.id}
-                  className={`${styles.freqPill} ${weekPrepPreference === opt.id ? styles.freqActive : ""}`}
-                  onClick={() => onWeekPrepPreferenceChange(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              ))}
             </div>
           </div>
 

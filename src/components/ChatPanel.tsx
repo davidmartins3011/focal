@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatMessage, AISettings, Task, Tag } from "../types";
-import { getChatMessages, sendMessage, sendDailyPrepMessage, sendDailyReviewMessage, sendWeeklyPrepMessage, sendWeeklyReviewMessage, sendPeriodPrepMessage, clearChat, type AiResponse, type DailyPrepResponse, type TagAction, type StepsAction, type GoalAction, type StrategyActionItem, type TacticAction, type ReflectionAction, type GoalStrategyLinkAction } from "../services/chat";
+import { getChatMessages, sendMessage, sendDailyPrepMessage, sendDailyReviewMessage, sendWeeklyPrepMessage, sendWeeklyReviewMessage, sendPeriodPrepMessage, sendPeriodReviewMessage, clearChat, type AiResponse, type DailyPrepResponse, type TagAction, type StepsAction, type GoalAction, type StrategyActionItem, type TacticAction, type ReflectionAction, type GoalStrategyLinkAction } from "../services/chat";
 import { getTasks, createTask, deleteTask, updateTask, toggleTask, reorderTasks, setMicroSteps, setTaskTags, clearAllTasks, clearTodayTasks } from "../services/tasks";
 import { upsertStrategyGoal, deleteStrategyGoal, upsertStrategy, deleteStrategy, upsertTactic, deleteTactic, upsertPeriodReflection, toggleGoalStrategyLink, getStrategyGoals, getStrategyPeriods } from "../services/reviews";
 import { getSetting, setSetting } from "../services/settings";
-import { dayClosedKey, dayPrepKey, weekClosedKey, getMondayISO, weekPrepKey, toISODate } from "../utils/dateFormat";
+import { getProfile } from "../services/profile";
+import { dayClosedKey, dayPrepKey, weekClosedKey, getMondayISO, weekPrepKey, toISODate, getNextDay, getNextMonday } from "../utils/dateFormat";
 import { runAnalysisNow } from "../services/memory";
 import { runSuggestionsNow } from "../services/chat";
 import { CheckmarkIcon } from "./icons";
@@ -156,6 +157,18 @@ const endPrepVariations: Record<string, string[]> = {
     "Bon bilan hebdo. Tu peux être fier ! 🌟",
     "C'est bouclé pour cette semaine. Bien joué ! 🎯",
   ],
+  period_review: [
+    "La revue de la période est terminée. Beau bilan ! 📊",
+    "Belle période en rétrospective ! Les leçons sont posées. 💡",
+    "Revue bouclée. Tu sais où tu vas pour la suite ! 🧭",
+    "Période bien analysée. En route pour la suivante ! 🚀",
+    "Bilan de la période fait. Bravo pour le chemin parcouru ! 👏",
+    "Super rétrospective ! Les insights sont précieux. ⭐",
+    "Période passée en revue. Belle progression ! 📈",
+    "Revue terminée. La prochaine période s'annonce bien ! 🔥",
+    "Bon bilan de période. Tu peux être fier du chemin ! 🌟",
+    "C'est bouclé ! Les apprentissages sont là. 🎯",
+  ],
   period: [
     "La période est bien préparée. En avant ! 🧭",
     "Tes caps sont posés. Belle période en perspective ! 🚀",
@@ -167,6 +180,81 @@ const endPrepVariations: Record<string, string[]> = {
     "Préparation terminée ! Concentre-toi sur tes priorités. 👊",
     "C'est calé pour cette période. En route ! 🌟",
     "Bien joué ! La période est prête, à toi de jouer. ☀️",
+  ],
+};
+
+const prepGreetings: Record<string, string[]> = {
+  daily: [
+    "C'est parti ! Préparons la journée ensemble.",
+    "Salut ! On organise ta journée ?",
+    "Hello ! Voyons ce qui t'attend aujourd'hui.",
+    "Allez, on prépare la journée !",
+    "Prêt à planifier ? C'est parti !",
+    "On s'y met ! Qu'est-ce qu'on a aujourd'hui ?",
+    "C'est le moment de poser la journée. On y va ?",
+    "Hop, on regarde ce qu'il y a au programme !",
+    "Let's go ! On structure ta journée.",
+    "Allez, on fait le point sur aujourd'hui !",
+  ],
+  weekly: [
+    "C'est parti ! Préparons la semaine ensemble.",
+    "Salut ! On organise ta semaine ?",
+    "Hello ! Voyons ce qui t'attend cette semaine.",
+    "Allez, on prépare la semaine !",
+    "Prêt à planifier ta semaine ? C'est parti !",
+    "On s'y met ! Qu'est-ce qu'on a cette semaine ?",
+    "C'est le moment de poser la semaine. On y va ?",
+    "Hop, on regarde le programme de la semaine !",
+    "Let's go ! On structure ta semaine.",
+    "Allez, on fait le point sur la semaine !",
+  ],
+  daily_review: [
+    "C'est l'heure du bilan ! Voyons ce que tu as accompli aujourd'hui.",
+    "Bravo, la journée touche à sa fin ! On fait le point ?",
+    "Allez, on regarde ce que tu as fait aujourd'hui !",
+    "Fin de journée ! On célèbre tes accomplissements ?",
+    "C'est le moment de faire le bilan. Comment s'est passée ta journée ?",
+    "Voyons un peu ta journée ! Qu'est-ce qu'on a accompli ?",
+    "Journée terminée — on fait le récap ensemble ?",
+    "On fait le point sur ta journée ? Let's go !",
+    "Temps de souffler ! Regardons ce que tu as fait aujourd'hui.",
+    "C'est l'heure de la revue du soir ! On y va ?",
+  ],
+  weekly_review: [
+    "C'est l'heure du bilan de la semaine ! Voyons ce que tu as accompli.",
+    "Bravo, la semaine touche à sa fin ! On fait le point ?",
+    "Allez, on regarde ce que tu as fait cette semaine !",
+    "Fin de semaine ! On célèbre tes accomplissements ?",
+    "C'est le moment de faire le bilan hebdo. Comment s'est passée ta semaine ?",
+    "Voyons un peu ta semaine ! Qu'est-ce qu'on a accompli ?",
+    "Semaine terminée — on fait le récap ensemble ?",
+    "On fait le point sur ta semaine ? Let's go !",
+    "Temps de souffler ! Regardons ce que tu as fait cette semaine.",
+    "C'est l'heure de la revue hebdo ! On y va ?",
+  ],
+  period: [
+    "C'est parti ! Préparons cette période ensemble.",
+    "Salut ! On organise ta prise de recul ?",
+    "Hello ! Voyons tes priorités pour cette période.",
+    "Allez, on prépare la période !",
+    "Prêt à poser tes caps ? C'est parti !",
+    "On s'y met ! Quels sont tes objectifs pour cette période ?",
+    "C'est le moment de structurer ta période. On y va ?",
+    "Hop, on fait le point sur tes priorités stratégiques !",
+    "Let's go ! On clarifie tes caps à tenir.",
+    "Allez, on pose les bases de cette période !",
+  ],
+  period_review: [
+    "C'est l'heure du bilan de la période ! Voyons ce que tu as accompli.",
+    "Bravo, la période touche à sa fin ! On fait le point ?",
+    "Allez, on regarde ce que tu as fait cette période !",
+    "Fin de période ! On célèbre tes accomplissements ?",
+    "C'est le moment de faire le bilan de la période. Comment ça s'est passé ?",
+    "Voyons un peu cette période ! Qu'est-ce qu'on a accompli ?",
+    "Période terminée — on fait le récap ensemble ?",
+    "On fait le point sur ta période ? Let's go !",
+    "Temps de souffler ! Regardons ce que tu as fait cette période.",
+    "C'est l'heure de la revue de la période ! On y va ?",
   ],
 };
 
@@ -192,6 +280,8 @@ interface ChatPanelProps {
   onWeeklyPrepConsumed?: () => void;
   periodPrepPending?: { periodId: string } | null;
   onPeriodPrepConsumed?: () => void;
+  periodReviewPending?: { periodId: string } | null;
+  onPeriodReviewConsumed?: () => void;
   dailyReviewPending?: boolean;
   onDailyReviewConsumed?: () => void;
   weeklyReviewPending?: boolean;
@@ -205,7 +295,7 @@ interface ChatPanelProps {
   onWeekCompleted?: () => void;
 }
 
-export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, periodPrepPending, onPeriodPrepConsumed, dailyReviewPending, onDailyReviewConsumed, weeklyReviewPending, onWeeklyReviewConsumed, stuckTask, onStuckConsumed, onTasksChanged, onStrategyChanged, onViewSwitch, onDayCompleted, onWeekCompleted }: ChatPanelProps) {
+export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDailyPrepConsumed, weeklyPrepPending, onWeeklyPrepConsumed, periodPrepPending, onPeriodPrepConsumed, periodReviewPending, onPeriodReviewConsumed, dailyReviewPending, onDailyReviewConsumed, weeklyReviewPending, onWeeklyReviewConsumed, stuckTask, onStuckConsumed, onTasksChanged, onStrategyChanged, onViewSwitch, onDayCompleted, onWeekCompleted }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -216,7 +306,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
-  const [prepMode, setPrepMode] = useState<"daily" | "weekly" | "daily_review" | "weekly_review" | "period" | null>(null);
+  const [prepMode, setPrepMode] = useState<"daily" | "weekly" | "daily_review" | "weekly_review" | "period" | "period_review" | null>(null);
   const periodIdRef = useRef<string | null>(null);
   const [rawView, setRawView] = useState(false);
   const [addedStepsMsgIds, setAddedStepsMsgIds] = useState<Set<string>>(new Set());
@@ -227,6 +317,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
   const [showPrepNextWeekPrompt, setShowPrepNextWeekPrompt] = useState(false);
   const pendingPrepExit = useRef<string | null>(null);
   const prepHistory = useRef<{ role: string; content: string }[]>([]);
+  const prepTargetDate = useRef<string | null>(null);
   const todayTasksRef = useRef(todayTasks);
   todayTasksRef.current = todayTasks;
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -710,6 +801,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
         pendingPrepExit.current = null;
         setPrepMode(null);
         prepHistory.current = [];
+        prepTargetDate.current = null;
 
         // When daily review completes, close the day and conditionally offer to prep tomorrow
         if (exitMode === "daily_review") {
@@ -717,8 +809,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
           await setSetting(dayClosedKey(todayStr), "true");
           onDayCompleted?.();
           onTasksChanged?.();
-          const pref = await getSetting("day-prep-preference");
-          const shouldAsk = pref === "evening" || Math.random() < 1 / 15;
+          const profile = await getProfile();
+          const shouldAsk = (profile.dayPrepPreference ?? "morning") === "evening" || Math.random() < 1 / 15;
           if (shouldAsk) {
             setShowPrepTomorrowPrompt(true);
           } else {
@@ -737,8 +829,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
           await setSetting(weekClosedKey(mondayStr), "true");
           onWeekCompleted?.();
           onTasksChanged?.();
-          const pref = await getSetting("week-prep-preference");
-          const shouldAsk = pref === "end" || Math.random() < 1 / 15;
+          const profile = await getProfile();
+          const shouldAsk = (profile.weekPrepPreference ?? "start") === "end" || Math.random() < 1 / 15;
           if (shouldAsk) {
             setShowPrepNextWeekPrompt(true);
           } else {
@@ -750,13 +842,18 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
             setMessages((prev) => [...prev, goodWeekend]);
           }
         }
+
+        // When period review completes, notify strategy view to refresh
+        if (exitMode === "period_review") {
+          onStrategyChanged?.();
+        }
       }
     },
-    [applyTaskActions, applyPeriodActions, prepMode, onDayCompleted, onWeekCompleted, onTasksChanged],
+    [applyTaskActions, applyPeriodActions, prepMode, onDayCompleted, onWeekCompleted, onTasksChanged, onStrategyChanged],
   );
 
   const sendPrepMessage = useCallback(
-    (text: string, mode: "daily" | "weekly" | "daily_review" | "weekly_review" | "period" = "daily") => {
+    (text: string, mode: "daily" | "weekly" | "daily_review" | "weekly_review" | "period" | "period_review" = "daily") => {
       if (isTyping) return;
 
       prepHistory.current.push({ role: "user", content: text });
@@ -767,15 +864,18 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
       setIsTyping(true);
 
       let sendPromise: Promise<import("../services/chat").DailyPrepResponse>;
-      if (mode === "period" && periodIdRef.current) {
+      if (mode === "period_review" && periodIdRef.current) {
+        sendPromise = sendPeriodReviewMessage(text, prepHistory.current.slice(0, -1), periodIdRef.current);
+      } else if (mode === "period" && periodIdRef.current) {
         sendPromise = sendPeriodPrepMessage(text, prepHistory.current.slice(0, -1), periodIdRef.current);
       } else if (mode === "daily_review") {
         sendPromise = sendDailyReviewMessage(text, prepHistory.current.slice(0, -1));
       } else if (mode === "weekly_review") {
         sendPromise = sendWeeklyReviewMessage(text, prepHistory.current.slice(0, -1));
+      } else if (mode === "weekly") {
+        sendPromise = sendWeeklyPrepMessage(text, prepHistory.current.slice(0, -1), prepTargetDate.current ?? undefined);
       } else {
-        const sendFn = mode === "weekly" ? sendWeeklyPrepMessage : sendDailyPrepMessage;
-        sendPromise = sendFn(text, prepHistory.current.slice(0, -1));
+        sendPromise = sendDailyPrepMessage(text, prepHistory.current.slice(0, -1), prepTargetDate.current ?? undefined);
       }
 
       sendPromise
@@ -801,102 +901,47 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     [isTyping, handlePrepResponse],
   );
 
-  const startDailyPrep = useCallback(() => {
+  const initPrepSession = useCallback((
+    mode: "daily" | "weekly" | "daily_review" | "weekly_review" | "period" | "period_review",
+    opts?: { targetDate?: string; periodId?: string; viewTab?: "today" | "week" | "strategy"; skipViewSwitch?: boolean },
+  ) => {
     if (isTyping) return;
-    setPrepMode("daily");
+    setPrepMode(mode);
     setPrepHasAiReply(false);
     pendingPrepExit.current = null;
     prepHistory.current = [];
+    prepTargetDate.current = opts?.targetDate ?? null;
+    if (opts?.periodId) periodIdRef.current = opts.periodId;
     textareaRef.current?.focus();
-    onViewSwitch?.("today");
-    const greetings = [
-      "C'est parti ! Préparons la journée ensemble.",
-      "Salut ! On organise ta journée ?",
-      "Hello ! Voyons ce qui t'attend aujourd'hui.",
-      "Allez, on prépare la journée !",
-      "Prêt à planifier ? C'est parti !",
-      "On s'y met ! Qu'est-ce qu'on a aujourd'hui ?",
-      "C'est le moment de poser la journée. On y va ?",
-      "Hop, on regarde ce qu'il y a au programme !",
-      "Let's go ! On structure ta journée.",
-      "Allez, on fait le point sur aujourd'hui !",
-    ];
-    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-    sendPrepMessage(greeting, "daily");
+    if (!opts?.skipViewSwitch && opts?.viewTab) onViewSwitch?.(opts.viewTab);
+    const pool = prepGreetings[mode];
+    const greeting = pool[Math.floor(Math.random() * pool.length)];
+    sendPrepMessage(greeting, mode);
   }, [isTyping, sendPrepMessage, onViewSwitch]);
 
-  const startWeeklyPrep = useCallback(() => {
-    if (isTyping) return;
-    setPrepMode("weekly");
-    setPrepHasAiReply(false);
-    pendingPrepExit.current = null;
-    prepHistory.current = [];
-    textareaRef.current?.focus();
-    onViewSwitch?.("week");
-    const greetings = [
-      "C'est parti ! Préparons la semaine ensemble.",
-      "Salut ! On organise ta semaine ?",
-      "Hello ! Voyons ce qui t'attend cette semaine.",
-      "Allez, on prépare la semaine !",
-      "Prêt à planifier ta semaine ? C'est parti !",
-      "On s'y met ! Qu'est-ce qu'on a cette semaine ?",
-      "C'est le moment de poser la semaine. On y va ?",
-      "Hop, on regarde le programme de la semaine !",
-      "Let's go ! On structure ta semaine.",
-      "Allez, on fait le point sur la semaine !",
-    ];
-    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-    sendPrepMessage(greeting, "weekly");
-  }, [isTyping, sendPrepMessage, onViewSwitch]);
+  const startDailyPrep = useCallback((opts?: { targetDate?: string; skipViewSwitch?: boolean }) => {
+    initPrepSession("daily", { targetDate: opts?.targetDate, viewTab: "today", skipViewSwitch: opts?.skipViewSwitch });
+  }, [initPrepSession]);
+
+  const startWeeklyPrep = useCallback((opts?: { targetMonday?: string; skipViewSwitch?: boolean }) => {
+    initPrepSession("weekly", { targetDate: opts?.targetMonday, viewTab: "week", skipViewSwitch: opts?.skipViewSwitch });
+  }, [initPrepSession]);
 
   const startPeriodPrep = useCallback((periodId: string) => {
-    if (isTyping) return;
-    setPrepMode("period");
-    setPrepHasAiReply(false);
-    pendingPrepExit.current = null;
-    prepHistory.current = [];
-    periodIdRef.current = periodId;
-    textareaRef.current?.focus();
-    onViewSwitch?.("strategy");
-    const greetings = [
-      "C'est parti ! Préparons cette période ensemble.",
-      "Salut ! On organise ta prise de recul ?",
-      "Hello ! Voyons tes priorités pour cette période.",
-      "Allez, on prépare la période !",
-      "Prêt à poser tes caps ? C'est parti !",
-      "On s'y met ! Quels sont tes objectifs pour cette période ?",
-      "C'est le moment de structurer ta période. On y va ?",
-      "Hop, on fait le point sur tes priorités stratégiques !",
-      "Let's go ! On clarifie tes caps à tenir.",
-      "Allez, on pose les bases de cette période !",
-    ];
-    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-    sendPrepMessage(greeting, "period");
-  }, [isTyping, sendPrepMessage, onViewSwitch]);
+    initPrepSession("period", { periodId, viewTab: "strategy" });
+  }, [initPrepSession]);
 
   const startDailyReview = useCallback(() => {
-    if (isTyping) return;
-    setPrepMode("daily_review");
-    setPrepHasAiReply(false);
-    pendingPrepExit.current = null;
-    prepHistory.current = [];
-    textareaRef.current?.focus();
-    onViewSwitch?.("today");
-    const greetings = [
-      "C'est l'heure du bilan ! Voyons ce que tu as accompli aujourd'hui.",
-      "Bravo, la journée touche à sa fin ! On fait le point ?",
-      "Allez, on regarde ce que tu as fait aujourd'hui !",
-      "Fin de journée ! On célèbre tes accomplissements ?",
-      "C'est le moment de faire le bilan. Comment s'est passée ta journée ?",
-      "Voyons un peu ta journée ! Qu'est-ce qu'on a accompli ?",
-      "Journée terminée — on fait le récap ensemble ?",
-      "On fait le point sur ta journée ? Let's go !",
-      "Temps de souffler ! Regardons ce que tu as fait aujourd'hui.",
-      "C'est l'heure de la revue du soir ! On y va ?",
-    ];
-    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-    sendPrepMessage(greeting, "daily_review");
-  }, [isTyping, sendPrepMessage, onViewSwitch]);
+    initPrepSession("daily_review", { viewTab: "today" });
+  }, [initPrepSession]);
+
+  const startWeeklyReview = useCallback(() => {
+    initPrepSession("weekly_review", { viewTab: "week" });
+  }, [initPrepSession]);
+
+  const startPeriodReview = useCallback((periodId: string) => {
+    initPrepSession("period_review", { periodId, viewTab: "strategy" });
+  }, [initPrepSession]);
 
   useEffect(() => {
     if (!dailyPrepPending) return;
@@ -909,30 +954,6 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     onDailyReviewConsumed?.();
     startDailyReview();
   }, [dailyReviewPending, startDailyReview, onDailyReviewConsumed]);
-
-  const startWeeklyReview = useCallback(() => {
-    if (isTyping) return;
-    setPrepMode("weekly_review");
-    setPrepHasAiReply(false);
-    pendingPrepExit.current = null;
-    prepHistory.current = [];
-    textareaRef.current?.focus();
-    onViewSwitch?.("week");
-    const greetings = [
-      "C'est l'heure du bilan de la semaine ! Voyons ce que tu as accompli.",
-      "Bravo, la semaine touche à sa fin ! On fait le point ?",
-      "Allez, on regarde ce que tu as fait cette semaine !",
-      "Fin de semaine ! On célèbre tes accomplissements ?",
-      "C'est le moment de faire le bilan hebdo. Comment s'est passée ta semaine ?",
-      "Voyons un peu ta semaine ! Qu'est-ce qu'on a accompli ?",
-      "Semaine terminée — on fait le récap ensemble ?",
-      "On fait le point sur ta semaine ? Let's go !",
-      "Temps de souffler ! Regardons ce que tu as fait cette semaine.",
-      "C'est l'heure de la revue hebdo ! On y va ?",
-    ];
-    const greeting = greetings[Math.floor(Math.random() * greetings.length)];
-    sendPrepMessage(greeting, "weekly_review");
-  }, [isTyping, sendPrepMessage, onViewSwitch]);
 
   useEffect(() => {
     if (!weeklyReviewPending) return;
@@ -951,6 +972,12 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
     onPeriodPrepConsumed?.();
     startPeriodPrep(periodPrepPending.periodId);
   }, [periodPrepPending, startPeriodPrep, onPeriodPrepConsumed]);
+
+  useEffect(() => {
+    if (!periodReviewPending) return;
+    onPeriodReviewConsumed?.();
+    startPeriodReview(periodReviewPending.periodId);
+  }, [periodReviewPending, startPeriodReview, onPeriodReviewConsumed]);
 
   useEffect(() => {
     if (!stuckTask) return;
@@ -1517,7 +1544,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
                 onClick={() => {
                   setShowPrepTomorrowPrompt(false);
                   onViewSwitch?.("tomorrow");
-                  startDailyPrep();
+                  const tomorrow = getNextDay(toISODate(new Date()));
+                  startDailyPrep({ targetDate: tomorrow, skipViewSwitch: true });
                 }}
               >
                 Préparer demain
@@ -1550,7 +1578,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
                 onClick={() => {
                   setShowPrepNextWeekPrompt(false);
                   onViewSwitch?.("next-week");
-                  startWeeklyPrep();
+                  const nextMonday = getNextMonday(getMondayISO(new Date()));
+                  startWeeklyPrep({ targetMonday: nextMonday, skipViewSwitch: true });
                 }}
               >
                 Préparer la semaine
@@ -1596,8 +1625,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
                 await setSetting(dayClosedKey(todayStr), "true");
                 onDayCompleted?.();
                 onTasksChanged?.();
-                const pref = await getSetting("day-prep-preference");
-                const shouldAsk = pref === "evening" || Math.random() < 1 / 15;
+                const profile = await getProfile();
+                const shouldAsk = (profile.dayPrepPreference ?? "morning") === "evening" || Math.random() < 1 / 15;
                 if (shouldAsk) {
                   setShowPrepTomorrowPrompt(true);
                 } else {
@@ -1615,8 +1644,8 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
                 await setSetting(weekClosedKey(mondayStr), "true");
                 onWeekCompleted?.();
                 onTasksChanged?.();
-                const pref = await getSetting("week-prep-preference");
-                const shouldAsk = pref === "end" || Math.random() < 1 / 15;
+                const profile = await getProfile();
+                const shouldAsk = (profile.weekPrepPreference ?? "start") === "end" || Math.random() < 1 / 15;
                 if (shouldAsk) {
                   setShowPrepNextWeekPrompt(true);
                 } else {
@@ -1631,7 +1660,7 @@ export default function ChatPanel({ onStartOnboarding, dailyPrepPending, onDaily
             }}
           >
             <CheckmarkIcon size={14} strokeWidth={2} />
-            {{ daily: "Finir le planning du jour", weekly: "Finir le planning de la semaine", daily_review: "Finir la revue du jour", weekly_review: "Finir la revue de la semaine", period: "Finir la préparation de la période" }[prepMode]}
+            {{ daily: "Finir le planning du jour", weekly: "Finir le planning de la semaine", daily_review: "Finir la revue du jour", weekly_review: "Finir la revue de la semaine", period: "Finir la préparation de la période", period_review: "Finir la revue de la période" }[prepMode]}
           </button>
         )}
         <div className={styles.inputBox}>

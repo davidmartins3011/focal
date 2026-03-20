@@ -47,6 +47,19 @@ export const LABELS = {
     avancer_sans_pression: "M'aide à avancer sans pression",
     cadrer: "Me cadre un peu plus",
   },
+  dayPrepPreference: {
+    morning: "Le matin",
+    evening: "Le soir",
+  },
+  weekPrepPreference: {
+    start: "En début de semaine",
+    end: "En fin de semaine",
+  },
+  peakProductivityTime: {
+    morning: "Le matin",
+    afternoon: "L'après-midi",
+    evening: "Le soir",
+  },
 } as const;
 
 export const BLOCKER_KEYS = ["commencer", "oublier", "agir", "finir", "trop_head", "motivation"] as const;

@@ -263,7 +263,7 @@ pub async fn fetch_emails(
 }
 
 /// Gets a valid access token for the given integration, refreshing if needed.
-async fn resolve_access_token(
+pub(crate) async fn resolve_access_token(
     state: &State<'_, AppState>,
     integration_id: &str,
     provider: &str,

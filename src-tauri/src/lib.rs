@@ -108,6 +108,7 @@ pub fn run() {
             commands::ai::send_weekly_prep_message,
             commands::ai::send_weekly_review_message,
             commands::ai::send_period_prep_message,
+            commands::ai::send_period_review_message,
             commands::ai::send_onboarding_message,
             commands::ai::analyze_profile_url,
             commands::memory::check_and_run_analysis,

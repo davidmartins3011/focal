@@ -155,10 +155,12 @@ export interface DailyPrepResponse {
 export function sendDailyPrepMessage(
   userMessage: string,
   history: { role: string; content: string }[],
+  targetDate?: string,
 ): Promise<DailyPrepResponse> {
   return invoke<DailyPrepResponse>("send_daily_prep_message", {
     userMessage,
     history: JSON.stringify(history),
+    targetDate: targetDate ?? null,
   });
 }
 
@@ -185,10 +187,12 @@ export function sendWeeklyReviewMessage(
 export function sendWeeklyPrepMessage(
   userMessage: string,
   history: { role: string; content: string }[],
+  targetMonday?: string,
 ): Promise<DailyPrepResponse> {
   return invoke<DailyPrepResponse>("send_weekly_prep_message", {
     userMessage,
     history: JSON.stringify(history),
+    targetMonday: targetMonday ?? null,
   });
 }
 
@@ -198,6 +202,18 @@ export function sendPeriodPrepMessage(
   periodId: string,
 ): Promise<DailyPrepResponse> {
   return invoke<DailyPrepResponse>("send_period_prep_message", {
+    userMessage,
+    history: JSON.stringify(history),
+    periodId,
+  });
+}
+
+export function sendPeriodReviewMessage(
+  userMessage: string,
+  history: { role: string; content: string }[],
+  periodId: string,
+): Promise<DailyPrepResponse> {
+  return invoke<DailyPrepResponse>("send_period_review_message", {
     userMessage,
     history: JSON.stringify(history),
     periodId,

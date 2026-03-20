@@ -22,6 +22,7 @@ interface Props {
   onLaunchWeeklyPrep?: () => void;
   onLaunchWeeklyReview?: () => void;
   onLaunchPeriodPrep?: (periodId: string) => void;
+  onLaunchPeriodReview?: (periodId: string) => void;
   onStuck?: (taskId: string, taskName: string) => void;
   taskRefreshKey?: number;
   strategyRefreshKey?: number;
@@ -34,7 +35,7 @@ const STATIC_TABS: { id: ViewTab; label: string }[] = [
   { id: "strategy", label: "Prise de recul" },
 ];
 
-export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyEnabled, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchDailyReview, onLaunchWeeklyPrep, onLaunchWeeklyReview, onLaunchPeriodPrep, onStuck, taskRefreshKey, strategyRefreshKey, workingDays }: Props) {
+export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyEnabled, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchDailyReview, onLaunchWeeklyPrep, onLaunchWeeklyReview, onLaunchPeriodPrep, onLaunchPeriodReview, onStuck, taskRefreshKey, strategyRefreshKey, workingDays }: Props) {
   const [dayClosed, setDayClosed] = useState(false);
   const [weekClosed, setWeekClosed] = useState(false);
 
@@ -165,7 +166,7 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
           />
         )}
         {activeTab === "strategy" && (
-          <StrategyView frequency={strategyFrequency} cycleStart={strategyCycleStart} onLaunchPeriodPrep={onLaunchPeriodPrep} refreshKey={strategyRefreshKey} />
+          <StrategyView frequency={strategyFrequency} cycleStart={strategyCycleStart} onLaunchPeriodPrep={onLaunchPeriodPrep} onLaunchPeriodReview={onLaunchPeriodReview} refreshKey={strategyRefreshKey} />
         )}
       </div>
     </div>

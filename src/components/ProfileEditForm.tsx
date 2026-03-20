@@ -299,6 +299,51 @@ export default function ProfileEditForm({ editForm, onUpdate, onSave, onCancel }
         </FormField>
       </ProfileSection>
 
+      <ProfileSection title="Préférences d'organisation" icon="📋">
+        <FormField label="Quand préfères-tu planifier ta journée ?">
+          <div className={styles.pillGroup}>
+            {([{ id: "morning" as const, label: "Le matin" }, { id: "evening" as const, label: "Le soir" }]).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`${styles.pill} ${(editForm.dayPrepPreference ?? "morning") === opt.id ? styles.pillActive : ""}`}
+                onClick={() => onUpdate("dayPrepPreference", opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </FormField>
+        <FormField label="Quand préfères-tu planifier ta semaine ?">
+          <div className={styles.pillGroup}>
+            {([{ id: "start" as const, label: "En début" }, { id: "end" as const, label: "En fin" }]).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`${styles.pill} ${(editForm.weekPrepPreference ?? "start") === opt.id ? styles.pillActive : ""}`}
+                onClick={() => onUpdate("weekPrepPreference", opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </FormField>
+        <FormField label="Ton moment le plus productif ?">
+          <div className={styles.pillGroup}>
+            {([{ id: "morning" as const, label: "Le matin" }, { id: "afternoon" as const, label: "L'après-midi" }, { id: "evening" as const, label: "Le soir" }]).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`${styles.pill} ${editForm.peakProductivityTime === opt.id ? styles.pillActive : ""}`}
+                onClick={() => onUpdate("peakProductivityTime", opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </FormField>
+      </ProfileSection>
+
       <div className={styles.formFooter}>
         <button className={styles.cancelBtn} onClick={onCancel} type="button">Annuler</button>
         <button className={styles.saveBtn} type="submit">Enregistrer</button>

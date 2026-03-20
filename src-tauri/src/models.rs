@@ -282,4 +282,10 @@ pub struct UserProfile {
     pub main_expectation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_info: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub day_prep_preference: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub week_prep_preference: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_productivity_time: Option<String>,
 }

@@ -178,6 +178,12 @@ export default function ProfileView() {
                 <ProfileField label="Attente principale" value={profile.mainExpectation ? LABELS.mainExpectation[profile.mainExpectation] : undefined} />
                 <ProfileField label="Info importante" value={profile.extraInfo} />
               </ProfileSection>
+
+              <ProfileSection title="Préférences d'organisation" icon="📋">
+                <ProfileField label="Planification de la journée" value={LABELS.dayPrepPreference[profile.dayPrepPreference ?? "morning"]} />
+                <ProfileField label="Planification de la semaine" value={LABELS.weekPrepPreference[profile.weekPrepPreference ?? "start"]} />
+                <ProfileField label="Moment le plus productif" value={profile.peakProductivityTime ? LABELS.peakProductivityTime[profile.peakProductivityTime] : undefined} />
+              </ProfileSection>
             </>
           )}
 
