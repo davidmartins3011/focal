@@ -274,22 +274,29 @@ pub fn carry_over_goals(
         .filter_map(|r| r.ok())
         .collect();
 
+    // Track old→new ID mappings for goal_strategy_links
+    let mut goal_id_map: Vec<(String, String)> = Vec::new();
+    let mut strat_id_map: Vec<(String, String)> = Vec::new();
+
     for (old_gid, title, target, deadline, pos) in &goals {
         let new_gid = gen_short_id(&db)?;
+        goal_id_map.push((old_gid.clone(), new_gid.clone()));
         db.execute(
             "INSERT INTO strategy_goals (id, title, target, deadline, position, period_id) VALUES (?1,?2,?3,?4,?5,?6)",
             params![new_gid, title, target, deadline, pos, target_period_id],
         ).map_err(|e| e.to_string())?;
 
         // Copy strategies under this goal
-        let strat_map = copy_children(
+        let child_strat_map = copy_children(
             &db,
             "SELECT id, title, description, position FROM strategy_strategies WHERE goal_id = ?1 ORDER BY position",
             "INSERT INTO strategy_strategies (id, goal_id, title, description, position) VALUES (?1,?2,?3,?4,?5)",
             old_gid, &new_gid,
         )?;
 
-        for (old_sid, new_sid) in &strat_map {
+        for (old_sid, new_sid) in &child_strat_map {
+            strat_id_map.push((old_sid.clone(), new_sid.clone()));
+
             // Copy tactics under this strategy
             let tactic_map = copy_children(
                 &db,
@@ -316,6 +323,27 @@ pub fn carry_over_goals(
                     ).map_err(|e| e.to_string())?;
                 }
             }
+        }
+    }
+
+    // Copy goal_strategy_links using new IDs
+    let mut link_stmt = db.prepare(
+        "SELECT goal_id, strategy_id FROM goal_strategy_links WHERE goal_id IN (SELECT id FROM strategy_goals WHERE period_id = ?1)"
+    ).map_err(|e| e.to_string())?;
+    let old_links: Vec<(String, String)> = link_stmt
+        .query_map(params![source_period_id], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    for (old_gid, old_sid) in &old_links {
+        let new_gid = goal_id_map.iter().find(|(o, _)| o == old_gid).map(|(_, n)| n);
+        let new_sid = strat_id_map.iter().find(|(o, _)| o == old_sid).map(|(_, n)| n);
+        if let (Some(ng), Some(ns)) = (new_gid, new_sid) {
+            db.execute(
+                "INSERT OR IGNORE INTO goal_strategy_links (goal_id, strategy_id) VALUES (?1, ?2)",
+                params![ng, ns],
+            ).map_err(|e| e.to_string())?;
         }
     }
 
@@ -573,6 +601,21 @@ pub fn get_period_summary(
         params![start_date, end_date], |row| row.get(0),
     ).map_err(|e| e.to_string())?;
 
+    let priority_total: i32 = db.query_row(
+        &format!("SELECT COUNT(*) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2 AND priority = 'main'"),
+        params![start_date, end_date], |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    let priority_completed: i32 = db.query_row(
+        &format!("SELECT COUNT(*) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2 AND priority = 'main' AND done = 1"),
+        params![start_date, end_date], |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    let tasks_linked: i32 = db.query_row(
+        &format!("SELECT COUNT(*) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2 AND strategy_id IS NOT NULL AND strategy_id != ''"),
+        params![start_date, end_date], |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
     let focus_days: i32 = db.query_row(
         &format!("SELECT COUNT(DISTINCT {eff}) FROM tasks WHERE {eff} >= ?1 AND {eff} <= ?2 AND done = 1"),
         params![start_date, end_date], |row| row.get(0),
@@ -596,7 +639,7 @@ pub fn get_period_summary(
         .filter_map(|r| r.ok())
         .collect();
 
-    Ok(PeriodSummary { tasks_completed, tasks_total, focus_days, total_days, distribution })
+    Ok(PeriodSummary { tasks_completed, tasks_total, focus_days, total_days, priority_completed, priority_total, tasks_linked, distribution })
 }
 
 #[tauri::command]
@@ -610,7 +653,7 @@ pub fn get_strategy_progress(
 
     let mut stmt = db.prepare(&format!(
         "SELECT strategy_id, COUNT(*) as total, \
-         SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END) as completed \
+         COALESCE(SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END), 0) as completed \
          FROM tasks \
          WHERE strategy_id IS NOT NULL AND strategy_id != '' \
          AND {eff} >= ?1 AND {eff} <= ?2 \

@@ -44,9 +44,13 @@ export default function App() {
   const [strategyOccurrence, setStrategyOccurrence] = useState<FrequencyOccurrence>("last");
   const [strategyDay, setStrategyDay] = useState<WeekDayId>("dim");
   const [workingDays, setWorkingDays] = useState<WeekDayId[]>(["lun", "mar", "mer", "jeu", "ven"]);
+  const [dayPrepPreference, setDayPrepPreference] = useState<"morning" | "evening">("morning");
+  const [weekPrepPreference, setWeekPrepPreference] = useState<"start" | "end">("start");
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   const [dailyPrepPending, setDailyPrepPending] = useState(false);
+  const [dailyReviewPending, setDailyReviewPending] = useState(false);
   const [weeklyPrepPending, setWeeklyPrepPending] = useState(false);
+  const [weeklyReviewPending, setWeeklyReviewPending] = useState(false);
   const [periodPrepPending, setPeriodPrepPending] = useState<{ periodId: string } | null>(null);
   const [stuckTask, setStuckTask] = useState<{ taskId: string; taskName: string } | null>(null);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
@@ -121,6 +125,10 @@ export default function App() {
               setWorkingDays(parsed);
           } catch { /* ignore */ }
         }
+        if (s["day-prep-preference"] && ["morning", "evening"].includes(s["day-prep-preference"]))
+          setDayPrepPreference(s["day-prep-preference"] as "morning" | "evening");
+        if (s["week-prep-preference"] && ["start", "end"].includes(s["week-prep-preference"]))
+          setWeekPrepPreference(s["week-prep-preference"] as "start" | "end");
         if (s["onboarding-completed"] === "true") {
           setOnboardingDone(true);
         } else {
@@ -212,6 +220,14 @@ export default function App() {
     if (loaded.current) setSetting("working-days", JSON.stringify(workingDays));
   }, [workingDays]);
 
+  useEffect(() => {
+    if (loaded.current) setSetting("day-prep-preference", dayPrepPreference);
+  }, [dayPrepPreference]);
+
+  useEffect(() => {
+    if (loaded.current) setSetting("week-prep-preference", weekPrepPreference);
+  }, [weekPrepPreference]);
+
   const handleStrategyFrequencyChange = useCallback((freq: StrategyFrequency) => {
     setStrategyFrequency(freq);
     notif.setNotifSettings((prev) => ({
@@ -289,8 +305,16 @@ export default function App() {
     setDailyPrepPending(true);
   }, []);
 
+  const handleLaunchDailyReview = useCallback(() => {
+    setDailyReviewPending(true);
+  }, []);
+
   const handleLaunchWeeklyPrep = useCallback(() => {
     setWeeklyPrepPending(true);
+  }, []);
+
+  const handleLaunchWeeklyReview = useCallback(() => {
+    setWeeklyReviewPending(true);
   }, []);
 
   const handleLaunchPeriodPrep = useCallback((periodId: string) => {
@@ -336,6 +360,10 @@ export default function App() {
             onStrategyCycleStartChange={handleStrategyCycleStartChange}
             workingDays={workingDays}
             onWorkingDaysChange={setWorkingDays}
+            dayPrepPreference={dayPrepPreference}
+            onDayPrepPreferenceChange={setDayPrepPreference}
+            weekPrepPreference={weekPrepPreference}
+            onWeekPrepPreferenceChange={setWeekPrepPreference}
           />
         );
       case "suggestions":
@@ -358,7 +386,9 @@ export default function App() {
             strategyFrequency={strategyFrequency}
             strategyCycleStart={strategyCycleStart}
             onLaunchDailyPrep={handleLaunchDailyPrep}
+            onLaunchDailyReview={handleLaunchDailyReview}
             onLaunchWeeklyPrep={handleLaunchWeeklyPrep}
+            onLaunchWeeklyReview={handleLaunchWeeklyReview}
             onLaunchPeriodPrep={handleLaunchPeriodPrep}
             onStuck={handleStuck}
             taskRefreshKey={taskRefreshKey}
@@ -408,8 +438,12 @@ export default function App() {
           onStartOnboarding={handleStartOnboarding}
           dailyPrepPending={dailyPrepPending}
           onDailyPrepConsumed={() => setDailyPrepPending(false)}
+          dailyReviewPending={dailyReviewPending}
+          onDailyReviewConsumed={() => setDailyReviewPending(false)}
           weeklyPrepPending={weeklyPrepPending}
           onWeeklyPrepConsumed={() => setWeeklyPrepPending(false)}
+          weeklyReviewPending={weeklyReviewPending}
+          onWeeklyReviewConsumed={() => setWeeklyReviewPending(false)}
           periodPrepPending={periodPrepPending}
           onPeriodPrepConsumed={() => setPeriodPrepPending(null)}
           stuckTask={stuckTask}
@@ -417,6 +451,8 @@ export default function App() {
           onTasksChanged={handleTasksChanged}
           onStrategyChanged={handleStrategyChanged}
           onViewSwitch={handleViewSwitch}
+          onDayCompleted={handleTasksChanged}
+          onWeekCompleted={handleTasksChanged}
         />
       </div>
       <UpdateNotification />

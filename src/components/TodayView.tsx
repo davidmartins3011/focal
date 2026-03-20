@@ -47,6 +47,7 @@ function initializePriorities(tasks: Task[], maxMain: number): Task[] {
 interface TodayViewProps {
   dailyPriorityCount: number;
   onLaunchDailyPrep?: () => void;
+  onLaunchDailyReview?: () => void;
   onStuck?: (taskId: string, taskName: string) => void;
   refreshKey?: number;
   /** ISO date to display (defaults to today). */
@@ -61,7 +62,7 @@ interface TodayViewProps {
   onDayReopened?: () => void;
 }
 
-export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStuck, refreshKey, viewDate, isPlanning, isDayCompleted, onDayCompleted, onDayReopened }: TodayViewProps) {
+export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onLaunchDailyReview, onStuck, refreshKey, viewDate, isPlanning, isDayCompleted, onDayCompleted, onDayReopened }: TodayViewProps) {
   const [prepDone, setPrepDone] = useState(true);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
@@ -471,7 +472,7 @@ export default function TodayView({ dailyPriorityCount, onLaunchDailyPrep, onStu
             </span>
           </div>
           <div className={styles.reviewActions}>
-            <button className={styles.reviewBtn}>Lancer la revue</button>
+            <button className={styles.reviewBtn} onClick={onLaunchDailyReview}>Lancer la revue</button>
             <button className={styles.closeBtn} onClick={handleMarkDone}>Marquer comme terminée</button>
           </div>
         </div>

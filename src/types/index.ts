@@ -193,6 +193,9 @@ export interface PeriodSummary {
   tasksTotal: number;
   focusDays: number;
   totalDays: number;
+  priorityCompleted: number;
+  priorityTotal: number;
+  tasksLinked: number;
   distribution: TagDistribution[];
 }
 

@@ -508,6 +508,7 @@ fn build_system_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, St
         "- Le champ \"steps\" est optionnel. Inclus-le UNIQUEMENT quand tu décomposes une tâche en micro-étapes.".to_string(),
         "- Tous les champs d'action (tasksTo*, goalsTo*, strategiesTo*, tacticsTo*, reflectionsToUpdate, goalStrategyLinksToToggle) sont optionnels. N'inclus que ceux nécessaires.".to_string(),
         "- N'utilise jamais de markdown dans content. Utilise des sauts de ligne (\\n) pour les paragraphes.".to_string(),
+        "- N'inclus JAMAIS les IDs courts ([t1], [s1], [g1], [tc1], [r1]) dans le texte du content. Utilise uniquement les noms. Les IDs courts servent uniquement pour les champs d'action JSON.".to_string(),
         String::new(),
     ];
 
@@ -1798,6 +1799,7 @@ fn build_daily_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<String
     parts.push("- Utilise les scores dans ton TEXTE d'analyse pour justifier tes suggestions, mais pas dans la liste des tâches.".to_string());
     parts.push("- Sections séparées par des phrases naturelles (ex: \"En reliquat des jours précédents, on a :\"), PAS par des titres markdown.".to_string());
     parts.push("- Ton conversationnel et chaleureux. Phrases courtes.".to_string());
+    parts.push("- N'inclus JAMAIS les IDs courts ([t1], [s1], [g1], [tc1], [r1]) dans le texte du content. Utilise uniquement les noms. Les IDs courts servent uniquement pour les champs d'action JSON.".to_string());
     parts.push("- Utilise les labels de section exacts : \"Priorités du jour\", \"Aussi prévu\", \"En reliquat\".".to_string());
     parts.push("- Exemple de format attendu :".to_string());
     parts.push(r#"  "Pour aujourd'hui, on peut structurer ta journée comme suit :\n\n⚡ **Priorités du jour :**\n\n1. **Nom de la tâche** [principal] (~30 min)\n2. **Autre tâche** [principal]\n\n📋 **Aussi prévu :**\n\n1. **Tâche secondaire** [secondaire] (~20 min)\n2. **Autre tâche** [secondaire]\n\n⏳ **En reliquat** des jours précédents :\n\n1. ⚡ **Tâche qui était prioritaire** (~25 min)\n2. **Tâche urgente** (~20 min) [Urgence: 5/5]\n3. **Autre tâche** (~15 min)\n\nTu as une tâche qui était déjà prioritaire hier. On la remet dans les priorités du jour ?""#.to_string());
@@ -1939,6 +1941,490 @@ pub async fn send_daily_prep_message(
         let db = state.get_db()?;
         let (provider, model) = get_active_provider(&db)?;
         let (system, id_map) = build_daily_prep_prompt(&db);
+        (provider.id, provider.api_key, model, system, id_map)
+    };
+
+    let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
+    let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
+    msgs.push(("user".to_string(), user_message));
+
+    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs, true).await?;
+    parse_daily_prep_response(&raw, &id_map)
+}
+
+// ── Daily Review (evening) ──
+
+fn build_daily_review_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, String>) {
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let tomorrow = (chrono::Local::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+
+    let mut parts = vec![
+        "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
+        "Tu es en mode REVUE DU SOIR : tu aides l'utilisateur à faire le bilan de sa journée.".to_string(),
+        format!("Date d'aujourd'hui : {today}"),
+        format!("Date de demain : {tomorrow}"),
+        String::new(),
+        "CONTEXTE TDAH — TON ET APPROCHE :".to_string(),
+        "- Le cerveau TDAH a tendance à ne voir que ce qui n'est PAS fait. Ton rôle est d'abord de valoriser ce qui A été fait.".to_string(),
+        "- Les tâches non terminées génèrent de la culpabilité. Normalise : reporter n'est PAS échouer, c'est réorganiser.".to_string(),
+        "- Sois chaleureux, bienveillant, encourageant. Tutoie l'utilisateur. Pas de morale.".to_string(),
+        "- Phrases courtes et concises. Pose UNE SEULE question par message.".to_string(),
+        String::new(),
+        "DÉROULEMENT DE LA REVUE (adapte-toi, pas un script rigide) :".to_string(),
+        String::new(),
+        "**Étape 1 — Célébrer les accomplissements**".to_string(),
+        "- Commence par les tâches terminées aujourd'hui. Mets-les en valeur avec enthousiasme.".to_string(),
+        "- Souligne les priorités accomplies en particulier.".to_string(),
+        "- Si beaucoup de tâches ont été faites, félicite sincèrement.".to_string(),
+        "- Si peu ou rien n'a été fait, ne juge pas. Cherche ce qui a pu bloquer (\"Journée chargée ? C'est normal, ça arrive.\").".to_string(),
+        String::new(),
+        "**Étape 2 — Gérer les tâches non terminées**".to_string(),
+        "- Pour chaque tâche non terminée, propose 3 options claires :".to_string(),
+        "  • Reporter à demain (tasksToUpdate avec scheduledDate = demain)".to_string(),
+        "  • Reporter à un autre jour (demander quel jour)".to_string(),
+        "  • Supprimer si plus pertinent (tasksToRemove)".to_string(),
+        "- Regroupe si plusieurs tâches non terminées : \"On les déplace toutes à demain, ou tu veux trier ?\"".to_string(),
+        "- Ne force pas un tri tâche par tâche si l'utilisateur préfère tout reporter d'un coup.".to_string(),
+        String::new(),
+        "**Étape 3 — Clôturer**".to_string(),
+        "- Quand toutes les tâches non terminées ont été traitées (déplacées ou supprimées), confirme et mets prepComplete: true.".to_string(),
+        "- Termine avec un message positif et chaleureux pour la soirée.".to_string(),
+        String::new(),
+        "RÈGLES DE CONVERSATION :".to_string(),
+        "- Tu es un CONSEILLER bienveillant. Tu proposes, l'utilisateur décide.".to_string(),
+        "- Propose des choix concrets plutôt que des questions ouvertes.".to_string(),
+        "- Valorise chaque décision prise.".to_string(),
+        String::new(),
+        "RÉACTIVITÉ EN TEMPS RÉEL — RÈGLE CRITIQUE :".to_string(),
+        "- JAMAIS dire qu'une action est faite dans le content SANS l'inclure dans les champs JSON.".to_string(),
+        "- Les tâches existantes ont des IDs courts (t1, t2, t3...) entre crochets dans la liste. Utilise TOUJOURS ces IDs exacts.".to_string(),
+        "- Pour déplacer à demain : tasksToUpdate avec id + scheduledDate.".to_string(),
+        "- Pour supprimer : tasksToRemove avec l'ID.".to_string(),
+        "- Les modifications sont appliquées en temps réel côté interface.".to_string(),
+        String::new(),
+        "ACTIONS SUR LES TÂCHES (INCLURE OBLIGATOIREMENT dans le JSON) :".to_string(),
+        format!("- tasksToUpdate : [{{\"id\": \"t2\", \"scheduledDate\": \"{tomorrow}\"}}] — déplacer à demain ou autre jour"),
+        "- tasksToRemove : [\"t1\", \"t3\"] — supprimer des tâches".to_string(),
+        "- tasksToToggle : [\"t1\"] — cocher/décocher une tâche".to_string(),
+        "- tasksToAdd : pour ajouter une tâche si l'utilisateur le demande".to_string(),
+        "- RAPPEL : si tu confirmes une action dans content, le champ JSON correspondant DOIT être rempli.".to_string(),
+        String::new(),
+    ];
+
+    if let Some(profile) = get_user_profile(db) {
+        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
+            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
+            parts.push(String::new());
+        }
+    }
+
+    // Memory insights
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            let memory_lines: Vec<String> = rows
+                .filter_map(|r| r.ok())
+                .map(|(cat, insight)| {
+                    let label = match cat.as_str() {
+                        "prioritization" => "Priorisation",
+                        "work_patterns" => "Rythme de travail",
+                        "organization" => "Organisation",
+                        "blockers" => "Blocages",
+                        "psychology" => "Psychologie",
+                        "habits" => "Habitudes",
+                        other => other,
+                    };
+                    format!("- {label} : {insight}")
+                })
+                .collect();
+            if !memory_lines.is_empty() {
+                parts.push("MÉMOIRE — CE QUE TU SAIS DE L'UTILISATEUR :".to_string());
+                parts.push("(Utilise ces infos pour personnaliser la revue et mieux célébrer les accomplissements.)".to_string());
+                parts.extend(memory_lines);
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // Active period goals (lightweight, just names for context)
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT g.id, g.title FROM strategy_goals g JOIN strategy_periods p ON g.period_id = p.id WHERE p.status = 'active' ORDER BY g.position",
+    ) {
+        if let Ok(goals) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            let goal_lines: Vec<String> = goals.filter_map(|r| r.ok()).map(|(_, title)| format!("- {title}")).collect();
+            if !goal_lines.is_empty() {
+                parts.push("🎯 OBJECTIFS DE LA PÉRIODE ACTIVE (pour contexte) :".to_string());
+                parts.push("(Si des tâches terminées sont liées à ces objectifs, souligne-le dans la célébration.)".to_string());
+                parts.extend(goal_lines);
+                parts.push(String::new());
+            }
+        }
+    }
+
+    let mut id_map: HashMap<String, String> = HashMap::new();
+    let mut id_counter = 1i32;
+    let tags_map = load_all_tags_map(db);
+    let empty_tags: Vec<Tag> = vec![];
+
+    // Collect today's tasks split by done/not-done
+    let mut done_lines: Vec<String> = Vec::new();
+    let mut not_done_lines: Vec<String> = Vec::new();
+
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, name, done, priority, estimated_minutes, scheduled_date, urgency, importance \
+         FROM tasks \
+         WHERE (view_context = 'today' AND scheduled_date IS NULL) OR scheduled_date = ?1 \
+         ORDER BY position",
+    ) {
+        if let Ok(tasks) = stmt.query_map(params![today], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, bool>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<i32>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<i32>>(6)?,
+                row.get::<_, Option<i32>>(7)?,
+            ))
+        }) {
+            for row in tasks.filter_map(|r| r.ok()) {
+                let (id, name, done, pri, est, sched, urg, imp) = row;
+                let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                let line = format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags, None);
+                if done {
+                    done_lines.push(line);
+                } else {
+                    not_done_lines.push(line);
+                }
+            }
+        }
+    }
+
+    if done_lines.is_empty() && not_done_lines.is_empty() {
+        parts.push("AUCUNE TÂCHE AUJOURD'HUI — journée sans tâches planifiées.".to_string());
+    } else {
+        parts.push(format!("✅ TÂCHES TERMINÉES AUJOURD'HUI ({}) :", done_lines.len()));
+        if done_lines.is_empty() {
+            parts.push("  (aucune tâche terminée)".to_string());
+        } else {
+            parts.extend(done_lines);
+        }
+        parts.push(String::new());
+
+        parts.push(format!("⏳ TÂCHES NON TERMINÉES ({}) :", not_done_lines.len()));
+        if not_done_lines.is_empty() {
+            parts.push("  (tout est fait — bravo !)".to_string());
+        } else {
+            parts.extend(not_done_lines);
+        }
+    }
+    parts.push(String::new());
+
+    // Also include overdue tasks
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, name, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE scheduled_date < ?1 AND done = 0 ORDER BY scheduled_date, position",
+    ) {
+        if let Ok(overdue) = stmt.query_map(params![today], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<i32>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<i32>>(5)?,
+                row.get::<_, Option<i32>>(6)?,
+            ))
+        }) {
+            let overdue_data: Vec<_> = overdue.filter_map(|r| r.ok()).collect();
+            if !overdue_data.is_empty() {
+                let n = overdue_data.len();
+                parts.push(format!("⏳ RELIQUAT ({n} tâche(s) en retard des jours précédents) :"));
+                for (id, name, pri, est, sched, urg, imp) in overdue_data {
+                    let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                    let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                    let line = format_task_line(&short, &name, false, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags, None);
+                    parts.push(line);
+                }
+                parts.push(String::new());
+            }
+        }
+    }
+
+    parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
+    parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tasksToToggle": [], "tasksToReorder": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
+    parts.push("- content : ton message texte. N'INCLUS JAMAIS le JSON dans le content.".to_string());
+    parts.push(format!(r#"- tasksToUpdate : [{{"id": "t2", "scheduledDate": "{tomorrow}"}}] — chaque champ sauf id est optionnel"#));
+    parts.push("- tasksToRemove : [\"t1\", \"t3\"] — IDs courts des tâches à supprimer".to_string());
+    parts.push("- tasksToToggle : [\"t1\"] — cocher/décocher par ID court".to_string());
+    parts.push("- prepComplete : true quand la revue est terminée (toutes les tâches non faites sont traitées)".to_string());
+    parts.push(String::new());
+    parts.push("STYLE DU CONTENU (content) :".to_string());
+    parts.push("- INTERDIT : titres markdown (#, ##, ###). Jamais de headers.".to_string());
+    parts.push("- Autorisé : **gras** pour les noms de tâches, listes numérotées (1. 2. 3.), \\n pour les sauts de ligne.".to_string());
+    parts.push("- Ton chaleureux et encourageant. Phrases courtes.".to_string());
+    parts.push("- N'inclus JAMAIS les IDs courts dans le texte du content. Utilise uniquement les noms.".to_string());
+
+    (parts.join("\n"), id_map)
+}
+
+#[tauri::command]
+pub async fn send_daily_review_message(
+    state: State<'_, AppState>,
+    user_message: String,
+    history: String,
+) -> Result<DailyPrepResponse, String> {
+    let (provider_id, api_key, model, system_prompt, id_map) = {
+        let db = state.get_db()?;
+        let (provider, model) = get_active_provider(&db)?;
+        let (system, id_map) = build_daily_review_prompt(&db);
+        (provider.id, provider.api_key, model, system, id_map)
+    };
+
+    let past: Vec<HistoryMsg> = serde_json::from_str(&history).unwrap_or_default();
+    let mut msgs: Vec<(String, String)> = past.into_iter().map(|m| (m.role, m.content)).collect();
+    msgs.push(("user".to_string(), user_message));
+
+    let raw = call_llm(&provider_id, &api_key, &model, &system_prompt, msgs, true).await?;
+    parse_daily_prep_response(&raw, &id_map)
+}
+
+// ── Weekly Review ──
+
+fn build_weekly_review_prompt(db: &rusqlite::Connection) -> (String, HashMap<String, String>) {
+    let now = chrono::Local::now();
+    let today = now.format("%Y-%m-%d").to_string();
+    let weekday = now.weekday().num_days_from_monday() as i64;
+    let monday = now - chrono::Duration::days(weekday);
+    let friday = monday + chrono::Duration::days(4);
+    let sunday = monday + chrono::Duration::days(6);
+    let monday_str = monday.format("%Y-%m-%d").to_string();
+    let friday_str = friday.format("%Y-%m-%d").to_string();
+    let sunday_str = sunday.format("%Y-%m-%d").to_string();
+    let next_monday = monday + chrono::Duration::days(7);
+    let next_monday_str = next_monday.format("%Y-%m-%d").to_string();
+
+    let mut parts = vec![
+        "Tu es focal., l'assistant de productivité conçu pour les personnes TDAH.".to_string(),
+        "Tu es en mode REVUE DE LA SEMAINE : tu aides l'utilisateur à faire le bilan de sa semaine.".to_string(),
+        format!("Date d'aujourd'hui : {today}"),
+        format!("Semaine en cours : du {monday_str} au {friday_str}"),
+        format!("Semaine prochaine commence le : {next_monday_str}"),
+        String::new(),
+        "CONTEXTE TDAH — TON ET APPROCHE :".to_string(),
+        "- Le cerveau TDAH a tendance à ne voir que ce qui n'est PAS fait. Ton rôle est d'abord de valoriser ce qui A été fait cette semaine.".to_string(),
+        "- Les tâches non terminées génèrent de la culpabilité. Normalise : reporter n'est PAS échouer, c'est réorganiser.".to_string(),
+        "- Sois chaleureux, bienveillant, encourageant. Tutoie l'utilisateur. Pas de morale.".to_string(),
+        "- Phrases courtes et concises. Pose UNE SEULE question par message.".to_string(),
+        String::new(),
+        "DÉROULEMENT DE LA REVUE (adapte-toi, pas un script rigide) :".to_string(),
+        String::new(),
+        "**Étape 1 — Célébrer les accomplissements de la semaine**".to_string(),
+        "- Commence par les tâches terminées cette semaine. Mets-les en valeur avec enthousiasme.".to_string(),
+        "- Donne des chiffres concrets : \"X tâches terminées cette semaine, dont Y priorités !\"".to_string(),
+        "- Souligne les priorités accomplies et les objectifs qui ont avancé.".to_string(),
+        "- Si peu a été fait, ne juge pas. Cherche ce qui a pu bloquer.".to_string(),
+        String::new(),
+        "**Étape 2 — Gérer les tâches non terminées**".to_string(),
+        "- Pour les tâches non terminées, propose 3 options claires :".to_string(),
+        format!("  • Reporter à la semaine prochaine (tasksToUpdate avec scheduledDate = \"{next_monday_str}\")"),
+        "  • Reporter à un jour précis".to_string(),
+        "  • Supprimer si plus pertinent (tasksToRemove)".to_string(),
+        "- Regroupe si plusieurs : \"On les déplace toutes à la semaine prochaine, ou tu veux trier ?\"".to_string(),
+        "- Ne force pas un tri tâche par tâche si l'utilisateur préfère tout reporter d'un coup.".to_string(),
+        String::new(),
+        "**Étape 3 — Clôturer**".to_string(),
+        "- Quand toutes les tâches non terminées ont été traitées, confirme et mets prepComplete: true.".to_string(),
+        "- Termine avec un message positif et encourageant pour le week-end ou la semaine à venir.".to_string(),
+        String::new(),
+        "RÈGLES DE CONVERSATION :".to_string(),
+        "- Tu es un CONSEILLER bienveillant. Tu proposes, l'utilisateur décide.".to_string(),
+        "- Propose des choix concrets plutôt que des questions ouvertes.".to_string(),
+        "- Valorise chaque décision prise.".to_string(),
+        String::new(),
+        "RÉACTIVITÉ EN TEMPS RÉEL — RÈGLE CRITIQUE :".to_string(),
+        "- JAMAIS dire qu'une action est faite dans le content SANS l'inclure dans les champs JSON.".to_string(),
+        "- Les tâches existantes ont des IDs courts (t1, t2, t3...) entre crochets dans la liste. Utilise TOUJOURS ces IDs exacts.".to_string(),
+        format!("- Pour reporter à la semaine prochaine : tasksToUpdate avec id + scheduledDate = \"{next_monday_str}\"."),
+        "- Pour supprimer : tasksToRemove avec l'ID.".to_string(),
+        "- Les modifications sont appliquées en temps réel côté interface.".to_string(),
+        String::new(),
+        "ACTIONS SUR LES TÂCHES (INCLURE OBLIGATOIREMENT dans le JSON) :".to_string(),
+        format!("- tasksToUpdate : [{{\"id\": \"t2\", \"scheduledDate\": \"{next_monday_str}\"}}] — reporter ou modifier"),
+        "- tasksToRemove : [\"t1\", \"t3\"] — supprimer des tâches".to_string(),
+        "- tasksToToggle : [\"t1\"] — cocher/décocher une tâche".to_string(),
+        "- tasksToAdd : pour ajouter une tâche si l'utilisateur le demande".to_string(),
+        "- RAPPEL : si tu confirmes une action dans content, le champ JSON correspondant DOIT être rempli.".to_string(),
+        String::new(),
+    ];
+
+    if let Some(profile) = get_user_profile(db) {
+        if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
+            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
+            parts.push(String::new());
+        }
+    }
+
+    // Memory insights
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            let memory_lines: Vec<String> = rows
+                .filter_map(|r| r.ok())
+                .map(|(cat, insight)| {
+                    let label = match cat.as_str() {
+                        "prioritization" => "Priorisation",
+                        "work_patterns" => "Rythme de travail",
+                        "organization" => "Organisation",
+                        "blockers" => "Blocages",
+                        "psychology" => "Psychologie",
+                        "habits" => "Habitudes",
+                        other => other,
+                    };
+                    format!("- {label} : {insight}")
+                })
+                .collect();
+            if !memory_lines.is_empty() {
+                parts.push("MÉMOIRE — CE QUE TU SAIS DE L'UTILISATEUR :".to_string());
+                parts.extend(memory_lines);
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // Active period goals
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT g.id, g.title FROM strategy_goals g JOIN strategy_periods p ON g.period_id = p.id WHERE p.status = 'active' ORDER BY g.position",
+    ) {
+        if let Ok(goals) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            let goal_lines: Vec<String> = goals.filter_map(|r| r.ok()).map(|(_, title)| format!("- {title}")).collect();
+            if !goal_lines.is_empty() {
+                parts.push("🎯 OBJECTIFS DE LA PÉRIODE ACTIVE :".to_string());
+                parts.extend(goal_lines);
+                parts.push(String::new());
+            }
+        }
+    }
+
+    let mut id_map: HashMap<String, String> = HashMap::new();
+    let mut id_counter = 1i32;
+    let tags_map = load_all_tags_map(db);
+    let empty_tags: Vec<Tag> = vec![];
+
+    // Week priorities (view_context = 'week')
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, name, done, priority, estimated_minutes, urgency, importance FROM tasks WHERE view_context = 'week' ORDER BY position",
+    ) {
+        if let Ok(tasks) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, bool>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<i32>>(4)?,
+                row.get::<_, Option<i32>>(5)?,
+                row.get::<_, Option<i32>>(6)?,
+            ))
+        }) {
+            let mut done_lines: Vec<String> = Vec::new();
+            let mut not_done_lines: Vec<String> = Vec::new();
+            for row in tasks.filter_map(|r| r.ok()) {
+                let (id, name, done, pri, est, urg, imp) = row;
+                let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                let line = format_task_line(&short, &name, done, pri.as_deref(), est, None, urg, imp, task_tags, None);
+                if done { done_lines.push(line); } else { not_done_lines.push(line); }
+            }
+            if !done_lines.is_empty() || !not_done_lines.is_empty() {
+                parts.push(format!("⚡ PRIORITÉS DE LA SEMAINE — terminées ({}) :", done_lines.len()));
+                if done_lines.is_empty() { parts.push("  (aucune)".to_string()); }
+                else { parts.extend(done_lines); }
+                parts.push(String::new());
+                parts.push(format!("⚡ PRIORITÉS DE LA SEMAINE — non terminées ({}) :", not_done_lines.len()));
+                if not_done_lines.is_empty() { parts.push("  (toutes terminées !)".to_string()); }
+                else { parts.extend(not_done_lines); }
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // Daily tasks for the week (monday to sunday)
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT id, name, done, priority, estimated_minutes, scheduled_date, urgency, importance FROM tasks WHERE scheduled_date >= ?1 AND scheduled_date <= ?2 ORDER BY scheduled_date, position",
+    ) {
+        if let Ok(tasks) = stmt.query_map(params![monday_str, sunday_str], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, bool>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<i32>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<i32>>(6)?,
+                row.get::<_, Option<i32>>(7)?,
+            ))
+        }) {
+            let mut done_lines: Vec<String> = Vec::new();
+            let mut not_done_lines: Vec<String> = Vec::new();
+            for row in tasks.filter_map(|r| r.ok()) {
+                let (id, name, done, pri, est, sched, urg, imp) = row;
+                let short = assign_short_id(&mut id_counter, &id, &mut id_map);
+                let task_tags = tags_map.get(&id).unwrap_or(&empty_tags);
+                let line = format_task_line(&short, &name, done, pri.as_deref(), est, sched.as_deref(), urg, imp, task_tags, None);
+                if done { done_lines.push(line); } else { not_done_lines.push(line); }
+            }
+            let total = done_lines.len() + not_done_lines.len();
+            if total > 0 {
+                parts.push(format!("✅ TÂCHES TERMINÉES CETTE SEMAINE ({}) :", done_lines.len()));
+                if done_lines.is_empty() { parts.push("  (aucune tâche terminée)".to_string()); }
+                else { parts.extend(done_lines); }
+                parts.push(String::new());
+                parts.push(format!("⏳ TÂCHES NON TERMINÉES ({}) :", not_done_lines.len()));
+                if not_done_lines.is_empty() { parts.push("  (tout est fait — bravo !)".to_string()); }
+                else { parts.extend(not_done_lines); }
+                parts.push(String::new());
+            }
+        }
+    }
+
+    parts.push("FORMAT DE RÉPONSE — RÉPONDS UNIQUEMENT EN JSON VALIDE, PAS DE TEXTE AVANT NI APRÈS :".to_string());
+    parts.push(r#"{"content": "...", "tasksToAdd": [], "tasksToRemove": [], "tasksToUpdate": [], "tasksToToggle": [], "tasksToReorder": [], "tagsToSet": [], "stepsToSet": [], "prepComplete": false}"#.to_string());
+    parts.push("- content : ton message texte. N'INCLUS JAMAIS le JSON dans le content.".to_string());
+    parts.push(format!(r#"- tasksToUpdate : [{{"id": "t2", "scheduledDate": "{next_monday_str}"}}] — chaque champ sauf id est optionnel"#));
+    parts.push("- tasksToRemove : [\"t1\", \"t3\"] — IDs courts des tâches à supprimer".to_string());
+    parts.push("- tasksToToggle : [\"t1\"] — cocher/décocher par ID court".to_string());
+    parts.push("- prepComplete : true quand la revue est terminée (toutes les tâches non faites sont traitées)".to_string());
+    parts.push(String::new());
+    parts.push("STYLE DU CONTENU (content) :".to_string());
+    parts.push("- INTERDIT : titres markdown (#, ##, ###). Jamais de headers.".to_string());
+    parts.push("- Autorisé : **gras** pour les noms de tâches, listes numérotées (1. 2. 3.), \\n pour les sauts de ligne.".to_string());
+    parts.push("- Ton chaleureux et encourageant. Phrases courtes.".to_string());
+    parts.push("- N'inclus JAMAIS les IDs courts dans le texte du content. Utilise uniquement les noms.".to_string());
+
+    (parts.join("\n"), id_map)
+}
+
+#[tauri::command]
+pub async fn send_weekly_review_message(
+    state: State<'_, AppState>,
+    user_message: String,
+    history: String,
+) -> Result<DailyPrepResponse, String> {
+    let (provider_id, api_key, model, system_prompt, id_map) = {
+        let db = state.get_db()?;
+        let (provider, model) = get_active_provider(&db)?;
+        let (system, id_map) = build_weekly_review_prompt(&db);
         (provider.id, provider.api_key, model, system, id_map)
     };
 
@@ -2301,6 +2787,7 @@ fn build_weekly_prep_prompt(db: &rusqlite::Connection) -> (String, HashMap<Strin
     parts.push("- Utilise les scores dans ton TEXTE d'analyse pour justifier tes suggestions, mais pas dans la liste des tâches.".to_string());
     parts.push("- Sections séparées par des phrases naturelles, PAS par des titres markdown.".to_string());
     parts.push("- Ton conversationnel et chaleureux. Phrases courtes.".to_string());
+    parts.push("- N'inclus JAMAIS les IDs courts ([t1], [s1], [g1], [tc1], [r1]) dans le texte du content. Utilise uniquement les noms. Les IDs courts servent uniquement pour les champs d'action JSON.".to_string());
     parts.push("- Utilise les labels de section exacts : \"Priorités de la semaine\", \"Tâches planifiées cette semaine\", \"En reliquat de la semaine passée\", \"Tâches non planifiées\".".to_string());
     parts.push("- Pour le reliquat : utilise ⚡ devant le nom si la tâche était prioritaire (priorité: main dans les données), sinon pas de label.".to_string());
     parts.push("- Pour les tâches planifiées : indique le jour entre parenthèses (ex: \"(lundi)\", \"(aujourd'hui)\").".to_string());
@@ -2514,41 +3001,215 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> (Stri
         }
     }
 
+    // ── Profil utilisateur complet ──
     if let Some(profile) = get_user_profile(db) {
+        let mut ctx = vec!["PROFIL DE L'UTILISATEUR :".to_string()];
         if let Some(name) = profile.get("firstName").and_then(|v| v.as_str()) {
-            parts.push(format!("PRÉNOM DE L'UTILISATEUR : {name}"));
+            ctx.push(format!("- Prénom : {name}"));
+        }
+        if let Some(main_ctx) = profile.get("mainContext").and_then(|v| v.as_str()) {
+            let label = match main_ctx {
+                "travail_salarie" => "Travail salarié",
+                "independant" => "Indépendant / freelance",
+                "etudes" => "Études",
+                "parent" => "Parent au foyer",
+                "mix" => "Mix de contextes",
+                _ => main_ctx,
+            };
+            ctx.push(format!("- Contexte principal : {label}"));
+        }
+        if let Some(other) = profile.get("mainContextOther").and_then(|v| v.as_str()) {
+            if !other.is_empty() { ctx.push(format!("  Précision : {other}")); }
+        }
+        if let Some(job) = profile.get("jobActivity").and_then(|v| v.as_str()) {
+            if !job.is_empty() { ctx.push(format!("- Activité / métier : {job}")); }
+        }
+        if let Some(adhd) = profile.get("adhdRecognition").and_then(|v| v.as_str()) {
+            let label = match adhd {
+                "diagnostique" => "Diagnostiqué",
+                "fortement" => "Fortement suspecté",
+                "un_peu" => "Légèrement suspecté",
+                "non" => "Pas de TDAH identifié",
+                _ => adhd,
+            };
+            ctx.push(format!("- TDAH : {label}"));
+        }
+        if let Some(blockers) = profile.get("blockers").and_then(|v| v.as_array()) {
+            let labels: Vec<&str> = blockers.iter().filter_map(|v| v.as_str()).map(|b| match b {
+                "commencer" => "Difficulté à commencer",
+                "oublier" => "Oublis fréquents",
+                "agir" => "Difficulté à passer à l'action",
+                "finir" => "Difficulté à finir",
+                "trop_head" => "Trop de choses en tête",
+                "motivation" => "Manque de motivation",
+                other => other,
+            }).collect();
+            if !labels.is_empty() { ctx.push(format!("- Blocages principaux : {}", labels.join(", "))); }
+        }
+        if let Some(horizon) = profile.get("organizationHorizon").and_then(|v| v.as_str()) {
+            let label = match horizon {
+                "aujourdhui" => "Vit au jour le jour",
+                "semaine" => "Planifie à la semaine",
+                "projets_longs" => "Gère des projets longs",
+                "mix" => "Mix selon les projets",
+                _ => horizon,
+            };
+            ctx.push(format!("- Horizon d'organisation : {label}"));
+        }
+        if let Some(expect) = profile.get("mainExpectation").and_then(|v| v.as_str()) {
+            let label = match expect {
+                "me_dire_quoi_faire" => "Qu'on lui dise quoi faire",
+                "prioriser" => "Aide à prioriser",
+                "allege_tete" => "Alléger la charge mentale",
+                "avancer_sans_pression" => "Avancer sans pression",
+                "cadrer" => "Un cadre structurant",
+                _ => expect,
+            };
+            ctx.push(format!("- Attente principale envers focal. : {label}"));
+        }
+        if let Some(extra) = profile.get("extraInfo").and_then(|v| v.as_str()) {
+            if !extra.is_empty() { ctx.push(format!("- Info complémentaire : {extra}")); }
+        }
+        if let Some(summary) = profile.get("publicProfileSummary").and_then(|v| v.as_str()) {
+            if !summary.is_empty() { ctx.push(format!("- Résumé du profil public : {summary}")); }
+        }
+        if ctx.len() > 1 {
+            parts.push(ctx.join("\n"));
             parts.push(String::new());
         }
     }
 
+    // ── Mémoire AI (observations des conversations passées) ──
+    if let Ok(mut stmt) = db.prepare(
+        "SELECT category, insight FROM ai_memory_insights ORDER BY updated_at DESC",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            let memory_lines: Vec<String> = rows
+                .filter_map(|r| r.ok())
+                .map(|(cat, insight)| {
+                    let label = match cat.as_str() {
+                        "prioritization" => "Priorisation",
+                        "work_patterns" => "Rythme de travail",
+                        "organization" => "Organisation",
+                        "blockers" => "Blocages",
+                        "psychology" => "Psychologie",
+                        "habits" => "Habitudes",
+                        other => other,
+                    };
+                    format!("- {label} : {insight}")
+                })
+                .collect();
+            if !memory_lines.is_empty() {
+                parts.push("MÉMOIRE — CE QUE TU SAIS DE L'UTILISATEUR :".to_string());
+                parts.push("(Observations apprises au fil des conversations passées. Utilise ces infos pour personnaliser ton accompagnement.)".to_string());
+                parts.extend(memory_lines);
+                parts.push(String::new());
+            }
+        }
+    }
+
+    // ── Ton rôle et posture ──
+    parts.push("TON RÔLE :".to_string());
+    parts.push("Tu es un coach stratégique personnel. La préparation de période est le moment le plus important de focal. — c'est là que l'utilisateur prend du recul sur sa vie et définit sa direction.".to_string());
+    parts.push("Tu n'es PAS un simple assistant qui liste des données. Tu es un partenaire de réflexion qui :".to_string());
+    parts.push("- Challenge gentiment les caps trop vagues ou trop nombreux".to_string());
+    parts.push("- Aide à transformer des intentions floues en objectifs concrets et actionnables".to_string());
+    parts.push("- Détecte les incohérences (ex: 5 caps mais aucun objectif concret pour les atteindre)".to_string());
+    parts.push("- S'appuie sur le profil et les blocages de l'utilisateur pour adapter ses conseils".to_string());
+    parts.push("- Propose des stratégies concrètes adaptées au contexte (freelance vs salarié vs étudiant, etc.)".to_string());
+    parts.push("- Valorise ce qui a fonctionné dans la période précédente et aide à abandonner ce qui n'a pas marché".to_string());
+    parts.push(String::new());
+
     parts.push("CONTEXTE TDAH — PRINCIPES FONDAMENTAUX :".to_string());
     parts.push("- Le cerveau TDAH a du mal à hiérarchiser : TOUT semble important. Ton rôle est d'aider à clarifier, pas d'ajouter du bruit.".to_string());
-    parts.push("- Trop d'objectifs = aucun objectif. Protège l'utilisateur quand il veut tout faire.".to_string());
-    parts.push("- La prise de recul est un moment précieux : aide à synthétiser et prioriser, pas à tout détailler.".to_string());
+    parts.push("- Trop d'objectifs = aucun objectif. Protège l'utilisateur quand il veut tout faire. Recommande 2-3 caps max et 2-4 objectifs par cap.".to_string());
+    parts.push("- La prise de recul peut être intimidante. Rends-la légère et progressive — pas un exercice scolaire.".to_string());
+    parts.push("- Un objectif sans stratégie concrète est un vœu pieux. Pousse toujours à décliner en actions concrètes.".to_string());
+    parts.push("- Les personnes TDAH sont souvent optimistes sur leur capacité à tout faire. Sois le garde-fou bienveillant.".to_string());
+    parts.push("- La prise de recul est un investissement : si l'utilisateur veut expédier, rappelle gentiment que 10 min maintenant évitent 3 mois de flou. Mais ne force jamais.".to_string());
     parts.push(String::new());
 
     parts.push("RÈGLES DE CONVERSATION :".to_string());
     parts.push("- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string());
-    parts.push("- Tu es un CONSEILLER : tu fais des suggestions, tu proposes des ajustements, tu donnes ton avis — mais c'est l'utilisateur qui a le dernier mot.".to_string());
+    parts.push("- Messages COURTS. 3-5 phrases max hors récap. Un cerveau TDAH décroche vite sur les pavés.".to_string());
     parts.push("- Tutoie l'utilisateur. Sois chaleureux, bienveillant, encourageant et concis.".to_string());
     parts.push("- Ne fais jamais la morale. Pas de jugement.".to_string());
+    parts.push("- Donne ton avis et fais des suggestions concrètes — mais c'est l'utilisateur qui a le dernier mot.".to_string());
+    parts.push("- Quand tu proposes quelque chose, explique brièvement POURQUOI (en lien avec le profil, les blocages, ou la période précédente).".to_string());
     parts.push(String::new());
 
-    parts.push("DÉROULEMENT NATUREL (adapte-toi, ce n'est pas un script rigide) :".to_string());
-    parts.push("1. Commence par un résumé de la situation : les caps à tenir actuels, les objectifs, et si disponible les réflexions de la période précédente.".to_string());
-    parts.push("2. Demande si les caps à tenir sont toujours d'actualité ou s'il y a des changements.".to_string());
-    parts.push("3. Aide à affiner ou ajouter des objectifs concrets pour cette période.".to_string());
-    parts.push("4. Explore les priorités : qu'est-ce qui est le plus important cette période ?".to_string());
-    parts.push("5. Si des engagements de la période précédente existent, rappelle-les et demande comment les intégrer.".to_string());
-    parts.push("6. Confirme le plan et lance la période (prepComplete: true).".to_string());
+    parts.push("INDICATEUR DE PROGRESSION :".to_string());
+    parts.push("Chaque message DOIT commencer par un indicateur d'étape discret pour que l'utilisateur sache où il en est :".to_string());
+    parts.push("Format : un emoji + le nom de l'étape en gras sur la première ligne, puis un saut de ligne avant le contenu.".to_string());
+    parts.push("Exemples :".to_string());
+    parts.push("  \"🔍 **Bilan**\\n\\nSalut David ! ...\"".to_string());
+    parts.push("  \"🧭 **Caps à tenir**\\n\\nOk, passons à tes caps...\"".to_string());
+    parts.push("  \"🎯 **Objectifs**\\n\\nPour ton cap...\"".to_string());
+    parts.push("  \"⚡ **Stratégies**\\n\\nMaintenant qu'on a tes objectifs...\"".to_string());
+    parts.push("  \"✅ **Validation**\\n\\nVoici le récap...\"".to_string());
+    parts.push("Utilise l'indicateur correspondant à l'étape en cours. Si tu restes sur la même étape (ex: discussion en cours sur les caps), garde le même indicateur.".to_string());
+    parts.push(String::new());
+
+    parts.push("DÉROULEMENT DE L'ACCOMPAGNEMENT :".to_string());
+    parts.push("Tu suis 4 étapes dans l'ordre. Chaque étape = un ou plusieurs échanges courts. Tu ne passes à l'étape suivante que quand l'utilisateur a validé l'étape en cours. Pas besoin de tout couvrir si l'utilisateur a déjà une vision claire — adapte-toi.".to_string());
+    parts.push(String::new());
+
+    parts.push("ÉTAPE 1 — 🔍 BILAN (premier message) :".to_string());
+    parts.push("Ton premier message est CRUCIAL — c'est lui qui donne envie de continuer ou pas. Il doit être :".to_string());
+    parts.push("- Court (5-6 phrases max)".to_string());
+    parts.push("- Personnel (utilise le prénom, fais référence au contexte)".to_string());
+    parts.push("- Ancré dans du concret (pas de blabla générique type \"on va prendre du recul ensemble\")".to_string());
+    parts.push("Structure du premier message :".to_string());
+    parts.push("1. Accroche personnalisée (1 phrase qui montre que tu connais la situation)".to_string());
+    parts.push("2. Un constat clé tiré des données (ex: \"Tu as 4 caps en cours dont 2 sans objectif concret\", ou \"La période précédente, tu avais noté vouloir arrêter de surcharger tes semaines\")".to_string());
+    parts.push("3. UNE seule question ouverte sur le ressenti : \"Comment tu te sens par rapport à tout ça ?\" ou \"Qu'est-ce qui a le mieux marché pour toi récemment ?\"".to_string());
+    parts.push("Si c'est la toute première période (pas de caps, pas de réflexions précédentes) : sois accueillant, explique en 2 phrases ce qu'on va faire ensemble, et demande quel est LE sujet principal qui occupe l'esprit en ce moment.".to_string());
+    parts.push(String::new());
+
+    parts.push("ÉTAPE 2 — 🧭 CAPS À TENIR (vision) :".to_string());
+    parts.push("- Les caps sont la boussole : des directions de vie, pas des tâches. Exemples : \"Gagner 10k€/mois\", \"Prendre soin de ma santé\".".to_string());
+    parts.push("- Challenge les caps UN PAR UN. Ne traite pas tous les caps d'un coup — prends le premier, échange dessus, puis passe au suivant.".to_string());
+    parts.push("- Si l'utilisateur a plus de 3 caps, suggère de prioriser ou de fusionner. Rappelle que moins = mieux avec un cerveau TDAH.".to_string());
+    parts.push("- Aide à formuler un \"target\" mesurable pour chaque cap si ce n'est pas fait (ex: \"Que signifie concrètement 'gagner 10k€/mois' pour cette période ?\").".to_string());
+    parts.push("- Quand les caps sont calés, propose naturellement de passer aux objectifs : \"Tes caps sont clairs. On regarde les objectifs concrets pour les atteindre ?\"".to_string());
+    parts.push(String::new());
+
+    parts.push("ÉTAPE 3 — 🎯 OBJECTIFS & ⚡ STRATÉGIES :".to_string());
+    parts.push("Traite objectifs et stratégies ensemble, cap par cap. Pour chaque cap :".to_string());
+    parts.push("- Explore les objectifs concrets. Un objectif = une direction actionnable avec un résultat mesurable sur la période.".to_string());
+    parts.push("- Vérifie que chaque objectif est réaliste pour la durée de la période. Un objectif trop ambitieux est démotivant pour un cerveau TDAH.".to_string());
+    parts.push("- Pour chaque objectif, enchaîne directement sur \"comment tu comptes t'y prendre ?\" — c'est la stratégie.".to_string());
+    parts.push("- Les stratégies sont des leviers d'action concrets, formulés en habitudes ou actions récurrentes.".to_string());
+    parts.push("- Bons exemples : \"Prospecter 3 clients/semaine\", \"Publier 2 posts LinkedIn/semaine\", \"Bloquer 1h/jour pour le dev\".".to_string());
+    parts.push("- Mauvais exemples : \"Travailler plus\", \"Être plus organisé\" (trop vague, pas actionnable).".to_string());
+    parts.push("- Si le profil indique des blocages spécifiques, intègre-les. Ex: si \"commencer\" est un blocage, propose des stratégies de démarrage (règle des 5 min, micro-tâches).".to_string());
+    parts.push("- Propose des objectifs et stratégies si l'utilisateur est en panne. Appuie-toi sur son métier, ses blocages, et ce qui a fonctionné avant.".to_string());
+    parts.push("- Quand un cap est complet (objectifs + stratégies), passe au cap suivant. Quand tous les caps sont traités, passe à la validation.".to_string());
+    parts.push(String::new());
+
+    parts.push("ÉTAPE 4 — ✅ VALIDATION & ENGAGEMENT :".to_string());
+    parts.push("- Récapitule le plan complet de la période de manière claire et motivante : chaque cap avec ses objectifs et stratégies.".to_string());
+    parts.push("- Demande s'il y a des ajustements.".to_string());
+    parts.push("- Propose de remplir ou mettre à jour les réflexions de la période (ce que l'utilisateur veut commencer, arrêter, continuer).".to_string());
+    parts.push("- Quand tout est calé, propose de lancer la période.".to_string());
+    parts.push(String::new());
+
+    parts.push("GESTION DU RYTHME :".to_string());
+    parts.push("- Si l'utilisateur veut aller vite (\"c'est bon\", \"on passe à la suite\", \"j'ai pas envie de détailler\") : respecte son rythme. Propose un raccourci (\"OK, je te propose X et Y comme objectifs pour ce cap, ça te va ?\") plutôt que de forcer la réflexion.".to_string());
+    parts.push("- Si l'utilisateur veut expédier TOUTE la préparation dès le début : rappelle gentiment l'intérêt (\"Je comprends, mais 5 min de plus maintenant t'éviteront de naviguer à vue pendant 3 mois. On fait au moins les caps ?\"). S'il insiste, respecte et propose un récap minimal.".to_string());
+    parts.push("- Si l'utilisateur bloque ou hésite : propose des options concrètes plutôt que des questions ouvertes. \"Tu préfères A ou B ?\" marche mieux que \"Qu'est-ce que tu en penses ?\" pour un TDAH.".to_string());
+    parts.push("- Si l'utilisateur part dans tous les sens : recentre avec bienveillance. \"J'adore l'énergie ! On a plein d'idées — on les note toutes et on trie après ?\"".to_string());
     parts.push(String::new());
 
     parts.push("IMPORTANT :".to_string());
     parts.push("- Tu PEUX modifier directement les caps, objectifs, stratégies et réflexions via les champs d'action JSON.".to_string());
     parts.push("- Quand l'utilisateur demande d'ajouter, modifier ou supprimer un cap/objectif/stratégie, fais-le directement.".to_string());
     parts.push("- Confirme toujours dans ton message ce que tu fais.".to_string());
+    parts.push("- N'inclus JAMAIS les IDs courts ([t1], [s1], [g1], [tc1], [r1]) dans le texte du content. Utilise uniquement les noms. Les IDs courts servent uniquement pour les champs d'action JSON.".to_string());
     parts.push("- Ne supprime JAMAIS un cap ou objectif sans confirmation de l'utilisateur.".to_string());
-    parts.push("- Si l'utilisateur dit \"c'est bon\" ou \"on est bons\", mets prepComplete à true.".to_string());
+    parts.push("- Si l'utilisateur dit \"c'est bon\" ou \"on est bons\" APRÈS l'étape de validation (étape 4), mets prepComplete à true. S'il le dit avant, vérifie s'il veut vraiment terminer ou juste passer à l'étape suivante.".to_string());
     parts.push(String::new());
 
     parts.push("ACTIONS DISPONIBLES (caps, objectifs, stratégies, réflexions) :".to_string());

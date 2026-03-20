@@ -86,6 +86,7 @@ const collisionDetection: CollisionDetection = (args) => {
 
 interface WeekViewProps {
   onLaunchWeeklyPrep?: () => void;
+  onLaunchWeeklyReview?: () => void;
   onStuck?: (taskId: string, taskName: string) => void;
   refreshKey?: number;
   workingDays?: WeekDayId[];
@@ -102,7 +103,7 @@ interface WeekViewProps {
   onWeekReopened?: () => void;
 }
 
-export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, workingDays = DEFAULT_WORKING_DAYS, dailyPriorityCount = 3, viewMonday, isPlanning, isWeekCompleted, onWeekCompleted, onWeekReopened }: WeekViewProps) {
+export default function WeekView({ onLaunchWeeklyPrep, onLaunchWeeklyReview, onStuck, refreshKey, workingDays = DEFAULT_WORKING_DAYS, dailyPriorityCount = 3, viewMonday, isPlanning, isWeekCompleted, onWeekCompleted, onWeekReopened }: WeekViewProps) {
   const [selectedFilter, setSelectedFilter] = useState<"week" | string>("week");
   const [scheduledTasks, setScheduledTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
@@ -742,7 +743,7 @@ export default function WeekView({ onLaunchWeeklyPrep, onStuck, refreshKey, work
             </span>
           </div>
           <div className={styles.reviewActions}>
-            <button className={styles.reviewBtn}>Lancer la revue</button>
+            <button className={styles.reviewBtn} onClick={onLaunchWeeklyReview}>Lancer la revue</button>
             <button className={styles.closeBtn} onClick={handleMarkWeekDone}>Marquer comme terminée</button>
           </div>
         </div>

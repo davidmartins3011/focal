@@ -18,7 +18,9 @@ interface Props {
   strategyFrequency: StrategyFrequency;
   strategyCycleStart: number;
   onLaunchDailyPrep?: () => void;
+  onLaunchDailyReview?: () => void;
   onLaunchWeeklyPrep?: () => void;
+  onLaunchWeeklyReview?: () => void;
   onLaunchPeriodPrep?: (periodId: string) => void;
   onStuck?: (taskId: string, taskName: string) => void;
   taskRefreshKey?: number;
@@ -32,7 +34,7 @@ const STATIC_TABS: { id: ViewTab; label: string }[] = [
   { id: "strategy", label: "Prise de recul" },
 ];
 
-export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyEnabled, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchWeeklyPrep, onLaunchPeriodPrep, onStuck, taskRefreshKey, strategyRefreshKey, workingDays }: Props) {
+export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, strategyEnabled, strategyFrequency, strategyCycleStart, onLaunchDailyPrep, onLaunchDailyReview, onLaunchWeeklyPrep, onLaunchWeeklyReview, onLaunchPeriodPrep, onStuck, taskRefreshKey, strategyRefreshKey, workingDays }: Props) {
   const [dayClosed, setDayClosed] = useState(false);
   const [weekClosed, setWeekClosed] = useState(false);
 
@@ -122,6 +124,7 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
           <TodayView
             dailyPriorityCount={dailyPriorityCount}
             onLaunchDailyPrep={onLaunchDailyPrep}
+            onLaunchDailyReview={onLaunchDailyReview}
             onStuck={onStuck}
             refreshKey={taskRefreshKey}
             isDayCompleted={dayClosed}
@@ -141,6 +144,7 @@ export default function MainPanel({ activeTab, onTabChange, dailyPriorityCount, 
         {activeTab === "week" && (
           <WeekView
             onLaunchWeeklyPrep={onLaunchWeeklyPrep}
+            onLaunchWeeklyReview={onLaunchWeeklyReview}
             onStuck={onStuck}
             refreshKey={taskRefreshKey}
             workingDays={workingDays}

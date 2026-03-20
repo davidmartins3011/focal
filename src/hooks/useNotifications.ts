@@ -37,9 +37,14 @@ function isMonthActiveForFrequency(
   cycleStart: number,
   month: number,
 ): boolean {
-  const step = freq === "monthly" ? 1 : freq === "bimonthly" ? 2 : freq === "quarterly" ? 3 : 6;
-  const start = (cycleStart - 1) % step;
-  return month % step === start;
+  if (freq === "monthly") return true;
+  const step = freq === "bimonthly" ? 2 : freq === "quarterly" ? 3 : 6;
+  const s0 = cycleStart - 1; // 0-indexed cycle start
+  // Build active months from cycle start, matching computeCurrentPeriod logic
+  for (let m = s0; m < 12; m += step) {
+    if (month === m) return true;
+  }
+  return false;
 }
 
 function shouldReminderFireOnDate(r: NotificationReminder, date: Date, workingDays: WeekDayId[]): boolean {

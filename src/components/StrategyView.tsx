@@ -273,6 +273,7 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const [goalLinks, setGoalLinks] = useState<Map<string, string[]>>(new Map());
+  const [closingPeriod, setClosingPeriod] = useState(false);
 
   const reloadGoals = useCallback(() => {
     if (!selectedPeriodId) return;
@@ -383,49 +384,57 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
         endYear: p.endYear,
         frequency,
       });
-      setSelectedPeriodId(id);
       await loadPeriods();
+      setSelectedPeriodId(id);
     } catch (err) {
       console.error("[StrategyView] createPeriod error:", err);
     }
   };
 
+  const hasReflections = selectedPeriod?.reflections.some((r) => r.answer.trim().length > 0) ?? false;
+  const canClosePeriod = goals.length > 0 && hasReflections;
+
+  const [closeError, setCloseError] = useState<string | null>(null);
+
   const handleClosePeriod = async () => {
-    if (!selectedPeriod) return;
+    if (!selectedPeriod || !canClosePeriod || closingPeriod) return;
+    setClosingPeriod(true);
+    setCloseError(null);
+    const periodId = selectedPeriod.id;
     try {
-      await closeStrategyPeriod(selectedPeriod.id);
+      await closeStrategyPeriod(periodId);
 
-      const allPeriods = await getStrategyPeriods();
-      const existingDraft = allPeriods.find((p) => p.status === "draft");
+      try {
+        const allPeriods = await getStrategyPeriods();
+        const existingDraft = allPeriods.find((p) => p.status === "draft");
 
-      if (existingDraft) {
-        await reopenStrategyPeriod(existingDraft.id);
-      } else {
-        const next = computeNextPeriod(selectedPeriod);
-        const nextId = `period-${crypto.randomUUID().slice(0, 12)}`;
-        await createStrategyPeriod({
-          id: nextId,
-          startMonth: next.startMonth,
-          startYear: next.startYear,
-          endMonth: next.endMonth,
-          endYear: next.endYear,
-          frequency: selectedPeriod.frequency,
-        });
-        for (let i = 0; i < goals.length; i++) {
-          await upsertStrategyGoal({
-            id: uid(),
-            title: goals[i].title,
-            target: goals[i].target,
-            deadline: goals[i].deadline,
-            position: i,
-            periodId: nextId,
+        if (existingDraft) {
+          await reopenStrategyPeriod(existingDraft.id);
+        } else {
+          const next = computeNextPeriod(selectedPeriod);
+          const nextId = `period-${crypto.randomUUID().slice(0, 12)}`;
+          await createStrategyPeriod({
+            id: nextId,
+            startMonth: next.startMonth,
+            startYear: next.startYear,
+            endMonth: next.endMonth,
+            endYear: next.endYear,
+            frequency: selectedPeriod.frequency,
           });
+          await carryOverGoals(periodId, nextId);
         }
+      } catch (followUpErr) {
+        console.error("[StrategyView] follow-up after close failed, reopening:", followUpErr);
+        await reopenStrategyPeriod(periodId).catch(() => {});
+        setCloseError("La clôture a échoué. La période a été réouverte.");
       }
 
       await loadPeriods();
     } catch (err) {
       console.error("[StrategyView] closePeriod error:", err);
+      setCloseError("Impossible de clôturer la période. Réessaie.");
+    } finally {
+      setClosingPeriod(false);
     }
   };
 
@@ -509,6 +518,22 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
           : p,
       ),
     );
+  };
+
+  const saveReflection = (reflId: string, prompt: string, answer: string, position: number) => {
+    if (!selectedPeriod) return;
+    const previousAnswer = selectedPeriod.reflections.find((r) => r.id === reflId)?.answer ?? "";
+    handleReflectionChange(reflId, answer);
+    upsertPeriodReflection({
+      id: reflId,
+      periodId: selectedPeriod.id,
+      prompt,
+      answer,
+      position,
+    }).catch((err) => {
+      console.error("[StrategyView] reflection save error:", err);
+      handleReflectionChange(reflId, previousAnswer);
+    });
   };
 
   // ── Render: Cap à tenir ──
@@ -602,8 +627,12 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
   }, [linkPickerOpen]);
 
   const handleToggleLink = async (goalId: string, strategyId: string) => {
-    await toggleGoalStrategyLink(goalId, strategyId);
-    reloadGoals();
+    try {
+      await toggleGoalStrategyLink(goalId, strategyId);
+      reloadGoals();
+    } catch (err) {
+      console.error("[StrategyView] toggleGoalStrategyLink error:", err);
+    }
   };
 
   const renderObjectives = () => (
@@ -665,10 +694,7 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
                         </button>
                         {pickerOpen && (() => {
                           const unlinked = goals.filter((g) => !linkedGoalIds.includes(g.id));
-                          if (unlinked.length === 0) {
-                            setLinkPickerOpen(null);
-                            return null;
-                          }
+                          if (unlinked.length === 0) return null;
                           return (
                             <div className={styles.linkPicker}>
                               {unlinked.map((g) => (
@@ -880,13 +906,24 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
                     <div className={styles.bilanStatFill} style={{ width: `${Math.round((bilan.tasksCompleted / bilan.tasksTotal) * 100)}%` }} />
                   </div>
                 </div>
+                {bilan.priorityTotal > 0 && (
+                  <div className={styles.bilanStat}>
+                    <div className={styles.bilanStatValue}>
+                      {bilan.priorityCompleted}<span className={styles.bilanStatSlash}>/{bilan.priorityTotal}</span>
+                    </div>
+                    <div className={styles.bilanStatLabel}>priorités terminées</div>
+                    <div className={styles.bilanStatBar}>
+                      <div className={styles.bilanStatFill} style={{ width: `${Math.round((bilan.priorityCompleted / bilan.priorityTotal) * 100)}%` }} />
+                    </div>
+                  </div>
+                )}
                 <div className={styles.bilanStat}>
                   <div className={styles.bilanStatValue}>
-                    {bilan.focusDays}<span className={styles.bilanStatSlash}>/{bilan.totalDays}j</span>
+                    {bilan.tasksLinked}<span className={styles.bilanStatSlash}>/{bilan.tasksTotal}</span>
                   </div>
-                  <div className={styles.bilanStatLabel}>jours de focus</div>
+                  <div className={styles.bilanStatLabel}>liées à un objectif</div>
                   <div className={styles.bilanStatBar}>
-                    <div className={`${styles.bilanStatFill} ${styles.bilanStatFillAlt}`} style={{ width: `${Math.round((bilan.focusDays / bilan.totalDays) * 100)}%` }} />
+                    <div className={`${styles.bilanStatFill} ${styles.bilanStatFillAlt}`} style={{ width: `${bilan.tasksTotal > 0 ? Math.round((bilan.tasksLinked / bilan.tasksTotal) * 100) : 0}%` }} />
                   </div>
                 </div>
               </div>
@@ -987,13 +1024,7 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
                   rows={2}
                   onChange={(e) => handleReflectionChange(r.id, e.target.value)}
                   onBlur={(e) => {
-                    upsertPeriodReflection({
-                      id: r.id,
-                      periodId: selectedPeriod.id,
-                      prompt: r.prompt,
-                      answer: (e.target as HTMLTextAreaElement).value,
-                      position: i,
-                    }).catch(console.error);
+                    saveReflection(r.id, r.prompt, (e.target as HTMLTextAreaElement).value, i);
                   }}
                   ref={(el) => {
                     if (el && r.answer) {
@@ -1015,11 +1046,17 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
               >
                 Lancer la revue de la période
               </button>
-              <button className={styles.closePeriodBtn} onClick={handleClosePeriod}>
-                Clôturer la période
+              <button className={styles.closePeriodBtn} onClick={handleClosePeriod} disabled={!canClosePeriod || closingPeriod}>
+                {closingPeriod ? "Clôture en cours…" : "Clôturer la période"}
               </button>
-              <span className={styles.closePeriodHint}>
-                Remplis tes réflexions avant de clôturer.
+              <span className={closeError ? styles.closePeriodError : styles.closePeriodHint}>
+                {closeError
+                  ? closeError
+                  : goals.length === 0
+                    ? "Ajoute au moins un cap avant de clôturer."
+                    : !hasReflections
+                      ? "Remplis au moins une réflexion avant de clôturer."
+                      : "Tu peux clôturer et passer à la période suivante."}
               </span>
             </div>
           )}

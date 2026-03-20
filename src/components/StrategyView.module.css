@@ -810,7 +810,7 @@
 
 .bilanGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -1234,9 +1234,14 @@
   white-space: nowrap;
 }
 
-.closePeriodBtn:hover {
+.closePeriodBtn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.closePeriodBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .reviewPeriodBtn {
@@ -1279,5 +1284,11 @@
   font-size: 11px;
   color: var(--text3);
   opacity: 0.6;
+  line-height: 1.4;
+}
+
+.closePeriodError {
+  font-size: 11px;
+  color: var(--danger, #e54e4e);
   line-height: 1.4;
 }

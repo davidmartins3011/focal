@@ -162,6 +162,26 @@ export function sendDailyPrepMessage(
   });
 }
 
+export function sendDailyReviewMessage(
+  userMessage: string,
+  history: { role: string; content: string }[],
+): Promise<DailyPrepResponse> {
+  return invoke<DailyPrepResponse>("send_daily_review_message", {
+    userMessage,
+    history: JSON.stringify(history),
+  });
+}
+
+export function sendWeeklyReviewMessage(
+  userMessage: string,
+  history: { role: string; content: string }[],
+): Promise<DailyPrepResponse> {
+  return invoke<DailyPrepResponse>("send_weekly_review_message", {
+    userMessage,
+    history: JSON.stringify(history),
+  });
+}
+
 export function sendWeeklyPrepMessage(
   userMessage: string,
   history: { role: string; content: string }[],

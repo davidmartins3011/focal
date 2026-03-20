@@ -182,6 +182,9 @@ pub struct PeriodSummary {
     pub tasks_total: i32,
     pub focus_days: i32,
     pub total_days: i32,
+    pub priority_completed: i32,
+    pub priority_total: i32,
+    pub tasks_linked: i32,
     pub distribution: Vec<TagDistribution>,
 }
 

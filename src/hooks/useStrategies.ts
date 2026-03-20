@@ -15,9 +15,6 @@ export interface PickerObjective {
   strategies: { id: string; title: string }[];
 }
 
-let cachedGoals: StrategyGoal[] | null = null;
-let cachedAllGoals: StrategyGoal[] | null = null;
-
 async function loadActiveGoals(): Promise<StrategyGoal[]> {
   const periods = await getStrategyPeriods();
   const active = periods.find((p) => p.status === "active");
@@ -25,17 +22,19 @@ async function loadActiveGoals(): Promise<StrategyGoal[]> {
 }
 
 export default function useStrategies() {
-  const [goals, setGoals] = useState<StrategyGoal[]>(cachedGoals ?? []);
-  const [allGoals, setAllGoals] = useState<StrategyGoal[]>(cachedAllGoals ?? []);
+  const [goals, setGoals] = useState<StrategyGoal[]>([]);
+  const [allGoals, setAllGoals] = useState<StrategyGoal[]>([]);
 
-  useEffect(() => {
+  const fetchAll = useCallback(() => {
     loadActiveGoals()
-      .then((g) => { cachedGoals = g; setGoals(g); })
-      .catch(() => {});
+      .then((g) => setGoals(g))
+      .catch((err) => console.error("[useStrategies] loadActiveGoals error:", err));
     getStrategyGoals()
-      .then((g) => { cachedAllGoals = g; setAllGoals(g); })
-      .catch(() => {});
+      .then((g) => setAllGoals(g))
+      .catch((err) => console.error("[useStrategies] getStrategyGoals error:", err));
   }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const pickerObjectives = useMemo<PickerObjective[]>(() => {
     const result: PickerObjective[] = [];
@@ -82,14 +81,5 @@ export default function useStrategies() {
     [strategyMap],
   );
 
-  const reload = useCallback(() => {
-    loadActiveGoals()
-      .then((g) => { cachedGoals = g; setGoals(g); })
-      .catch(() => {});
-    getStrategyGoals()
-      .then((g) => { cachedAllGoals = g; setAllGoals(g); })
-      .catch(() => {});
-  }, []);
-
-  return { pickerObjectives, getStrategyInfo, reload };
+  return { pickerObjectives, getStrategyInfo, reload: fetchAll };
 }
