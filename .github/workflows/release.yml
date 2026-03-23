@@ -45,6 +45,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          token: ${{ secrets.RELEASES_TOKEN }}
           owner: davidmartins3011
           repo: focal-releases
           tagName: v__VERSION__
