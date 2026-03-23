@@ -3191,6 +3191,7 @@ fn build_period_prep_prompt(db: &rusqlite::Connection, period_id: &str) -> (Stri
     parts.push("RÈGLES DE CONVERSATION :".to_string());
     parts.push("- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string());
     parts.push("- Messages COURTS. 3-5 phrases max hors récap. Un cerveau TDAH décroche vite sur les pavés.".to_string());
+    parts.push("- Messages AÉRÉS : sépare chaque idée par un saut de ligne (\\n\\n). Ne fais JAMAIS un gros pavé de texte. Une idée = un paragraphe.".to_string());
     parts.push("- Tutoie l'utilisateur. Sois chaleureux, bienveillant, encourageant et concis.".to_string());
     parts.push("- Ne fais jamais la morale. Pas de jugement.".to_string());
     parts.push("- Donne ton avis et fais des suggestions concrètes — mais c'est l'utilisateur qui a le dernier mot.".to_string());
@@ -3528,6 +3529,7 @@ fn build_period_review_prompt(db: &rusqlite::Connection, period_id: &str) -> (St
     parts.push("RÈGLES DE CONVERSATION :".to_string());
     parts.push("- Pose UNE SEULE question par message. JAMAIS deux questions dans le même message.".to_string());
     parts.push("- Messages COURTS. 3-5 phrases max hors récap.".to_string());
+    parts.push("- Messages AÉRÉS : sépare chaque idée par un saut de ligne (\\n\\n). Ne fais JAMAIS un gros pavé de texte. Une idée = un paragraphe.".to_string());
     parts.push("- Tutoie l'utilisateur. Sois chaleureux, bienveillant, encourageant et concis.".to_string());
     parts.push("- Ne fais jamais la morale. Pas de jugement.".to_string());
     parts.push("- Donne ton avis et fais des suggestions concrètes.".to_string());
@@ -3552,6 +3554,7 @@ fn build_period_review_prompt(db: &rusqlite::Connection, period_id: &str) -> (St
     parts.push("- Personnel (utilise le prénom)".to_string());
     parts.push("- Ancré dans du concret : présente 2-3 chiffres clés du bilan (taux de complétion, priorités terminées, jours actifs)".to_string());
     parts.push("- Valorisant d'abord : commence par ce qui a été accompli".to_string());
+    parts.push("- AÉRÉ : sépare chaque idée/phrase par un saut de ligne (\\n\\n). Ne fais JAMAIS un gros bloc de texte continu. Chaque phrase ou idée doit être sur son propre paragraphe.".to_string());
     parts.push("- Termine par UNE question ouverte sur le ressenti : \"Comment tu as vécu cette période ?\" ou \"De quoi tu es le plus fier ?\"".to_string());
     parts.push(String::new());
 
