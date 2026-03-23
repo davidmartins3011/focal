@@ -41,10 +41,12 @@ jobs:
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          owner: davidmartins3011
+          repo: focal-releases
           tagName: v__VERSION__
           releaseName: "focal v__VERSION__"
           releaseBody: "Voir les changements sur https://github.com/davidmartins3011/focal/blob/main/CHANGELOG.md"
