@@ -39,7 +39,7 @@ export default function App() {
   const [aiSettings, setAISettings] = useState<AISettings>(defaultAISettings);
   const [dailyPriorityCount, setDailyPriorityCount] = useState<number>(3);
   const [strategyEnabled, setStrategyEnabled] = useState<boolean>(true);
-  const [strategyFrequency, setStrategyFrequency] = useState<StrategyFrequency>("monthly");
+  const [strategyFrequency, setStrategyFrequency] = useState<StrategyFrequency>("quarterly");
   const [strategyCycleStart, setStrategyCycleStart] = useState<number>(1);
   const [strategyOccurrence, setStrategyOccurrence] = useState<FrequencyOccurrence>("last");
   const [strategyDay, setStrategyDay] = useState<WeekDayId>("dim");

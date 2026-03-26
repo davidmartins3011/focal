@@ -336,7 +336,7 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
   }, [bilan]);
 
   const objectiveProgress = useMemo(() => {
-    if (goals.length === 0 || strategyProgress.length === 0) return [];
+    if (goals.length === 0) return [];
     const progressMap = new Map<string, { total: number; completed: number }>();
     for (const item of strategyProgress) {
       progressMap.set(item.strategyId, { total: item.total, completed: item.completed });
@@ -368,7 +368,7 @@ export default function StrategyView({ frequency, cycleStart, onLaunchPeriodPrep
           tactics: tacticDetails,
         };
       })
-    ).filter((obj) => obj.total > 0 || obj.tactics.some((t) => t.total > 0));
+    );
   }, [goals, strategyProgress]);
 
   // ── Period lifecycle ──
