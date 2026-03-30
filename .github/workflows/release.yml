@@ -51,6 +51,7 @@ jobs:
           tagName: v__VERSION__
           releaseName: "focal v__VERSION__"
           releaseBody: "Voir les changements sur https://github.com/davidmartins3011/focal/blob/main/CHANGELOG.md"
+          releaseCommitish: main
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
